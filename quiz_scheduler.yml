@@ -1,0 +1,100 @@
+name: WB Exam Quiz Bot Scheduler
+
+# ---------------------------------------------------------------------------
+# This workflow IS the "serverless scheduler". GitHub spins up a fresh,
+# free Ubuntu runner at each cron time below, runs bot.py once, then throws
+# the machine away. Nothing needs to stay running 24/7 — this is what makes
+# the whole project genuinely free and serverless.
+#
+# All times below are UTC (GitHub Actions cron always uses UTC).
+# IST (Asia/Kolkata) = UTC + 5:30, so:
+#   14:30 UTC  ->  20:00 IST  (8:00 PM)   — Sunday syllabus announcement
+#   13:00 UTC  ->  18:30 IST  (6:30 PM)   — Monday–Saturday daily quiz
+# Adjust the two cron lines below if you want different posting times.
+# Use https://crontab.guru to sanity-check any cron expression.
+#
+# Heads-up: GitHub Actions' free scheduled workflows are "best effort" —
+# during high load they can fire several to ~30 minutes late. That's normal
+# and not a bug in this setup.
+#
+# `permissions: contents: write` (below) + the last step in this file let
+# bot.py's Gemini-generated weekly syllabus (syllabus_state.json) commit
+# itself back to the repo automatically. You never edit that file by hand.
+# ---------------------------------------------------------------------------
+
+permissions:
+  contents: write
+
+on:
+  schedule:
+    - cron: '30 14 * * 0'    # Sunday   20:00 IST -> syllabus announcement
+    - cron: '0 13 * * 1-6'   # Mon–Sat  18:30 IST -> daily quiz
+  workflow_dispatch:          # adds a "Run workflow" button on the Actions tab,
+                              # so you can manually trigger + test at any time
+
+jobs:
+  run-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # --- Sunday syllabus announcement -------------------------------------
+      # Also generates next week's chapters with Gemini before announcing —
+      # that's why GEMINI_API_KEY is needed here now too.
+      - name: Post Sunday syllabus announcement
+        if: github.event.schedule == '30 14 * * 0'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python bot.py --mode announce
+
+      # --- Monday-Saturday daily quiz ----------------------------------------
+      - name: Generate and post today's quiz
+        if: github.event.schedule == '0 13 * * 1-6'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          QUIZ_PAGE_URL: ${{ vars.QUIZ_PAGE_URL }}
+        run: python bot.py --mode quiz
+
+      # --- Manual test run (Actions tab -> "Run workflow" button) -----------
+      # Defaults to posting a quiz, since that's the more complex path to test.
+      # Temporarily change --mode to `announce` here if you want to test that
+      # path instead, then change it back.
+      - name: Manual test run
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          QUIZ_PAGE_URL: ${{ vars.QUIZ_PAGE_URL }}
+        run: python bot.py --mode quiz
+
+      # --- Save the AI-generated syllabus back to the repo -------------------
+      # bot.py writes/updates syllabus_state.json locally whenever it generates
+      # a new week (or self-heals a missing one). This step is what makes that
+      # change permanent, so next week's run (and next week's, forever) picks
+      # up where this one left off — with no one ever opening this file.
+      - name: Commit updated syllabus state (if changed)
+        if: always()
+        run: |
+          if [ -n "$(git status --porcelain syllabus_state.json 2>/dev/null)" ]; then
+            git config user.name "wb-quiz-bot"
+            git config user.email "actions@users.noreply.github.com"
+            git add syllabus_state.json
+            git commit -m "chore: auto-update weekly syllabus [skip ci]"
+            git push
+          else
+            echo "No syllabus_state.json changes to commit."
+          fi

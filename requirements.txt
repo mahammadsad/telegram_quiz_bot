@@ -1,0 +1,8 @@
+# Core dependencies (needed for --mode announce and --mode quiz,
+# i.e. the GitHub Actions / recommended setup)
+google-genai>=1.0.0
+requests>=2.31.0
+
+# Only needed if you use --mode daemon (the always-on `schedule` library
+# alternative described in bot.py). Safe to leave installed either way.
+schedule>=1.2.0

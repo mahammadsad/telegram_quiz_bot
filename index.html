@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>আজকের মক টেস্ট</title>
+
+<!-- Telegram's own bridge script. We feature-detect it below — the quiz
+     works perfectly with or without it (it only works at all in private
+     chats; from a group this page opens as a normal page). -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+<!-- pako: lets the browser un-gzip what bot.py compressed with zlib, so the
+     quiz can travel inside a URL without ballooning its length. -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Tiro+Bangla&family=Hind+Siliguri:wght@400;500;600;700&display=swap" rel="stylesheet" />
+
+<style>
+  :root{
+    /* ---- design tokens : "উত্তরপত্র" (answer-sheet / admit-card) theme ---- */
+    --paper:      #E9ECDF;   /* cool ledger-paper background */
+    --card:       #F8F9F3;   /* slightly lighter paper for the card surface */
+    --ink:        #1D2B36;   /* deep exam-ink navy-charcoal — primary text */
+    --ink-soft:   #55636B;   /* muted secondary text */
+    --line:       #C9CDBC;   /* hairline rule / divider */
+    --stamp-red:  #A6342A;   /* exam-stamp red — wrong / urgent / primary action */
+    --stamp-red-ink: #7C271F;
+    --seal-gold:  #B08526;   /* brass seal — selected / correct / accent */
+    --seal-gold-soft: #EADFBC;
+    --shadow: 0 10px 30px rgba(29,43,54,.10), 0 2px 8px rgba(29,43,54,.06);
+    --radius: 18px;
+  }
+
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 15% 8%, rgba(176,133,38,.07), transparent 40%),
+      radial-gradient(circle at 90% 90%, rgba(166,52,42,.05), transparent 45%),
+      var(--paper);
+    color:var(--ink);
+    font-family:'Hind Siliguri', 'Noto Sans Bengali', system-ui, sans-serif;
+    -webkit-font-smoothing:antialiased;
+    min-height:100%;
+    display:flex;
+    justify-content:center;
+    padding: 18px 12px 40px;
+  }
+
+  .app{ width:100%; max-width:440px; }
+
+  h1,h2,h3{ font-family:'Tiro Bangla', 'Noto Serif Bengali', serif; margin:0; }
+
+  /* ---------- the "sheet" card + its perforated top edge ---------- */
+  .sheet{
+    position:relative;
+    background:var(--card);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    border:1px solid var(--line);
+    overflow:hidden;
+  }
+  .sheet::before{
+    /* a row of little punch-holes, like a ticket / booklet perforation */
+    content:"";
+    display:block;
+    height:14px;
+    background-image: radial-gradient(circle, var(--paper) 3.5px, transparent 3.6px);
+    background-size: 22px 14px;
+    background-position: 11px center;
+    background-repeat: repeat-x;
+    border-bottom: 1px dashed var(--line);
+  }
+
+  .sheet-body{ padding:22px 20px 24px; }
+
+  .eyebrow{
+    font-size:12.5px;
+    letter-spacing:.06em;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .eyebrow .dot{ width:6px;height:6px;border-radius:50%;background:var(--stamp-red); }
+
+  .muted{ color:var(--ink-soft); }
+  .center{ text-align:center; }
+
+  button{ font-family:inherit; }
+
+  .btn{
+    appearance:none; border:none; cursor:pointer;
+    border-radius: 12px;
+    padding: 14px 20px;
+    font-size:17px;
+    font-weight:600;
+    width:100%;
+    transition: transform .12s ease, box-shadow .12s ease, background .15s ease;
+  }
+  .btn:active{ transform: scale(.98); }
+  .btn:focus-visible{ outline:3px solid var(--seal-gold); outline-offset:2px; }
+  .btn-primary{ background:var(--stamp-red); color:#FCF6EF; box-shadow:0 6px 16px rgba(166,52,42,.28); }
+  .btn-primary:hover{ background:var(--stamp-red-ink); }
+  .btn-ghost{ background:transparent; color:var(--ink); border:1.5px solid var(--line); }
+  .btn-ghost:hover{ border-color:var(--ink-soft); }
+
+  /* ================= SCREEN: intro ================= */
+  #screen-intro .meta-row{ display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 20px; }
+  .chip{
+    font-size:13.5px; padding:6px 12px; border-radius:999px;
+    background:var(--seal-gold-soft); color:#5B4110; border:1px solid #DFCB8E;
+    font-weight:600;
+  }
+  #screen-intro h1{ font-size:26px; line-height:1.35; margin:14px 0 4px; }
+  .intro-divider{ height:1px; background:var(--line); margin:18px 0; border:none; }
+  .hint{ font-size:14px; color:var(--ink-soft); margin-top:14px; line-height:1.6; }
+
+  /* ================= masthead (quiz screen header) ================= */
+  .masthead{
+    display:flex; align-items:center; justify-content:space-between;
+    padding-bottom:14px; margin-bottom:16px; border-bottom:1px dashed var(--line);
+  }
+  .masthead .subject{ font-size:12.5px; color:var(--ink-soft); }
+  .masthead .subject b{ color:var(--ink); }
+  .timer{
+    font-family:'Hind Siliguri', sans-serif;
+    font-weight:700; font-size:18px;
+    background:var(--ink); color:var(--card);
+    padding:6px 14px; border-radius:10px;
+    letter-spacing:.03em;
+    min-width:74px; text-align:center;
+    transition: background .3s ease;
+  }
+  .timer.low{ background:var(--stamp-red); }
+
+  /* ---------- OMR bubble progress strip (signature element) ---------- */
+  .omr-strip{
+    display:flex; gap:6px; overflow-x:auto; padding:2px 2px 12px;
+    margin-bottom:6px;
+    scrollbar-width:none;
+  }
+  .omr-strip::-webkit-scrollbar{ display:none; }
+  .omr-bubble{
+    flex:0 0 auto;
+    width:30px; height:30px; border-radius:50%;
+    border:2px solid var(--line);
+    background:var(--card);
+    color:var(--ink-soft);
+    font-size:13px; font-weight:600;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    transition: all .15s ease;
+  }
+  .omr-bubble.current{ border-color:var(--ink); color:var(--ink); }
+  .omr-bubble.answered{ background:var(--seal-gold); border-color:var(--seal-gold); color:#fff; }
+  .omr-bubble.answered.current{ box-shadow:0 0 0 3px var(--seal-gold-soft); }
+
+  /* ================= question + options ================= */
+  .q-index{ font-size:13px; color:var(--ink-soft); margin-bottom:6px; font-weight:600; }
+  .q-text{ font-size:19px; line-height:1.55; margin-bottom:20px; font-weight:600; }
+
+  .option{
+    display:flex; align-items:center; gap:12px;
+    padding:13px 14px; margin-bottom:10px;
+    border-radius:12px; border:1.5px solid var(--line);
+    background:var(--card);
+    cursor:pointer;
+    transition: border-color .15s ease, background .15s ease;
+  }
+  .option:hover{ border-color:var(--ink-soft); }
+  .option:focus-visible{ outline:3px solid var(--seal-gold); outline-offset:2px; }
+  .option .bubble{
+    flex:0 0 auto; width:22px; height:22px; border-radius:50%;
+    border:2px solid var(--ink-soft);
+    position:relative;
+  }
+  .option.selected{ border-color:var(--seal-gold); background:#FBF5E6; }
+  .option.selected .bubble{ border-color:var(--seal-gold); background:var(--seal-gold); }
+  .option.selected .bubble::after{
+    content:""; position:absolute; inset:4px; border-radius:50%; background:#fff;
+    transform:scale(0); transition:transform .12s ease;
+  }
+  .option.selected .bubble::after{ transform:scale(.4); }
+  .option .label{ font-size:16px; line-height:1.5; }
+
+  .nav-row{ display:flex; gap:10px; margin-top:22px; }
+  .nav-row .btn{ flex:1; }
+
+  /* ================= result screen ================= */
+  .stamp-wrap{ display:flex; justify-content:center; margin: 6px 0 18px; }
+  .stamp{
+    width:150px; height:150px; border-radius:50%;
+    border:3px solid var(--seal-gold);
+    outline:2px solid var(--seal-gold);
+    outline-offset:5px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    transform: rotate(-6deg);
+    background: radial-gradient(circle, #FBF6E8 60%, #F3E9C9 100%);
+    color:var(--seal-gold);
+  }
+  .stamp .score-num{ font-family:'Tiro Bangla', serif; font-size:34px; font-weight:700; line-height:1; }
+  .stamp .score-den{ font-size:13px; margin-top:2px; letter-spacing:.05em; }
+  .stamp .score-label{ font-size:11px; margin-top:6px; letter-spacing:.08em; text-transform:uppercase; color:#8a6a1c; }
+
+  .remark{ text-align:center; font-size:16px; font-weight:600; margin-bottom:4px; }
+  .remark.good{ color:#3E6B4F; }
+  .remark.mid{ color:var(--seal-gold); }
+  .remark.low{ color:var(--stamp-red); }
+
+  .review-item{
+    border-top:1px dashed var(--line);
+    padding:14px 0;
+  }
+  .review-q{ font-size:15px; font-weight:600; margin-bottom:8px; line-height:1.5; }
+  .review-line{ font-size:14px; margin:3px 0; display:flex; gap:6px; line-height:1.5; }
+  .review-line .tag{ flex:0 0 auto; font-weight:700; }
+  .review-line.correct .tag{ color:#3E6B4F; }
+  .review-line.wrong .tag{ color:var(--stamp-red); }
+  .review-expl{ font-size:13.5px; color:var(--ink-soft); margin-top:6px; line-height:1.6; background:var(--seal-gold-soft); padding:8px 10px; border-radius:8px; }
+
+  /* ================= error / loading ================= */
+  .center-screen{ text-align:center; padding: 40px 8px; }
+  .center-screen .big-emoji{ font-size:40px; margin-bottom:10px; }
+
+  .hidden{ display:none !important; }
+
+  @media (prefers-reduced-motion: reduce){
+    *{ transition:none !important; animation:none !important; }
+  }
+</style>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ============ LOADING ============ -->
+  <div id="screen-loading" class="sheet">
+    <div class="sheet-body center-screen">
+      <div class="big-emoji">📄</div>
+      <p class="muted">কুইজ লোড হচ্ছে...</p>
+    </div>
+  </div>
+
+  <!-- ============ ERROR ============ -->
+  <div id="screen-error" class="sheet hidden">
+    <div class="sheet-body center-screen">
+      <div class="big-emoji">⚠️</div>
+      <h2 style="font-size:20px;margin-bottom:8px;">কুইজ পাওয়া যায়নি</h2>
+      <p class="muted" style="line-height:1.6;">
+        এই লিংকে কোনো বৈধ কুইজ ডেটা নেই। টেলিগ্রাম চ্যানেলে আজকের কুইজ পোস্ট থেকে
+        বাটনে ক্লিক করে আবার চেষ্টা করো।
+      </p>
+    </div>
+  </div>
+
+  <!-- ============ INTRO ============ -->
+  <div id="screen-intro" class="sheet hidden">
+    <div class="sheet-body">
+      <div class="eyebrow"><span class="dot"></span> সরকারি চাকরি প্রস্তুতি — দৈনিক মক টেস্ট</div>
+      <h1 id="intro-chapter">—</h1>
+      <div class="meta-row">
+        <span class="chip" id="intro-subject">—</span>
+        <span class="chip" id="intro-count">—</span>
+        <span class="chip" id="intro-time">—</span>
+      </div>
+      <hr class="intro-divider" />
+      <p class="muted" style="line-height:1.7; font-size:15px;">
+        প্রতিটি প্রশ্নে ৪টি অপশন থাকবে। উত্তর দেওয়ার পর ব্যাখ্যা সহ ফলাফল দেখতে পাবে।
+        সময় শেষ হয়ে গেলে বাকি প্রশ্নগুলো স্বয়ংক্রিয়ভাবে জমা হয়ে যাবে — তাই সময় খেয়াল রেখো।
+      </p>
+      <div style="margin-top:22px;">
+        <button class="btn btn-primary" id="btn-start">✍️ কুইজ শুরু করো</button>
+      </div>
+      <p class="hint">টিপ: বাংলায় উত্তর ভালোভাবে পড়ে তারপর বেছে নাও — কিছু অপশন খুব কাছাকাছি হতে পারে।</p>
+    </div>
+  </div>
+
+  <!-- ============ QUIZ ============ -->
+  <div id="screen-quiz" class="sheet hidden">
+    <div class="sheet-body">
+      <div class="masthead">
+        <div class="subject">
+          <div><b id="quiz-subject">—</b></div>
+          <div id="quiz-chapter">—</div>
+        </div>
+        <div class="timer" id="timer">--:--</div>
+      </div>
+
+      <div class="omr-strip" id="omr-strip"></div>
+
+      <div class="q-index" id="q-index">প্রশ্ন ১ / ১০</div>
+      <div class="q-text" id="q-text">—</div>
+      <div id="options-wrap"></div>
+
+      <div class="nav-row">
+        <button class="btn btn-ghost" id="btn-prev">← আগের প্রশ্ন</button>
+        <button class="btn btn-primary" id="btn-next">পরবর্তী →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ RESULT ============ -->
+  <div id="screen-result" class="sheet hidden">
+    <div class="sheet-body">
+      <div class="eyebrow center" style="justify-content:center;"><span class="dot"></span> উত্তরপত্র মূল্যায়ন</div>
+      <div class="stamp-wrap">
+        <div class="stamp">
+          <div class="score-num" id="result-score">০</div>
+          <div class="score-den" id="result-total">/ ১০</div>
+          <div class="score-label">RESULT</div>
+        </div>
+      </div>
+      <p class="remark" id="result-remark">—</p>
+      <p class="muted center" id="result-sub" style="margin-bottom:18px;">—</p>
+
+      <button class="btn btn-ghost" id="btn-restart" style="margin-bottom:6px;">🔁 আবার দাও</button>
+
+      <div id="review-list" style="margin-top:12px;"></div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------------------------------------------------------------------
+  // 0. Telegram WebApp bridge — used only if it's actually available.
+  //    (Only present in private chats; from a group this is just a normal
+  //    webpage opened in Telegram's in-app browser, and that's fine.)
+  // ---------------------------------------------------------------------
+  var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  if (tg) {
+    try {
+      tg.ready();
+      tg.expand();
+      if (tg.themeParams && tg.themeParams.bg_color) {
+        // Light touch only — we keep our own designed palette by default
+        // and just avoid fighting Telegram's own chrome color.
+        document.documentElement.style.setProperty('--tg-bg', tg.themeParams.bg_color);
+      }
+    } catch (e) { /* older clients — ignore */ }
+  }
+
+  var BN_DIGITS = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
+  function bn(n) {
+    return String(n).replace(/[0-9]/g, function (d) { return BN_DIGITS[+d]; });
+  }
+  function bnPad2(n) { return bn(n < 10 ? '0' + n : '' + n); }
+
+  // ---------------------------------------------------------------------
+  // 1. Decode the quiz from the URL: ?data=<base64url(zlib(json))>
+  // ---------------------------------------------------------------------
+  function base64UrlToBytes(b64url) {
+    var b64 = b64url.replace(/-/g, '+').replace(/_/g, '/');
+    while (b64.length % 4) b64 += '=';
+    var bin = atob(b64);
+    var bytes = new Uint8Array(bin.length);
+    for (var i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return bytes;
+  }
+
+  function loadQuizFromUrl() {
+    var params = new URLSearchParams(window.location.search);
+    var data = params.get('data');
+    if (!data) return null;
+    try {
+      var compressedBytes = base64UrlToBytes(data);
+      var jsonBytes = pako.inflate(compressedBytes);
+      var jsonStr = new TextDecoder('utf-8').decode(jsonBytes);
+      var parsed = JSON.parse(jsonStr);
+      if (!parsed.qs || !Array.isArray(parsed.qs) || parsed.qs.length === 0) return null;
+      return parsed;
+    } catch (e) {
+      console.error('Quiz decode failed:', e);
+      return null;
+    }
+  }
+
+  // ---------------------------------------------------------------------
+  // 2. App state
+  // ---------------------------------------------------------------------
+  var quiz = null;          // { meta:{subject,chapter,date}, qs:[{q,o,a,e}, ...] }
+  var answers = [];         // answers[i] = selected option index, or null
+  var current = 0;
+  var timeLeft = 0;
+  var timerHandle = null;
+
+  var screens = {
+    loading: document.getElementById('screen-loading'),
+    error: document.getElementById('screen-error'),
+    intro: document.getElementById('screen-intro'),
+    quiz: document.getElementById('screen-quiz'),
+    result: document.getElementById('screen-result'),
+  };
+  function show(name) {
+    Object.keys(screens).forEach(function (k) {
+      screens[k].classList.toggle('hidden', k !== name);
+    });
+  }
+
+  // ---------------------------------------------------------------------
+  // 3. Intro screen
+  // ---------------------------------------------------------------------
+  function renderIntro() {
+    document.getElementById('intro-chapter').textContent = quiz.meta.chapter || 'আজকের মক টেস্ট';
+    document.getElementById('intro-subject').textContent = '📚 ' + (quiz.meta.subject || '');
+    document.getElementById('intro-count').textContent = bn(quiz.qs.length) + 'টি প্রশ্ন';
+    var totalSec = Math.max(300, quiz.qs.length * 60);
+    document.getElementById('intro-time').textContent = '⏱ ' + bn(Math.round(totalSec / 60)) + ' মিনিট';
+    show('intro');
+  }
+
+  // ---------------------------------------------------------------------
+  // 4. Quiz screen
+  // ---------------------------------------------------------------------
+  function startQuiz() {
+    answers = quiz.qs.map(function () { return null; });
+    current = 0;
+    timeLeft = Math.max(300, quiz.qs.length * 60);
+    document.getElementById('quiz-subject').textContent = quiz.meta.subject || '';
+    document.getElementById('quiz-chapter').textContent = quiz.meta.chapter || '';
+    buildOmrStrip();
+    renderQuestion();
+    startTimer();
+    show('quiz');
+  }
+
+  function buildOmrStrip() {
+    var strip = document.getElementById('omr-strip');
+    strip.innerHTML = '';
+    quiz.qs.forEach(function (_, i) {
+      var b = document.createElement('button');
+      b.className = 'omr-bubble';
+      b.textContent = bn(i + 1);
+      b.setAttribute('aria-label', 'প্রশ্ন ' + bn(i + 1) + '-এ যাও');
+      b.addEventListener('click', function () { current = i; renderQuestion(); });
+      strip.appendChild(b);
+    });
+  }
+
+  function refreshOmrStrip() {
+    var bubbles = document.querySelectorAll('.omr-bubble');
+    bubbles.forEach(function (el, i) {
+      el.classList.toggle('current', i === current);
+      el.classList.toggle('answered', answers[i] !== null);
+    });
+  }
+
+  function renderQuestion() {
+    var item = quiz.qs[current];
+    document.getElementById('q-index').textContent = 'প্রশ্ন ' + bn(current + 1) + ' / ' + bn(quiz.qs.length);
+    document.getElementById('q-text').textContent = item.q;
+
+    var wrap = document.getElementById('options-wrap');
+    wrap.innerHTML = '';
+    item.o.forEach(function (optText, idx) {
+      var row = document.createElement('div');
+      row.className = 'option' + (answers[current] === idx ? ' selected' : '');
+      row.setAttribute('role', 'button');
+      row.setAttribute('tabindex', '0');
+      row.innerHTML = '<span class="bubble"></span><span class="label"></span>';
+      row.querySelector('.label').textContent = optText;
+      row.addEventListener('click', function () { selectAnswer(idx); });
+      row.addEventListener('keydown', function (e) {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectAnswer(idx); }
+      });
+      wrap.appendChild(row);
+    });
+
+    document.getElementById('btn-prev').disabled = current === 0;
+    document.getElementById('btn-prev').style.opacity = current === 0 ? 0.4 : 1;
+    document.getElementById('btn-next').textContent = (current === quiz.qs.length - 1) ? 'ফলাফল দেখো ✓' : 'পরবর্তী →';
+
+    refreshOmrStrip();
+  }
+
+  function selectAnswer(idx) {
+    answers[current] = idx;
+    renderQuestion();
+  }
+
+  document.getElementById('btn-prev').addEventListener('click', function () {
+    if (current > 0) { current--; renderQuestion(); }
+  });
+  document.getElementById('btn-next').addEventListener('click', function () {
+    if (current < quiz.qs.length - 1) { current++; renderQuestion(); }
+    else finishQuiz();
+  });
+
+  // ---------------------------------------------------------------------
+  // 5. Timer
+  // ---------------------------------------------------------------------
+  function startTimer() {
+    updateTimerDisplay();
+    timerHandle = setInterval(function () {
+      timeLeft--;
+      updateTimerDisplay();
+      if (timeLeft <= 0) {
+        clearInterval(timerHandle);
+        finishQuiz();
+      }
+    }, 1000);
+  }
+  function updateTimerDisplay() {
+    var m = Math.max(0, Math.floor(timeLeft / 60));
+    var s = Math.max(0, timeLeft % 60);
+    var el = document.getElementById('timer');
+    el.textContent = bnPad2(m) + ':' + bnPad2(s);
+    el.classList.toggle('low', timeLeft <= 60);
+  }
+
+  // ---------------------------------------------------------------------
+  // 6. Result screen
+  // ---------------------------------------------------------------------
+  function finishQuiz() {
+    if (timerHandle) clearInterval(timerHandle);
+
+    var score = 0;
+    quiz.qs.forEach(function (item, i) { if (answers[i] === item.a) score++; });
+    var total = quiz.qs.length;
+    var pct = total ? (score / total) : 0;
+
+    document.getElementById('result-score').textContent = bn(score);
+    document.getElementById('result-total').textContent = '/ ' + bn(total);
+
+    var remarkEl = document.getElementById('result-remark');
+    var subEl = document.getElementById('result-sub');
+    if (pct >= 0.8) {
+      remarkEl.textContent = 'চমৎকার! দারুণ প্রস্তুতি 🎉';
+      remarkEl.className = 'remark good';
+      subEl.textContent = 'এই গতি ধরে রাখো, পরীক্ষার হলেও এমন ফল হবে।';
+    } else if (pct >= 0.5) {
+      remarkEl.textContent = 'ভালো, তবে আরও অনুশীলন দরকার 💪';
+      remarkEl.className = 'remark mid';
+      subEl.textContent = 'নিচে ভুল উত্তরগুলোর ব্যাখ্যা মন দিয়ে পড়ো।';
+    } else {
+      remarkEl.textContent = 'চিন্তা নেই, আবার চেষ্টা করো 📖';
+      remarkEl.className = 'remark low';
+      subEl.textContent = 'এই চ্যাপ্টারটা আরেকবার পড়ে নিলে পরের বার ভালো হবে।';
+    }
+
+    renderReview();
+    show('result');
+  }
+
+  function renderReview() {
+    var list = document.getElementById('review-list');
+    list.innerHTML = '';
+    quiz.qs.forEach(function (item, i) {
+      var userIdx = answers[i];
+      var isCorrect = userIdx === item.a;
+
+      var row = document.createElement('div');
+      row.className = 'review-item';
+
+      var qEl = document.createElement('div');
+      qEl.className = 'review-q';
+      qEl.textContent = bn(i + 1) + '. ' + item.q;
+      row.appendChild(qEl);
+
+      var userLine = document.createElement('div');
+      userLine.className = 'review-line ' + (isCorrect ? 'correct' : 'wrong');
+      userLine.innerHTML = '<span class="tag">' + (isCorrect ? '✓' : '✕') + '</span><span></span>';
+      userLine.querySelector('span:last-child').textContent =
+        'তোমার উত্তর: ' + (userIdx === null ? 'দেওয়া হয়নি' : item.o[userIdx]);
+      row.appendChild(userLine);
+
+      if (!isCorrect) {
+        var correctLine = document.createElement('div');
+        correctLine.className = 'review-line correct';
+        correctLine.innerHTML = '<span class="tag">✓</span><span></span>';
+        correctLine.querySelector('span:last-child').textContent = 'সঠিক উত্তর: ' + item.o[item.a];
+        row.appendChild(correctLine);
+      }
+
+      if (item.e) {
+        var expl = document.createElement('div');
+        expl.className = 'review-expl';
+        expl.textContent = '💡 ' + item.e;
+        row.appendChild(expl);
+      }
+
+      list.appendChild(row);
+    });
+  }
+
+  document.getElementById('btn-restart').addEventListener('click', function () {
+    window.location.reload();
+  });
+  document.getElementById('btn-start').addEventListener('click', startQuiz);
+
+  // ---------------------------------------------------------------------
+  // 7. Boot
+  // ---------------------------------------------------------------------
+  quiz = loadQuizFromUrl();
+  if (!quiz) {
+    show('error');
+  } else {
+    renderIntro();
+  }
+})();
+</script>
+</body>
+</html>
