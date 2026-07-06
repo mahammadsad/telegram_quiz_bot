@@ -71,6 +71,7 @@ import random
 import logging
 import argparse
 from datetime import datetime, date, timedelta
+from urllib.parse import urlparse
 
 import requests
 from google import genai
@@ -91,17 +92,26 @@ RETRY_BASE_DELAY = 3        # seconds; doubles each retry (exponential backoff)
 
 TELEGRAM_API_BASE = "https://api.telegram.org/bot{token}/{method}"
 
-# Fallback so the script doesn't crash if you forget to set the env var —
-# replace the placeholder or (better) set QUIZ_PAGE_URL as a repo variable.
-GITHUB_PAGES_QUIZ_URL = os.environ.get(
-    "QUIZ_PAGE_URL", "https://your-username.github.io/wb-quiz-bot/index.html"
-)
+# QUIZ_PAGE_URL is normally computed automatically by quiz_scheduler.yml from
+# your repo name (see its "Compute QUIZ_PAGE_URL" step) — you don't need to
+# set anything for the common case. This is just the in-code fallback for
+# that step producing nothing (e.g. running bot.py directly on your own
+# machine without setting the env var). NOTE: `os.environ.get(K, default)`
+# only returns `default` when K is completely unset — if a workflow passes
+# an *empty string*, `.get()` still returns that empty string, which is why
+# `.strip()` + the explicit empty-check below matters (this is exactly what
+# caused the "URL host is empty" Telegram error — QUIZ_PAGE_URL existed as
+# an env var but was blank).
+GITHUB_PAGES_QUIZ_URL = os.environ.get("QUIZ_PAGE_URL", "").strip()
+if not GITHUB_PAGES_QUIZ_URL:
+    GITHUB_PAGES_QUIZ_URL = "https://your-username.github.io/wb-quiz-bot/index.html"
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(message)s",
 )
 log = logging.getLogger("wb_quiz_bot")
+
 
 
 # ==========================================================================
@@ -447,6 +457,28 @@ def esc(text) -> str:
     return html.escape(str(text), quote=False)
 
 
+def validate_quiz_page_url(url: str) -> None:
+    """Fails fast with one clear line instead of letting a missing/broken
+    QUIZ_PAGE_URL surface as a confusing Telegram 400 error after 4 retries
+    (this is exactly what happened when the env var existed but was blank —
+    the resulting button URL was just '?data=...' with no host at all)."""
+    parsed = urlparse(url)
+    if not parsed.scheme or not parsed.netloc:
+        raise RuntimeError(
+            f"QUIZ_PAGE_URL is missing or malformed (got {url!r}). "
+            "quiz_scheduler.yml's 'Compute QUIZ_PAGE_URL' step normally sets "
+            "this automatically from your repo name — check that step's log. "
+            "If you're using a custom Pages domain, set the QUIZ_PAGE_URL "
+            "repo Variable yourself (Settings → Secrets and variables → "
+            "Actions → Variables)."
+        )
+    if "your-username" in url:
+        raise RuntimeError(
+            f"QUIZ_PAGE_URL is still the placeholder value ({url!r}). "
+            "Set it to your real GitHub Pages URL."
+        )
+
+
 def telegram_api(method: str, payload: dict) -> dict:
     token = os.environ["TELEGRAM_BOT_TOKEN"]
     url = TELEGRAM_API_BASE.format(token=token, method=method)
@@ -492,6 +524,8 @@ def send_daily_quiz():
     if today_idx == 6:
         log.info("Today is Sunday — no quiz scheduled. Skipping.")
         return
+
+    validate_quiz_page_url(GITHUB_PAGES_QUIZ_URL)  # fail fast, before any API calls
 
     state = load_state()
     state, _ = ensure_current_week(state)  # self-healing: generates the week if Sunday's job hasn't run
