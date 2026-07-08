@@ -133,15 +133,6 @@
     overflow:hidden;
     text-overflow:ellipsis;
   }
-  .notice{
-    border-left:4px solid var(--primary);
-    background:var(--surface-2);
-    padding:12px;
-    border-radius:var(--radius);
-    color:#24423f;
-    line-height:1.65;
-    font-size:14px;
-  }
   .btn{
     width:100%;
     border:1px solid transparent;
@@ -325,10 +316,6 @@
       <div class="meta"><b>বিষয়</b><span id="intro-subject">-</span></div>
       <div class="meta"><b>প্রশ্ন</b><span id="intro-count" class="num">-</span></div>
       <div class="meta"><b>সময়</b><span id="intro-time" class="num">-</span></div>
-    </div>
-    <div class="notice" id="intro-notice">
-      উত্তর সাবমিট করলে স্কোর ড্যাশবোর্ডে জমা হবে। ফলাফলের আগে সঠিক উত্তর
-      দেখানো হবে না, তাই নিজের প্রস্তুতির বাস্তব ছবি পাবে।
     </div>
     <button class="btn btn-primary browser-only" id="btn-start" style="margin-top:18px;">কুইজ শুরু করুন</button>
   </section>
@@ -524,9 +511,6 @@
     byId("intro-subject").textContent = meta.subject || "মক টেস্ট";
     byId("intro-count").textContent = bn(quiz.qs.length) + "টি";
     byId("intro-time").textContent = bn(Math.max(5, quiz.qs.length)) + " মিনিট";
-    byId("intro-notice").textContent = legacyLocal
-      ? "এই কুইজটি পুরনো পোস্ট থেকে খোলা হয়েছে। ফলাফল দেখা যাবে, তবে স্কোরবোর্ডে জমা নাও হতে পারে।"
-      : "উত্তর সাবমিট করলে স্কোর ড্যাশবোর্ডে জমা হবে। ফলাফলের আগে সঠিক উত্তর দেখানো হবে না, তাই নিজের প্রস্তুতির বাস্তব ছবি পাবে।";
     show("intro");
   }
 

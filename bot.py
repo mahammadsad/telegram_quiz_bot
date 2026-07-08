@@ -20,6 +20,7 @@ import argparse
 import html
 import json
 import logging
+import os
 import random
 import re
 import sys
@@ -111,10 +112,11 @@ COMPETITIVE_EXAM_TOPIC_SCOPE = {
     ],
 }
 WEEKLY_TOPIC_COUNT = 6
-TOPIC_PLANNER_VERSION = 3
+TOPIC_PLANNER_VERSION = 4
 TOPIC_REPEAT_COOLDOWN_DAYS = 21
 TOPIC_SPACED_REVIEW_DAYS = (3, 7, 14, 30)
 TOPIC_EVENT_LIMIT = 300
+POSTED_QUIZ_STATE_PREFIX = "mock_test_posted_quiz"
 
 BN_WEEKDAY_NAMES = {
     0: "সোমবার", 1: "মঙ্গলবার", 2: "বুধবার",
