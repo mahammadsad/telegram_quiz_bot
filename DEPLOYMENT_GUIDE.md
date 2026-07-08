@@ -12,6 +12,13 @@ This repo now uses the same Supabase/Postgres architecture as
 Firebase, Firestore rules, committed quiz JSON files, and committed syllabus
 state are no longer part of this project.
 
+Gemini now acts as the topic planner and Bengali question setter. Each week it
+chooses fresh topics from a broad competitive-exam syllabus universe:
+History, Geography, Polity, Economics, General Science, Mathematics,
+Reasoning, English, Bengali, Computer, and Current Affairs. Each quiz then
+uses Gemini to create Bengali MCQs for that selected topic, while Supabase
+tracks covered topics to reduce repetition.
+
 ## 1. Create / Reuse Supabase
 
 Use the same Supabase project as repo_1 if you want unified analytics.
@@ -165,12 +172,15 @@ python bot.py --mode quiz
 
 ## 8. Data Flow
 
-1. `bot.py --mode quiz` generates questions with Gemini.
-2. Each unique MCQ is inserted or reused in `questions`.
-3. Each quiz-pack question gets a delivery row in `polls` with
+1. `bot.py --mode announce` asks Gemini to plan six fresh competitive-exam
+   topics for the week and stores that plan in `bot_state`.
+2. `bot.py --mode quiz` asks Gemini to generate Bengali MCQs for today's
+   selected topic.
+3. Each unique MCQ is inserted or reused in `questions`.
+4. Each quiz-pack question gets a delivery row in `polls` with
    `bot_type='mock_test'` and `run_slot=<quiz_id>`.
-4. The Telegram button opens the Mini App with `startapp=<quiz_id>`.
-5. The Mini App fetches questions from the API without correct answers.
-6. On submit, the API verifies Telegram `initData`, upserts the user, and
+5. The Telegram button opens the Mini App with `startapp=<quiz_id>`.
+6. The Mini App fetches questions from the API without correct answers.
+7. On submit, the API verifies Telegram `initData`, upserts the user, and
    writes one raw `user_attempts` row per answered question.
-7. The dashboard computes leaderboard totals from raw attempts at read time.
+8. The dashboard computes leaderboard totals from raw attempts at read time.

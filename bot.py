@@ -47,10 +47,70 @@ MAX_RETRIES = 4
 RETRY_BASE_DELAY = 3
 TELEGRAM_API_BASE = "https://api.telegram.org/bot{token}/{method}"
 
-DEFAULT_EXAM_FOCUS = "WBCS প্রিলিমিনারি ও WBPSC গ্রুপ-ডি"
-SUBJECTS_MON_TO_FRI = ["ইতিহাস", "ভূগোল", "সাধারণ বিজ্ঞান", "গণিত", "রাজনীতি বিজ্ঞান"]
-CURRENT_AFFAIRS_SUBJECT = "কারেন্ট অ্যাফেয়ার্স"
-CURRENT_AFFAIRS_CHAPTER = "সাম্প্রতিক জাতীয় ও আন্তর্জাতিক ঘটনা"
+DEFAULT_EXAM_FOCUS = (
+    "WBCS, WBPSC Clerkship/Miscellaneous, WB Police, Kolkata Police, SSC, Railway, "
+    "Banking, Primary TET/School Service এবং অন্যান্য ভারতীয় competitive exams"
+)
+
+# Gemini uses this broad map as the syllabus universe. It is deliberately
+# written as an exam-oriented topic map instead of a narrow weekly routine.
+COMPETITIVE_EXAM_TOPIC_SCOPE = {
+    "History": [
+        "প্রাচীন ভারত", "মধ্যযুগীয় ভারত", "আধুনিক ভারত", "বাংলার ইতিহাস",
+        "জাতীয় আন্দোলন", "গভর্নর জেনারেল ও ভাইসরয়", "সামাজিক-ধর্মীয় সংস্কার আন্দোলন",
+        "সংবিধান গঠনের পটভূমি",
+    ],
+    "Geography": [
+        "ভারতের ভৌগোলিক অবস্থান", "পশ্চিমবঙ্গের ভূগোল", "নদী ও জলসম্পদ",
+        "জলবায়ু", "মাটি", "কৃষি", "খনিজ ও শিল্প", "জনসংখ্যা",
+        "বিশ্ব ভূগোলের মৌলিক ধারণা",
+    ],
+    "Polity": [
+        "ভারতীয় সংবিধানের বৈশিষ্ট্য", "মৌলিক অধিকার ও কর্তব্য",
+        "রাষ্ট্র পরিচালনার নির্দেশমূলক নীতি", "রাষ্ট্রপতি", "প্রধানমন্ত্রী ও মন্ত্রিসভা",
+        "সংসদ", "সুপ্রিম কোর্ট ও হাইকোর্ট", "নির্বাচন কমিশন",
+        "পঞ্চায়েত ও পৌরসভা", "সাংবিধানিক সংস্থা",
+    ],
+    "Economics": [
+        "ভারতীয় অর্থনীতির মৌলিক ধারণা", "পরিকল্পনা ও নীতি আয়োগ",
+        "জাতীয় আয়", "ব্যাংকিং", "RBI", "মুদ্রাস্ফীতি", "বাজেট",
+        "করব্যবস্থা", "দারিদ্র্য ও বেকারত্ব", "সরকারি প্রকল্প",
+    ],
+    "General Science": [
+        "পদার্থবিদ্যা", "রসায়ন", "জীববিদ্যা", "মানবদেহ",
+        "রোগ ও পুষ্টি", "পরিবেশ বিজ্ঞান", "দৈনন্দিন জীবনে বিজ্ঞান",
+        "পরিমাপের একক ও যন্ত্র", "মহাকাশ ও প্রযুক্তি",
+    ],
+    "Mathematics": [
+        "সংখ্যা পদ্ধতি", "শতকরা", "লাভ-ক্ষতি", "সরল ও চক্রবৃদ্ধি সুদ",
+        "অনুপাত-সমানুপাত", "সময় ও কাজ", "সময়-দূরত্ব", "গড়",
+        "মিশ্রণ", "সরলীকরণ", "ডেটা ইন্টারপ্রিটেশন",
+    ],
+    "Reasoning": [
+        "সিরিজ", "অ্যানালজি", "কোডিং-ডিকোডিং", "রক্তের সম্পর্ক",
+        "দিক নির্ণয়", "সিলজিজম", "ভেন ডায়াগ্রাম", "বসার বিন্যাস",
+        "নন-ভার্বাল রিজনিং",
+    ],
+    "English": [
+        "synonym-antonym", "one word substitution", "idioms and phrases",
+        "preposition", "article", "voice", "narration", "tense",
+        "subject-verb agreement", "error spotting",
+    ],
+    "Bengali": [
+        "ব্যাকরণ", "সমার্থক-বিপরীতার্থক শব্দ", "বাগধারা", "কারক-বিভক্তি",
+        "সমাস", "সন্ধি", "শুদ্ধ বানান", "বাক্য সংশোধন", "বাংলা সাহিত্য",
+    ],
+    "Computer": [
+        "কম্পিউটারের মৌলিক ধারণা", "হার্ডওয়্যার-সফটওয়্যার", "ইন্টারনেট",
+        "MS Office", "সাইবার নিরাপত্তা", "ডেটাবেস", "অপারেটিং সিস্টেম",
+    ],
+    "Current Affairs": [
+        "জাতীয় ঘটনা", "আন্তর্জাতিক ঘটনা", "পশ্চিমবঙ্গ", "পুরস্কার",
+        "খেলাধুলা", "বিজ্ঞান ও প্রযুক্তি", "নিয়োগ ও সরকারি প্রকল্প",
+    ],
+}
+WEEKLY_TOPIC_COUNT = 6
+TOPIC_PLANNER_VERSION = 2
 
 BN_WEEKDAY_NAMES = {
     0: "সোমবার", 1: "মঙ্গলবার", 2: "বুধবার",
@@ -100,7 +160,7 @@ def save_state(state: dict) -> None:
     log.info("Saved syllabus state in Supabase bot_state[%s].", SYLLABUS_STATE_KEY)
 
 
-WEEKLY_CHAPTERS_SCHEMA = {
+WEEKLY_TOPICS_SCHEMA = {
     "type": "ARRAY",
     "items": {
         "type": "OBJECT",
@@ -114,70 +174,94 @@ WEEKLY_CHAPTERS_SCHEMA = {
 
 
 def _build_syllabus_prompt(exam_focus: str, history: dict) -> str:
-    blocks = []
-    for subject in SUBJECTS_MON_TO_FRI:
-        covered = history.get(subject, [])[-20:]
-        covered_text = "; ".join(covered) if covered else "(এখনও কিছু কভার করা হয়নি)"
-        blocks.append(f'- বিষয়: "{subject}" | ইতিমধ্যে পড়ানো চ্যাপ্টার: {covered_text}')
+    scope_lines = []
+    for subject, topics in COMPETITIVE_EXAM_TOPIC_SCOPE.items():
+        scope_lines.append(f"- {subject}: {', '.join(topics)}")
+
+    history_lines = []
+    for subject, chapters in sorted((history or {}).items()):
+        if not isinstance(chapters, list):
+            continue
+        recent = "; ".join(str(item) for item in chapters[-30:])
+        if recent:
+            history_lines.append(f"- {subject}: {recent}")
+    history_text = "\n".join(history_lines) or "(এখনও কোনো টপিক কভার করা হয়নি)"
 
     return f"""তুমি একজন অভিজ্ঞ প্রশ্নপত্র/সিলেবাস পরিকল্পনাকারী।
 লক্ষ্য পরীক্ষা: {exam_focus}
 
-নিচের বিষয়গুলির প্রতিটির জন্য আগামী সপ্তাহে পড়ানোর মতো ঠিক ১টি করে নতুন
-চ্যাপ্টার/টপিক বেছে নাও। আগের চ্যাপ্টার পুনরাবৃত্তি করা যাবে না।
+এই bot-এর কাজ হলো competitive exam-এ আসতে পারে এমন সব গুরুত্বপূর্ণ বিষয়ে
+বাংলা MCQ practice করানো। নিচের syllabus universe থেকে আগামী ৬ দিনের জন্য
+ঠিক {WEEKLY_TOPIC_COUNT}টি fresh quiz topic বেছে নাও।
 
-{chr(10).join(blocks)}
+=== Syllabus universe ===
+{chr(10).join(scope_lines)}
 
-আউটপুট অবশ্যই ঠিক {len(SUBJECTS_MON_TO_FRI)}টি অবজেক্টসহ JSON array হবে, এই ক্রমে:
-{", ".join(SUBJECTS_MON_TO_FRI)}
-প্রতিটি অবজেক্টে থাকবে "subject" এবং "chapter"। শুধুমাত্র JSON ফেরত দাও।
+=== ইতিমধ্যে কভার করা recent topics ===
+{history_text}
+
+নিয়ম:
+1. আগের recent topics হুবহু repeat করবে না।
+2. সপ্তাহে subject mix balanced রাখবে: static GK, math/reasoning, language,
+   science/current affairs — সব দিক ঘুরে আসবে।
+3. chapter খুব নির্দিষ্ট হবে, যেমন "মৌলিক অধিকার: Article 14-18" বা
+   "সময় ও কাজ: pipe and cistern"। অস্পষ্ট "History" টাইপ topic নয়।
+4. প্রশ্ন WBCS/WBPSC/WB Police/SSC/Railway/Banking/TET ধরনের পরীক্ষার উপযোগী হবে।
+5. আউটপুট অবশ্যই ঠিক {WEEKLY_TOPIC_COUNT}টি object সহ JSON array হবে।
+6. প্রতিটি object-এ থাকবে "subject" এবং "chapter"। subject ইংরেজি category
+   name হতে পারে, chapter বাংলা হবে। শুধুমাত্র JSON ফেরত দাও।
 """
 
 
-def generate_weekly_chapters(exam_focus: str, history: dict) -> list[str]:
+def generate_weekly_topics(exam_focus: str, history: dict) -> list[dict]:
     client = genai.Client(api_key=require_env("GEMINI_API_KEY"))
     response = client.models.generate_content(
         model=GEMINI_MODEL,
         contents=_build_syllabus_prompt(exam_focus, history),
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
-            response_schema=WEEKLY_CHAPTERS_SCHEMA,
+            response_schema=WEEKLY_TOPICS_SCHEMA,
             temperature=0.8,
         ),
     )
     raw = json.loads(response.text)
-    chapters = [str(item.get("chapter", "")).strip() for item in raw if str(item.get("chapter", "")).strip()]
-    if len(chapters) != len(SUBJECTS_MON_TO_FRI):
-        raise ValueError(f"Expected {len(SUBJECTS_MON_TO_FRI)} chapters from Gemini, got {len(chapters)}.")
-    return chapters
+    topics = []
+    for item in raw:
+        subject = str(item.get("subject", "")).strip()
+        chapter = str(item.get("chapter", "")).strip()
+        if subject and chapter:
+            topics.append({"subject": subject, "chapter": chapter})
+    if len(topics) != WEEKLY_TOPIC_COUNT:
+        raise ValueError(f"Expected {WEEKLY_TOPIC_COUNT} topics from Gemini, got {len(topics)}.")
+    return topics
 
 
 def ensure_current_week(state: dict) -> tuple[dict, bool]:
     today = date.today()
     monday = today - timedelta(days=today.weekday())
-    if state.get("week_start_date") == monday.isoformat() and state.get("days"):
+    if (
+        state.get("week_start_date") == monday.isoformat()
+        and state.get("days")
+        and state.get("planner_version") == TOPIC_PLANNER_VERSION
+    ):
         return state, False
 
     exam_focus = state.get("exam_focus") or DEFAULT_EXAM_FOCUS
     history = state.get("history") or {}
-    chapters = retry_with_backoff(
-        generate_weekly_chapters,
+    topics = retry_with_backoff(
+        generate_weekly_topics,
         exam_focus,
         history,
-        what="Gemini weekly syllabus generation",
+        what="Gemini weekly competitive-topic planning",
     )
 
     days = {}
-    for i, subject in enumerate(SUBJECTS_MON_TO_FRI):
-        chapter = chapters[i]
+    for i, topic in enumerate(topics):
+        subject = topic["subject"]
+        chapter = topic["chapter"]
         days[str(i)] = {"day_bn": BN_WEEKDAY_NAMES[i], "subject": subject, "chapter": chapter}
         history.setdefault(subject, []).append(chapter)
         history[subject] = history[subject][-20:]
-    days["5"] = {
-        "day_bn": BN_WEEKDAY_NAMES[5],
-        "subject": CURRENT_AFFAIRS_SUBJECT,
-        "chapter": CURRENT_AFFAIRS_CHAPTER,
-    }
 
     state.update({
         "exam_focus": exam_focus,
@@ -185,6 +269,7 @@ def ensure_current_week(state: dict) -> tuple[dict, bool]:
         "week_start_date": monday.isoformat(),
         "week_label_bn": format_week_label_bn(monday),
         "days": days,
+        "planner_version": TOPIC_PLANNER_VERSION,
     })
     save_state(state)
     return state, True
@@ -221,7 +306,7 @@ MCQ_JSON_SCHEMA = {
 
 
 def _build_mcq_prompt(subject: str, chapter: str, exam_focus: str, num_questions: int) -> str:
-    return f"""You are an expert Bengali MCQ question setter for West Bengal government exams.
+    return f"""You are an expert Bengali MCQ question setter for Indian and West Bengal competitive exams.
 Target difficulty: {exam_focus}
 
 Create exactly {num_questions} MCQs for:
@@ -229,13 +314,16 @@ Subject: {subject}
 Chapter/topic: {chapter}
 
 Rules:
-1. Bengali language only, except standard abbreviations/proper nouns.
+1. The question, explanation, and detailed_explanation must be in Bengali.
+   If the subject is English grammar/vocabulary, the tested word/sentence/options may contain English,
+   but the instruction/explanation must still be Bengali.
 2. Exactly 4 plausible options per question.
 3. correct_index is 0, 1, 2, or 3.
-4. Questions must match WBCS/WBPSC/WB Police/SSC/Railway exam style.
+4. Questions must match WBCS/WBPSC/WB Police/Kolkata Police/SSC/Railway/Banking/TET exam style.
 5. explanation: one short Bengali sentence.
 6. detailed_explanation: 2-4 useful Bengali sentences for result review.
-7. Return only the JSON array described by the schema.
+7. Avoid vague trivia. Ask exam-relevant, factual, unambiguous questions.
+8. Return only the JSON array described by the schema.
 """
 
 
@@ -312,7 +400,7 @@ def send_sunday_announcement() -> None:
     validate_runtime_config()
     state, _ = ensure_current_week(load_state())
     lines = [
-        "📌 <b>এই সপ্তাহের মক টেস্ট প্ল্যান</b>",
+        "📌 <b>এই সপ্তাহের Competitive Exam Topic Plan</b>",
         f"🎯 <b>লক্ষ্য পরীক্ষা:</b> {esc(state['exam_focus'])}",
         f"🗓️ <b>{esc(state['week_label_bn'])}</b>",
         "",
@@ -320,7 +408,11 @@ def send_sunday_announcement() -> None:
     for i in range(6):
         d = state["days"][str(i)]
         lines.append(f"<b>{esc(d['day_bn'])}</b> · {esc(d['subject'])} — {esc(d['chapter'])}")
-    lines.extend(["", "প্রতিদিনের কুইজ Mini App-এ খুলবে, স্কোর সরাসরি ড্যাশবোর্ডে জমা হবে।"])
+    lines.extend([
+        "",
+        "Gemini প্রতিটি টপিক থেকে বাংলা MCQ তৈরি করবে। ধীরে ধীরে History, Polity, Geography, Science, Math, Reasoning, Language, Computer, Current Affairs সব গুরুত্বপূর্ণ অংশ কভার হবে।",
+        "প্রতিদিনের কুইজ Mini App-এ খুলবে, স্কোর সরাসরি ড্যাশবোর্ডে জমা হবে।",
+    ])
     retry_with_backoff(
         telegram_api,
         "sendMessage",
@@ -378,6 +470,7 @@ def send_daily_quiz() -> None:
         f"📚 <b>বিষয়:</b> {esc(meta.get('subject', ''))}\n"
         f"📖 <b>চ্যাপ্টার:</b> {esc(meta.get('chapter', ''))}\n"
         f"🔢 <b>প্রশ্ন:</b> {len(pack['items'])}টি\n\n"
+        "সব প্রশ্ন বাংলা competitive-exam practice-এর জন্য Gemini দিয়ে তৈরি। "
         "স্কোর ও উত্তরপত্র সাবমিটের পর ড্যাশবোর্ডে আপডেট হবে।"
     )
     keyboard = {"inline_keyboard": [[{"text": "কুইজ শুরু করুন", "url": quiz_url}]]}
