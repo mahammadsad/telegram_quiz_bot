@@ -327,7 +327,7 @@
       <div class="meta"><b>সময়</b><span id="intro-time" class="num">-</span></div>
     </div>
     <div class="notice" id="intro-notice">
-      উত্তর সাবমিট করলে স্কোর Supabase ড্যাশবোর্ডে জমা হবে। ফলাফলের আগে সঠিক উত্তর
+      উত্তর সাবমিট করলে স্কোর ড্যাশবোর্ডে জমা হবে। ফলাফলের আগে সঠিক উত্তর
       দেখানো হবে না, তাই নিজের প্রস্তুতির বাস্তব ছবি পাবে।
     </div>
     <button class="btn btn-primary browser-only" id="btn-start" style="margin-top:18px;">কুইজ শুরু করুন</button>
@@ -514,7 +514,7 @@
       })
       .catch(function(err){
         console.error(err);
-        showError("কুইজ লোড করা যায়নি। API সার্ভার চালু আছে, Supabase-এ এই quiz_id আছে, অথবা legacy quizzes/" + quizId + ".json ফাইল আছে কিনা দেখুন।");
+        showError("এই কুইজটি এখন খোলা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন, অথবা গ্রুপের নতুন কুইজ বাটন থেকে খুলুন।");
       });
   }
 
@@ -525,8 +525,8 @@
     byId("intro-count").textContent = bn(quiz.qs.length) + "টি";
     byId("intro-time").textContent = bn(Math.max(5, quiz.qs.length)) + " মিনিট";
     byId("intro-notice").textContent = legacyLocal
-      ? "এই কুইজটি legacy JSON fallback থেকে লোড হয়েছে। API/Supabase ঠিক হলে স্কোর ড্যাশবোর্ডে জমা হবে; না হলে শুধু লোকাল রিভিউ দেখাবে।"
-      : "উত্তর সাবমিট করলে স্কোর Supabase ড্যাশবোর্ডে জমা হবে। ফলাফলের আগে সঠিক উত্তর দেখানো হবে না, তাই নিজের প্রস্তুতির বাস্তব ছবি পাবে।";
+      ? "এই কুইজটি পুরনো পোস্ট থেকে খোলা হয়েছে। ফলাফল দেখা যাবে, তবে স্কোরবোর্ডে জমা নাও হতে পারে।"
+      : "উত্তর সাবমিট করলে স্কোর ড্যাশবোর্ডে জমা হবে। ফলাফলের আগে সঠিক উত্তর দেখানো হবে না, তাই নিজের প্রস্তুতির বাস্তব ছবি পাবে।";
     show("intro");
   }
 
@@ -632,7 +632,7 @@
           renderResult(buildLocalLegacyResult(err.message));
           return;
         }
-        showError(err.message || "উত্তর সাবমিট করা যায়নি।");
+        showError("উত্তর জমা করা যায়নি। একটু পরে আবার চেষ্টা করুন।");
       });
   }
 
@@ -659,7 +659,7 @@
       total:quiz.qs.length,
       review:review,
       localOnly:true,
-      localReason:reason || "API submit failed",
+      localReason:reason || "score submit failed",
     };
   }
 
@@ -669,7 +669,7 @@
     byId("score-text").textContent = bn(result.score) + "/" + bn(result.total);
     byId("result-title").textContent = resultTitle(pct);
     byId("result-subtitle").textContent = result.localOnly
-      ? "API/Supabase-এ স্কোর জমা হয়নি। আপাতত লোকাল রিভিউ দেখানো হচ্ছে।"
+      ? "স্কোরবোর্ডে জমা হয়নি। আপাতত তোমার উত্তরপত্র দেখানো হচ্ছে।"
       : "স্কোর সংরক্ষণ হয়েছে। নিচে প্রশ্নভিত্তিক রিভিউ দেখুন।";
 
     var list = byId("review-list");

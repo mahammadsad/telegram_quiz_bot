@@ -86,16 +86,26 @@ def submit_quiz(quiz_id: str, payload: SubmitQuizRequest) -> dict:
         _ensure_quiz_pack(clean_quiz_id, allow_readonly_legacy=False)
         telegram_user = _telegram_user_from_payload(payload)
         return quiz_pack_service.submit_quiz_attempts(clean_quiz_id, telegram_user, payload.answers)
+    except HTTPException:
+        raise
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except (Exception, SystemExit) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="স্কোর জমা করা যায়নি। একটু পরে আবার চেষ্টা করুন।",
+        ) from exc
 
 
 @app.get("/api/leaderboard")
 def leaderboard(limit: int = 20) -> dict:
     limit = max(1, min(limit, 100))
-    return {"rows": stats_repo.leaderboard(limit=limit)}
+    try:
+        return {"rows": stats_repo.leaderboard(limit=limit), "unavailable": False}
+    except (Exception, SystemExit):
+        return {"rows": [], "unavailable": True}
 
 
 def _telegram_user_from_payload(payload: SubmitQuizRequest) -> dict:
@@ -130,7 +140,10 @@ def _ensure_quiz_pack(quiz_id: str, allow_readonly_legacy: bool) -> tuple[dict |
         legacy_payload = _load_legacy_payload(quiz_id)
         if allow_readonly_legacy and legacy_payload:
             return None, legacy_payload
-        raise HTTPException(status_code=503, detail=f"Database is not reachable: {exc}") from exc
+        raise HTTPException(
+            status_code=503,
+            detail="কুইজটি এখন খোলা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।",
+        ) from exc
 
     if pack:
         return pack, None
@@ -152,7 +165,7 @@ def _ensure_quiz_pack(quiz_id: str, allow_readonly_legacy: bool) -> tuple[dict |
             return None, legacy_payload
         raise HTTPException(
             status_code=503,
-            detail=f"Legacy quiz exists, but it could not be imported into Supabase: {exc}",
+            detail="কুইজটি এখন খোলা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।",
         ) from exc
 
 

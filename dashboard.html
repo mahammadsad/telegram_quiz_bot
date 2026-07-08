@@ -183,7 +183,7 @@
 <main class="app">
   <header class="topbar">
     <div class="brand">
-      <small>Supabase Live</small>
+      <small>লাইভ স্কোরবোর্ড</small>
       <h1>মক টেস্ট ড্যাশবোর্ড</h1>
     </div>
     <a class="nav-link" href="index.html">কুইজে ফিরুন</a>
@@ -191,9 +191,9 @@
 
   <section class="surface">
     <div class="summary">
-      <div class="metric"><b>শিক্ষার্থী</b><span class="num" id="m-students">-</span></div>
-      <div class="metric"><b>মোট উত্তর</b><span class="num" id="m-attempts">-</span></div>
-      <div class="metric"><b>সেরা স্কোর</b><span class="num" id="m-best">-</span></div>
+      <div class="metric"><b>শিক্ষার্থী</b><span class="num" id="m-students">০</span></div>
+      <div class="metric"><b>মোট উত্তর</b><span class="num" id="m-attempts">০</span></div>
+      <div class="metric"><b>সেরা স্কোর</b><span class="num" id="m-best">০</span></div>
     </div>
 
     <div id="state-loading" class="state">
@@ -201,10 +201,10 @@
       ড্যাশবোর্ড লোড হচ্ছে...
     </div>
     <div id="state-empty" class="state hidden">
-      এখনও কোনো মক টেস্ট উত্তর জমা হয়নি। প্রথম সাবমিশন হলেই তালিকা দেখা যাবে।
+      এখনও কেউ কুইজ শেষ করেনি। প্রথম ফলাফল জমা হলেই তালিকা দেখা যাবে।
     </div>
     <div id="state-error" class="state hidden">
-      ড্যাশবোর্ড লোড করা যায়নি। API সার্ভার ও Supabase environment variables পরীক্ষা করুন।
+      স্কোরবোর্ড সাময়িকভাবে দেখা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।
     </div>
     <div id="list" class="list hidden"></div>
   </section>
@@ -245,9 +245,17 @@
         if (!resp.ok) throw new Error("Leaderboard API returned " + resp.status);
         return resp.json();
       })
-      .then(function(data){ render(data.rows || []); })
+      .then(function(data){
+        if (data.unavailable) {
+          setMetrics(0, 0, 0);
+          setState("error");
+          return;
+        }
+        render(data.rows || []);
+      })
       .catch(function(err){
         console.error(err);
+        setMetrics(0, 0, 0);
         setState("error");
       });
   }
@@ -255,9 +263,7 @@
   function render(rows){
     var totalAttempts = rows.reduce(function(sum,row){ return sum + (row.total_attempts || 0); }, 0);
     var best = rows.length ? rows[0].correct_attempts || 0 : 0;
-    byId("m-students").textContent = bn(rows.length);
-    byId("m-attempts").textContent = bn(totalAttempts);
-    byId("m-best").textContent = bn(best);
+    setMetrics(rows.length, totalAttempts, best);
 
     if (!rows.length) {
       setState("empty");
@@ -288,6 +294,12 @@
       list.appendChild(item);
     });
     setState("ok");
+  }
+
+  function setMetrics(students, attempts, best){
+    byId("m-students").textContent = bn(students);
+    byId("m-attempts").textContent = bn(attempts);
+    byId("m-best").textContent = bn(best);
   }
 
   function displayName(row){
