@@ -21,6 +21,7 @@ import html
 import json
 import logging
 import random
+import re
 import sys
 import time
 from datetime import date, datetime, timedelta
@@ -110,7 +111,10 @@ COMPETITIVE_EXAM_TOPIC_SCOPE = {
     ],
 }
 WEEKLY_TOPIC_COUNT = 6
-TOPIC_PLANNER_VERSION = 2
+TOPIC_PLANNER_VERSION = 3
+TOPIC_REPEAT_COOLDOWN_DAYS = 21
+TOPIC_SPACED_REVIEW_DAYS = (3, 7, 14, 30)
+TOPIC_EVENT_LIMIT = 300
 
 BN_WEEKDAY_NAMES = {
     0: "সোমবার", 1: "মঙ্গলবার", 2: "বুধবার",
@@ -121,6 +125,8 @@ BN_MONTHS = [
     "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর",
 ]
 _BN_DIGIT_MAP = str.maketrans("0123456789", "০১২৩৪৫৬৭৮৯")
+_TOPIC_PUNCT_RE = re.compile(r"[।,.!?\"'‘’“”:;()\[\]{}—–\-_/|]+")
+_WHITESPACE_RE = re.compile(r"\s+")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("wb_quiz_pack_bot")
@@ -143,6 +149,128 @@ def format_week_label_bn(monday: date) -> str:
         f"{bn_num(monday.day)} {BN_MONTHS[monday.month - 1]}, {bn_num(monday.year)} – "
         f"{bn_num(saturday.day)} {BN_MONTHS[saturday.month - 1]}, {bn_num(saturday.year)}"
     )
+
+
+def topic_key(subject: str, chapter: str) -> str:
+    text = f"{subject} {chapter}".strip().lower()
+    text = _TOPIC_PUNCT_RE.sub(" ", text)
+    text = _WHITESPACE_RE.sub(" ", text)
+    return text.strip()
+
+
+def parse_iso_date(value: str | None) -> date | None:
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(str(value)[:10])
+    except ValueError:
+        return None
+
+
+def topic_events_from_state(state: dict) -> list[dict]:
+    events = []
+    seen = set()
+    keys_with_dated_events = set()
+    for raw in state.get("topic_events") or []:
+        if not isinstance(raw, dict):
+            continue
+        subject = str(raw.get("subject", "")).strip()
+        chapter = str(raw.get("chapter", "")).strip()
+        if not subject or not chapter:
+            continue
+        key = str(raw.get("key") or topic_key(subject, chapter))
+        event = {
+            "subject": subject,
+            "chapter": chapter,
+            "key": key,
+            "planned_for": raw.get("planned_for"),
+            "planned_at": raw.get("planned_at"),
+        }
+        marker = (key, event.get("planned_for"), event.get("planned_at"))
+        if marker not in seen:
+            events.append(event)
+            seen.add(marker)
+            keys_with_dated_events.add(key)
+
+    # Backfill older state shape. Those entries may not have dates, but they
+    # still help block exact repeats after upgrading from the older planner.
+    for subject, chapters in (state.get("history") or {}).items():
+        if not isinstance(chapters, list):
+            continue
+        for chapter in chapters:
+            chapter_text = str(chapter).strip()
+            if not chapter_text:
+                continue
+            key = topic_key(str(subject), chapter_text)
+            if key in keys_with_dated_events:
+                continue
+            marker = (key, None, None)
+            if marker in seen:
+                continue
+            events.append({
+                "subject": str(subject),
+                "chapter": chapter_text,
+                "key": key,
+                "planned_for": None,
+                "planned_at": None,
+            })
+            seen.add(marker)
+    return events[-TOPIC_EVENT_LIMIT:]
+
+
+def event_topic_date(event: dict) -> date | None:
+    return parse_iso_date(event.get("planned_for")) or parse_iso_date(event.get("planned_at"))
+
+
+def is_review_due(event_date: date, planned_for: date) -> bool:
+    return (planned_for - event_date).days in TOPIC_SPACED_REVIEW_DAYS
+
+
+def is_topic_allowed(key: str, events: list[dict], planned_for: date, selected_keys: set[str]) -> bool:
+    if key in selected_keys:
+        return False
+    for event in events:
+        if event.get("key") != key:
+            continue
+        event_date = event_topic_date(event)
+        if event_date is None:
+            return False
+        age_days = (planned_for - event_date).days
+        if age_days < 0:
+            return False
+        if age_days < TOPIC_REPEAT_COOLDOWN_DAYS and not is_review_due(event_date, planned_for):
+            return False
+    return True
+
+
+def topic_memory_blocks(state: dict, monday: date) -> tuple[str, str]:
+    events = topic_events_from_state(state)
+    saturday = monday + timedelta(days=5)
+    recent_lines = []
+    review_lines = []
+
+    for event in reversed(events[-80:]):
+        event_date = event_topic_date(event)
+        label = f"{event['subject']} — {event['chapter']}"
+        if event_date is None:
+            recent_lines.append(f"- {label}")
+            continue
+
+        due_this_week = False
+        for offset in TOPIC_SPACED_REVIEW_DAYS:
+            due_date = event_date + timedelta(days=offset)
+            if monday <= due_date <= saturday:
+                review_lines.append(f"- {due_date.isoformat()}: {label}")
+                due_this_week = True
+                break
+
+        age_days = (monday - event_date).days
+        if 0 <= age_days < TOPIC_REPEAT_COOLDOWN_DAYS and not due_this_week:
+            recent_lines.append(f"- {event_date.isoformat()}: {label}")
+
+    recent_text = "\n".join(recent_lines[:60]) or "(কোনো recent topic নেই)"
+    review_text = "\n".join(review_lines[:20]) or "(এই সপ্তাহে নির্দিষ্ট revision topic নেই)"
+    return recent_text, review_text
 
 
 def load_state() -> dict:
@@ -173,19 +301,12 @@ WEEKLY_TOPICS_SCHEMA = {
 }
 
 
-def _build_syllabus_prompt(exam_focus: str, history: dict) -> str:
+def _build_syllabus_prompt(exam_focus: str, state: dict, monday: date) -> str:
     scope_lines = []
     for subject, topics in COMPETITIVE_EXAM_TOPIC_SCOPE.items():
         scope_lines.append(f"- {subject}: {', '.join(topics)}")
 
-    history_lines = []
-    for subject, chapters in sorted((history or {}).items()):
-        if not isinstance(chapters, list):
-            continue
-        recent = "; ".join(str(item) for item in chapters[-30:])
-        if recent:
-            history_lines.append(f"- {subject}: {recent}")
-    history_text = "\n".join(history_lines) or "(এখনও কোনো টপিক কভার করা হয়নি)"
+    recent_text, review_text = topic_memory_blocks(state, monday)
 
     return f"""তুমি একজন অভিজ্ঞ প্রশ্নপত্র/সিলেবাস পরিকল্পনাকারী।
 লক্ষ্য পরীক্ষা: {exam_focus}
@@ -197,27 +318,32 @@ def _build_syllabus_prompt(exam_focus: str, history: dict) -> str:
 === Syllabus universe ===
 {chr(10).join(scope_lines)}
 
-=== ইতিমধ্যে কভার করা recent topics ===
-{history_text}
+=== Blocked recent topics: এগুলো repeat করবে না ===
+{recent_text}
+
+=== Spaced-repetition review topics: চাইলে এগুলো revision হিসেবে নেওয়া যাবে ===
+{review_text}
 
 নিয়ম:
-1. আগের recent topics হুবহু repeat করবে না।
-2. সপ্তাহে subject mix balanced রাখবে: static GK, math/reasoning, language,
+1. Blocked recent topics থেকে কোনো topic repeat করবে না।
+2. Spaced-repetition list থেকে topic নিলে সেটি revision হিসেবে নেওয়া যাবে,
+   কিন্তু একই wording নয়; একটু ভিন্ন angle/subtopic করবে।
+3. সপ্তাহে subject mix balanced রাখবে: static GK, math/reasoning, language,
    science/current affairs — সব দিক ঘুরে আসবে।
-3. chapter খুব নির্দিষ্ট হবে, যেমন "মৌলিক অধিকার: Article 14-18" বা
+4. chapter খুব নির্দিষ্ট হবে, যেমন "মৌলিক অধিকার: Article 14-18" বা
    "সময় ও কাজ: pipe and cistern"। অস্পষ্ট "History" টাইপ topic নয়।
-4. প্রশ্ন WBCS/WBPSC/WB Police/SSC/Railway/Banking/TET ধরনের পরীক্ষার উপযোগী হবে।
-5. আউটপুট অবশ্যই ঠিক {WEEKLY_TOPIC_COUNT}টি object সহ JSON array হবে।
-6. প্রতিটি object-এ থাকবে "subject" এবং "chapter"। subject ইংরেজি category
+5. প্রশ্ন WBCS/WBPSC/WB Police/SSC/Railway/Banking/TET ধরনের পরীক্ষার উপযোগী হবে।
+6. আউটপুট অবশ্যই ঠিক {WEEKLY_TOPIC_COUNT}টি object সহ JSON array হবে।
+7. প্রতিটি object-এ থাকবে "subject" এবং "chapter"। subject ইংরেজি category
    name হতে পারে, chapter বাংলা হবে। শুধুমাত্র JSON ফেরত দাও।
 """
 
 
-def generate_weekly_topics(exam_focus: str, history: dict) -> list[dict]:
+def generate_weekly_topics(exam_focus: str, state: dict, monday: date) -> list[dict]:
     client = genai.Client(api_key=require_env("GEMINI_API_KEY"))
     response = client.models.generate_content(
         model=GEMINI_MODEL,
-        contents=_build_syllabus_prompt(exam_focus, history),
+        contents=_build_syllabus_prompt(exam_focus, state, monday),
         config=types.GenerateContentConfig(
             response_mime_type="application/json",
             response_schema=WEEKLY_TOPICS_SCHEMA,
@@ -236,6 +362,103 @@ def generate_weekly_topics(exam_focus: str, history: dict) -> list[dict]:
     return topics
 
 
+def validate_weekly_topics(raw_topics: list[dict], state: dict, monday: date) -> list[dict]:
+    events = topic_events_from_state(state)
+    selected_keys: set[str] = set()
+    accepted: list[dict] = []
+
+    for raw in raw_topics:
+        if len(accepted) >= WEEKLY_TOPIC_COUNT:
+            break
+        subject = str(raw.get("subject", "")).strip()
+        chapter = str(raw.get("chapter", "")).strip()
+        if not subject or not chapter:
+            continue
+        planned_for = monday + timedelta(days=len(accepted))
+        key = topic_key(subject, chapter)
+        if not is_topic_allowed(key, events, planned_for, selected_keys):
+            log.info("Rejected repeated topic from planner: %s / %s", subject, chapter)
+            continue
+        accepted.append({"subject": subject, "chapter": chapter, "key": key})
+        selected_keys.add(key)
+
+    return accepted
+
+
+def fill_missing_weekly_topics(topics: list[dict], state: dict, monday: date) -> list[dict]:
+    events = topic_events_from_state(state)
+    selected_keys = {topic["key"] for topic in topics}
+    candidates = [
+        {"subject": subject, "chapter": chapter, "key": topic_key(subject, chapter)}
+        for subject, chapters in COMPETITIVE_EXAM_TOPIC_SCOPE.items()
+        for chapter in chapters
+    ]
+    random.shuffle(candidates)
+
+    for candidate in candidates:
+        if len(topics) >= WEEKLY_TOPIC_COUNT:
+            break
+        planned_for = monday + timedelta(days=len(topics))
+        if not is_topic_allowed(candidate["key"], events, planned_for, selected_keys):
+            continue
+        topics.append(candidate)
+        selected_keys.add(candidate["key"])
+
+    if len(topics) < WEEKLY_TOPIC_COUNT:
+        raise ValueError("Could not build enough non-repeating weekly topics.")
+    return topics
+
+
+def plan_weekly_topics(exam_focus: str, state: dict, monday: date) -> list[dict]:
+    best: list[dict] = []
+    for attempt in range(1, 4):
+        raw_topics = generate_weekly_topics(exam_focus, state, monday)
+        topics = validate_weekly_topics(raw_topics, state, monday)
+        if len(topics) > len(best):
+            best = topics
+        if len(topics) == WEEKLY_TOPIC_COUNT:
+            return topics
+        log.warning(
+            "Topic planner returned %d/%d usable non-repeating topics on attempt %d.",
+            len(topics),
+            WEEKLY_TOPIC_COUNT,
+            attempt,
+        )
+    return fill_missing_weekly_topics(best, state, monday)
+
+
+def remember_planned_topics(state: dict, topics: list[dict], monday: date) -> dict:
+    history = state.get("history") or {}
+    events = topic_events_from_state(state)
+    existing_markers = {
+        (event.get("key"), event.get("planned_for"))
+        for event in events
+    }
+    planned_at = date.today().isoformat()
+
+    for i, topic in enumerate(topics):
+        subject = topic["subject"]
+        chapter = topic["chapter"]
+        planned_for = (monday + timedelta(days=i)).isoformat()
+        key = topic.get("key") or topic_key(subject, chapter)
+        history.setdefault(subject, []).append(chapter)
+        history[subject] = history[subject][-50:]
+        marker = (key, planned_for)
+        if marker not in existing_markers:
+            events.append({
+                "subject": subject,
+                "chapter": chapter,
+                "key": key,
+                "planned_for": planned_for,
+                "planned_at": planned_at,
+            })
+            existing_markers.add(marker)
+
+    state["history"] = history
+    state["topic_events"] = events[-TOPIC_EVENT_LIMIT:]
+    return state
+
+
 def ensure_current_week(state: dict) -> tuple[dict, bool]:
     today = date.today()
     monday = today - timedelta(days=today.weekday())
@@ -247,11 +470,11 @@ def ensure_current_week(state: dict) -> tuple[dict, bool]:
         return state, False
 
     exam_focus = state.get("exam_focus") or DEFAULT_EXAM_FOCUS
-    history = state.get("history") or {}
     topics = retry_with_backoff(
-        generate_weekly_topics,
+        plan_weekly_topics,
         exam_focus,
-        history,
+        state,
+        monday,
         what="Gemini weekly competitive-topic planning",
     )
 
@@ -260,12 +483,11 @@ def ensure_current_week(state: dict) -> tuple[dict, bool]:
         subject = topic["subject"]
         chapter = topic["chapter"]
         days[str(i)] = {"day_bn": BN_WEEKDAY_NAMES[i], "subject": subject, "chapter": chapter}
-        history.setdefault(subject, []).append(chapter)
-        history[subject] = history[subject][-20:]
+
+    state = remember_planned_topics(state, topics, monday)
 
     state.update({
         "exam_focus": exam_focus,
-        "history": history,
         "week_start_date": monday.isoformat(),
         "week_label_bn": format_week_label_bn(monday),
         "days": days,

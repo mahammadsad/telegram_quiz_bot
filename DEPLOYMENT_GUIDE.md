@@ -19,6 +19,10 @@ Reasoning, English, Bengali, Computer, and Current Affairs. Each quiz then
 uses Gemini to create Bengali MCQs for that selected topic, while Supabase
 tracks covered topics to reduce repetition.
 
+The planner also enforces a topic cooldown. A recently used topic is blocked
+from normal selection, and it can return only when it is due for spaced
+revision after `3`, `7`, `14`, or `30` days.
+
 ## 1. Create / Reuse Supabase
 
 Use the same Supabase project as repo_1 if you want unified analytics.

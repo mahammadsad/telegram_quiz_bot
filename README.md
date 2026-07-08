@@ -11,6 +11,10 @@ Gemini is used in two places:
   Current Affairs
 - Bengali MCQ generation for the selected competitive-exam topic
 
+Topic planning has a hard anti-repeat layer: recently used topics are blocked,
+while older topics can return only on spaced-repetition review windows
+(`3`, `7`, `14`, and `30` days).
+
 ## What Runs
 
 - `bot.py --mode announce` posts the weekly competitive-exam topic plan.
