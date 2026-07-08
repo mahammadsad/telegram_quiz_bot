@@ -410,7 +410,7 @@ def send_sunday_announcement() -> None:
         lines.append(f"<b>{esc(d['day_bn'])}</b> · {esc(d['subject'])} — {esc(d['chapter'])}")
     lines.extend([
         "",
-        "Gemini প্রতিটি টপিক থেকে বাংলা MCQ তৈরি করবে। ধীরে ধীরে History, Polity, Geography, Science, Math, Reasoning, Language, Computer, Current Affairs সব গুরুত্বপূর্ণ অংশ কভার হবে।",
+        "ধীরে ধীরে History, Polity, Geography, Science, Math, Reasoning, Language, Computer, Current Affairs সব গুরুত্বপূর্ণ অংশ কভার হবে।",
         "প্রতিদিনের কুইজ Mini App-এ খুলবে, স্কোর সরাসরি ড্যাশবোর্ডে জমা হবে।",
     ])
     retry_with_backoff(
@@ -470,7 +470,7 @@ def send_daily_quiz() -> None:
         f"📚 <b>বিষয়:</b> {esc(meta.get('subject', ''))}\n"
         f"📖 <b>চ্যাপ্টার:</b> {esc(meta.get('chapter', ''))}\n"
         f"🔢 <b>প্রশ্ন:</b> {len(pack['items'])}টি\n\n"
-        "সব প্রশ্ন বাংলা competitive-exam practice-এর জন্য Gemini দিয়ে তৈরি। "
+        "প্রশ্নগুলো competitive-exam practice-এর জন্য সাজানো। "
         "স্কোর ও উত্তরপত্র সাবমিটের পর ড্যাশবোর্ডে আপডেট হবে।"
     )
     keyboard = {"inline_keyboard": [[{"text": "কুইজ শুরু করুন", "url": quiz_url}]]}
