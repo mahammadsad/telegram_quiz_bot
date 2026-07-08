@@ -1,14 +1,4 @@
-# WB Exam Quiz Bot Scheduler
-#
-# NOTE: this file was reconstructed from DEPLOYMENT_GUIDE.md's description of
-# the original workflow (that file itself wasn't shared when this update was
-# made) — since we removed the QUIZ_PAGE_URL / GitHub-Pages-URL computation
-# step entirely (the new Mini App flow doesn't need it: index.html fetches
-# quizzes/<id>.json as a plain relative path, and the button links to a
-# t.me/... Mini App URL instead). If your real workflow had other custom
-# steps, merge them back in — everything else here matches the guide.
-
-name: WB Exam Quiz Bot Scheduler
+name: WB Exam Quiz Pack Bot Scheduler
 
 on:
   schedule:
@@ -24,13 +14,6 @@ on:
         options:
           - announce
           - quiz
-
-# Needed so the last step below can push syllabus_state.json / quizzes/*.json
-# back to the repo. Also set in Settings → Actions → General → Workflow
-# permissions → "Read and write permissions" (belt-and-braces; some org
-# policies only honor the repo setting, others only honor this).
-permissions:
-  contents: write
 
 jobs:
   run-bot:
@@ -65,16 +48,6 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
           TELEGRAM_BOT_USERNAME: ${{ vars.TELEGRAM_BOT_USERNAME }}
           MINIAPP_SHORT_NAME: ${{ vars.MINIAPP_SHORT_NAME }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: python bot.py --mode ${{ steps.decide.outputs.mode }}
-
-      - name: Commit generated quiz + syllabus files
-        run: |
-          git config user.name "wb-quiz-bot"
-          git config user.email "actions@users.noreply.github.com"
-          git add syllabus_state.json quizzes/ 2>/dev/null || true
-          if git diff --cached --quiet; then
-            echo "Nothing changed — skipping commit."
-          else
-            git commit -m "chore: update syllabus state + today's quiz [skip ci]"
-            git push
-          fi
