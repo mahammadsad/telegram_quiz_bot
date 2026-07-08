@@ -326,7 +326,7 @@
       <div class="meta"><b>প্রশ্ন</b><span id="intro-count" class="num">-</span></div>
       <div class="meta"><b>সময়</b><span id="intro-time" class="num">-</span></div>
     </div>
-    <div class="notice">
+    <div class="notice" id="intro-notice">
       উত্তর সাবমিট করলে স্কোর Supabase ড্যাশবোর্ডে জমা হবে। ফলাফলের আগে সঠিক উত্তর
       দেখানো হবে না, তাই নিজের প্রস্তুতির বাস্তব ছবি পাবে।
     </div>
@@ -400,6 +400,7 @@
 
   var quizId = getQuizId();
   var quiz = null;
+  var legacyLocal = false;
   var answers = [];
   var current = 0;
   var totalSeconds = 0;
@@ -483,13 +484,37 @@
       })
       .then(function(data){
         if (!data.qs || !data.qs.length) throw new Error("Empty quiz");
+        if (data.legacy) {
+          loadLegacyQuiz();
+          return;
+        }
         quiz = data;
+        legacyLocal = false;
         answers = quiz.qs.map(function(){ return null; });
         renderIntro();
       })
       .catch(function(err){
         console.error(err);
-        showError("কুইজ লোড করা যায়নি। API সার্ভার চালু আছে এবং Supabase-এ এই quiz_id আছে কিনা দেখুন।");
+        loadLegacyQuiz();
+      });
+  }
+
+  function loadLegacyQuiz(){
+    fetch("quizzes/" + encodeURIComponent(quizId) + ".json")
+      .then(function(resp){
+        if (!resp.ok) throw new Error("Legacy quiz returned " + resp.status);
+        return resp.json();
+      })
+      .then(function(data){
+        if (!data.qs || !data.qs.length) throw new Error("Empty legacy quiz");
+        quiz = data;
+        legacyLocal = true;
+        answers = quiz.qs.map(function(){ return null; });
+        renderIntro();
+      })
+      .catch(function(err){
+        console.error(err);
+        showError("কুইজ লোড করা যায়নি। API সার্ভার চালু আছে, Supabase-এ এই quiz_id আছে, অথবা legacy quizzes/" + quizId + ".json ফাইল আছে কিনা দেখুন।");
       });
   }
 
@@ -499,6 +524,9 @@
     byId("intro-subject").textContent = meta.subject || "মক টেস্ট";
     byId("intro-count").textContent = bn(quiz.qs.length) + "টি";
     byId("intro-time").textContent = bn(Math.max(5, quiz.qs.length)) + " মিনিট";
+    byId("intro-notice").textContent = legacyLocal
+      ? "এই কুইজটি legacy JSON fallback থেকে লোড হয়েছে। API/Supabase ঠিক হলে স্কোর ড্যাশবোর্ডে জমা হবে; না হলে শুধু লোকাল রিভিউ দেখাবে।"
+      : "উত্তর সাবমিট করলে স্কোর Supabase ড্যাশবোর্ডে জমা হবে। ফলাফলের আগে সঠিক উত্তর দেখানো হবে না, তাই নিজের প্রস্তুতির বাস্তব ছবি পাবে।";
     show("intro");
   }
 
@@ -600,8 +628,39 @@
       .then(renderResult)
       .catch(function(err){
         console.error(err);
+        if (legacyLocal) {
+          renderResult(buildLocalLegacyResult(err.message));
+          return;
+        }
         showError(err.message || "উত্তর সাবমিট করা যায়নি।");
       });
+  }
+
+  function buildLocalLegacyResult(reason){
+    var review = [];
+    var score = 0;
+    quiz.qs.forEach(function(item, index){
+      var selected = answers[index];
+      var correct = Number(item.a);
+      var ok = selected === correct;
+      if (ok) score += 1;
+      review.push({
+        q:item.q,
+        o:item.o,
+        selectedIndex:selected,
+        correctIndex:correct,
+        isCorrect:ok,
+        explanation:item.e || "",
+      });
+    });
+    return {
+      quiz_id:quizId,
+      score:score,
+      total:quiz.qs.length,
+      review:review,
+      localOnly:true,
+      localReason:reason || "API submit failed",
+    };
   }
 
   function renderResult(result){
@@ -609,7 +668,9 @@
     byId("score-ring").style.setProperty("--score-deg", (pct * 3.6) + "deg");
     byId("score-text").textContent = bn(result.score) + "/" + bn(result.total);
     byId("result-title").textContent = resultTitle(pct);
-    byId("result-subtitle").textContent = "স্কোর সংরক্ষণ হয়েছে। নিচে প্রশ্নভিত্তিক রিভিউ দেখুন।";
+    byId("result-subtitle").textContent = result.localOnly
+      ? "API/Supabase-এ স্কোর জমা হয়নি। আপাতত লোকাল রিভিউ দেখানো হচ্ছে।"
+      : "স্কোর সংরক্ষণ হয়েছে। নিচে প্রশ্নভিত্তিক রিভিউ দেখুন।";
 
     var list = byId("review-list");
     list.innerHTML = "";

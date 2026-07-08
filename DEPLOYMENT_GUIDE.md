@@ -70,6 +70,24 @@ The same server also serves:
 - `/api/quiz/{quiz_id}/submit` -> verified answer submission
 - `/api/leaderboard` -> live leaderboard
 
+Important: if BotFather still points to a GitHub Pages URL, the browser will
+try to call `/api/quiz/<quiz_id>` on GitHub Pages and the quiz will not load.
+The simplest production setup is to point BotFather directly at the FastAPI
+root URL above.
+
+If you intentionally keep `index.html` on GitHub Pages and run the API
+elsewhere, edit both `index.html` and `dashboard.html`:
+
+```html
+<meta name="quiz-api-base" content="https://your-api-domain.example" />
+```
+
+Then set this on the API host:
+
+```bash
+CORS_ALLOWED_ORIGINS=https://your-github-username.github.io
+```
+
 ## 4. Register the Telegram Mini App
 
 In BotFather:
@@ -118,6 +136,11 @@ python scripts/import_legacy_quizzes.py
 
 The script writes each pack into `questions` and `polls`. It is safe to skip
 if you do not need old packs.
+
+Old Telegram posts may still open URLs like `startapp=20260708`. This repo
+keeps `quizzes/20260708.json` as a legacy fallback so that old link can still
+open. The API also attempts to import a matching legacy JSON file into
+Supabase on demand.
 
 ## 7. Local Development
 

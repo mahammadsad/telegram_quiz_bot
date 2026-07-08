@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import json
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -52,6 +53,17 @@ def dashboard() -> FileResponse:
     return FileResponse(ROOT / "dashboard.html")
 
 
+@app.get("/quizzes/{quiz_file}")
+def legacy_quiz_file(quiz_file: str) -> FileResponse:
+    if not quiz_file.endswith(".json"):
+        raise HTTPException(status_code=404, detail="Legacy quiz file not found.")
+    quiz_id = _clean_quiz_id(quiz_file[:-5])
+    path = ROOT / "quizzes" / f"{quiz_id}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Legacy quiz file not found.")
+    return FileResponse(path, media_type="application/json")
+
+
 @app.get("/api/health")
 def health() -> dict:
     return {"ok": True}
@@ -59,8 +71,10 @@ def health() -> dict:
 
 @app.get("/api/quiz/{quiz_id}")
 def get_quiz(quiz_id: str) -> dict:
-    pack = quiz_pack_service.get_quiz_pack(_clean_quiz_id(quiz_id))
+    pack, legacy_payload = _ensure_quiz_pack(_clean_quiz_id(quiz_id), allow_readonly_legacy=True)
     if not pack:
+        if legacy_payload:
+            return _public_legacy_payload(legacy_payload)
         raise HTTPException(status_code=404, detail="Quiz pack not found.")
     return quiz_pack_service.public_quiz_payload(pack)
 
@@ -68,8 +82,10 @@ def get_quiz(quiz_id: str) -> dict:
 @app.post("/api/quiz/{quiz_id}/submit")
 def submit_quiz(quiz_id: str, payload: SubmitQuizRequest) -> dict:
     try:
+        clean_quiz_id = _clean_quiz_id(quiz_id)
+        _ensure_quiz_pack(clean_quiz_id, allow_readonly_legacy=False)
         telegram_user = _telegram_user_from_payload(payload)
-        return quiz_pack_service.submit_quiz_attempts(_clean_quiz_id(quiz_id), telegram_user, payload.answers)
+        return quiz_pack_service.submit_quiz_attempts(clean_quiz_id, telegram_user, payload.answers)
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
@@ -104,3 +120,63 @@ def _clean_quiz_id(value: str) -> str:
     if not quiz_id:
         raise HTTPException(status_code=400, detail="Invalid quiz id.")
     return quiz_id[:64]
+
+
+def _ensure_quiz_pack(quiz_id: str, allow_readonly_legacy: bool) -> tuple[dict | None, dict | None]:
+    """Find a DB pack, or import a legacy JSON pack into the DB if present."""
+    try:
+        pack = quiz_pack_service.get_quiz_pack(quiz_id)
+    except (Exception, SystemExit) as exc:
+        legacy_payload = _load_legacy_payload(quiz_id)
+        if allow_readonly_legacy and legacy_payload:
+            return None, legacy_payload
+        raise HTTPException(status_code=503, detail=f"Database is not reachable: {exc}") from exc
+
+    if pack:
+        return pack, None
+
+    legacy_payload = _load_legacy_payload(quiz_id)
+    if not legacy_payload:
+        return None, None
+
+    try:
+        pack = quiz_pack_service.record_quiz_pack(
+            quiz_id,
+            legacy_payload.get("qs") or [],
+            legacy_payload.get("meta") or {"quiz_id": quiz_id},
+            chat_id=0,
+        )
+        return pack, None
+    except (Exception, SystemExit) as exc:
+        if allow_readonly_legacy:
+            return None, legacy_payload
+        raise HTTPException(
+            status_code=503,
+            detail=f"Legacy quiz exists, but it could not be imported into Supabase: {exc}",
+        ) from exc
+
+
+def _load_legacy_payload(quiz_id: str) -> dict | None:
+    path = ROOT / "quizzes" / f"{quiz_id}.json"
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    if not isinstance(payload.get("qs"), list) or not payload["qs"]:
+        return None
+    payload.setdefault("meta", {})["quiz_id"] = quiz_id
+    return payload
+
+
+def _public_legacy_payload(payload: dict) -> dict:
+    meta = payload.get("meta") or {}
+    return {
+        "meta": meta,
+        "legacy": True,
+        "qs": [
+            {"q": item.get("q") or item.get("question"), "o": item.get("o") or item.get("options")}
+            for item in payload.get("qs", [])
+        ],
+    }
