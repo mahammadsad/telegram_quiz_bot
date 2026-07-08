@@ -19,21 +19,41 @@ HOW THIS WORKS (read this before editing anything below)
         job hasn't run yet for any reason, it generates it right here).
      b. Looks up today's {subject, chapter} from that syllabus.
      c. Asks Gemini for 10 strict-JSON Bengali MCQs on that chapter.
-     d. Compresses + Base64url-encodes the quiz JSON (no database, no
-        backend — the entire quiz travels inside a URL).
+     d. Writes that quiz as a small plain-JSON file to `quizzes/<id>.json`
+        (id = today's date, e.g. "20260709") — no compression, no
+        URL-encoding, just a normal static file sitting in the repo.
      e. Posts a message to the group with a button linking to
-        `<your-github-pages-url>?data=<encoded quiz>`.
-     f. index.html (hosted on GitHub Pages) decodes that same URL and
-        renders/grades the quiz entirely in the student's browser.
+        `https://t.me/<your-bot>/<your-miniapp-shortname>?startapp=<id>`.
+        Because this is a genuine Telegram Mini App **direct link** (not a
+        plain external URL), Telegram opens it natively inside the app —
+        no "open this link?" prompt, no browser chrome.
+     f. index.html (hosted on GitHub Pages) reads that `id` from
+        `Telegram.WebApp.initDataUnsafe.start_param`, fetches
+        `quizzes/<id>.json` as a normal static asset, and renders/grades
+        the quiz entirely in the student's browser.
 
-3. STATE — `syllabus_state.json` (repo root) is the only "memory" this
-   project has. It stores the current week's generated chapters plus a
-   short history per subject so Gemini doesn't repeat itself. The GitHub
-   Actions workflow commits this file back to the repo automatically after
-   every run that changes it — see the last step in quiz_scheduler.yml.
-   You never open or edit this file yourself.
+   WHY NOT JUST PUT THE QUIZ DATA IN THE startapp PARAMETER? Telegram caps
+   that parameter at 512 characters, and a 10-question quiz with
+   explanations runs well past that even compressed — so the quiz itself
+   has to live somewhere else. A plain file in the repo is the simplest
+   "somewhere else" that needs no extra hosting or accounts.
 
-4. SCHEDULING — there are two supported ways to run this script. Pick ONE:
+3. STATE — `syllabus_state.json` (repo root) is this project's syllabus
+   memory: current week's generated chapters plus a short history per
+   subject so Gemini doesn't repeat itself. `quizzes/*.json` are a second,
+   simpler kind of state — one small file per day's quiz, kept forever
+   (they're tiny; a year of them is well under a megabyte). The GitHub
+   Actions workflow commits both back to the repo automatically after
+   every run that changes them — see the last step in quiz_scheduler.yml.
+   You never open or edit these files yourself.
+
+4. LEADERBOARD — bot.py does not touch this at all. index.html and
+   dashboard.html write/read scores directly to Firestore from the
+   student's browser using the Firebase Web SDK (see DEPLOYMENT_GUIDE.md).
+   That keeps bot.py's job narrowly scoped to "write questions, post
+   message" — no service-account keys or admin SDKs needed here.
+
+5. SCHEDULING — there are two supported ways to run this script. Pick ONE:
 
      METHOD A (recommended): GitHub Actions cron
         GitHub triggers a fresh, short-lived run of `python bot.py --mode ...`
@@ -47,17 +67,17 @@ HOW THIS WORKS (read this before editing anything below)
         `schedule.every()...` loop. It will NOT work on GitHub Actions,
         because Actions kills the runner as soon as one script finishes —
         there is no "always on" process for `schedule` to keep alive.
-        (In this mode, `syllabus_state.json` just persists on local disk —
-        there's no git commit step, and none is needed.)
+        (In this mode, `syllabus_state.json` and `quizzes/` just persist on
+        local disk — there's no git commit step, and none is needed.)
 
 --------------------------------------------------------------------------
 ENVIRONMENT VARIABLES REQUIRED (see DEPLOYMENT_GUIDE.md for how to set these)
 --------------------------------------------------------------------------
-  GEMINI_API_KEY       — from https://aistudio.google.com/app/apikey
-  TELEGRAM_BOT_TOKEN   — from @BotFather
-  TELEGRAM_CHAT_ID     — your group's chat id (negative number, e.g. -100123456789)
-  QUIZ_PAGE_URL        — your deployed index.html, e.g.
-                         https://yourusername.github.io/wb-quiz-bot/index.html
+  GEMINI_API_KEY         — from https://aistudio.google.com/app/apikey
+  TELEGRAM_BOT_TOKEN     — from @BotFather
+  TELEGRAM_CHAT_ID       — your group's chat id (negative number, e.g. -100123456789)
+  TELEGRAM_BOT_USERNAME  — your bot's @username, WITHOUT the @ (e.g. "wb_quiz_bot")
+  MINIAPP_SHORT_NAME     — the short name you gave BotFather in /newapp (e.g. "quiz")
 """
 
 import os
@@ -65,13 +85,10 @@ import sys
 import json
 import time
 import html
-import zlib
-import base64
 import random
 import logging
 import argparse
 from datetime import datetime, date, timedelta
-from urllib.parse import urlparse
 
 import requests
 from google import genai
@@ -92,19 +109,18 @@ RETRY_BASE_DELAY = 3        # seconds; doubles each retry (exponential backoff)
 
 TELEGRAM_API_BASE = "https://api.telegram.org/bot{token}/{method}"
 
-# QUIZ_PAGE_URL is normally computed automatically by quiz_scheduler.yml from
-# your repo name (see its "Compute QUIZ_PAGE_URL" step) — you don't need to
-# set anything for the common case. This is just the in-code fallback for
-# that step producing nothing (e.g. running bot.py directly on your own
-# machine without setting the env var). NOTE: `os.environ.get(K, default)`
-# only returns `default` when K is completely unset — if a workflow passes
-# an *empty string*, `.get()` still returns that empty string, which is why
-# `.strip()` + the explicit empty-check below matters (this is exactly what
-# caused the "URL host is empty" Telegram error — QUIZ_PAGE_URL existed as
-# an env var but was blank).
-GITHUB_PAGES_QUIZ_URL = os.environ.get("QUIZ_PAGE_URL", "").strip()
-if not GITHUB_PAGES_QUIZ_URL:
-    GITHUB_PAGES_QUIZ_URL = "https://your-username.github.io/wb-quiz-bot/index.html"
+# Quiz files live in this folder, one per day, e.g. quizzes/20260709.json —
+# committed to the repo by quiz_scheduler.yml, served as a plain static file
+# by GitHub Pages right alongside index.html.
+QUIZZES_DIR = "quizzes"
+
+# Needed to build the Telegram Mini App direct link:
+#   https://t.me/<TELEGRAM_BOT_USERNAME>/<MINIAPP_SHORT_NAME>?startapp=<id>
+# Neither of these is secret (a bot's username and Mini App short name are
+# public by nature), so they're read as plain repo Variables, not Secrets —
+# see DEPLOYMENT_GUIDE.md.
+TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+MINIAPP_SHORT_NAME = os.environ.get("MINIAPP_SHORT_NAME", "").strip()
 
 logging.basicConfig(
     level=logging.INFO,
@@ -424,24 +440,61 @@ def generate_mcqs(subject: str, chapter: str, exam_focus: str, num_questions: in
 
 
 # ==========================================================================
-# SERVERLESS DATA TRANSFER — compact JSON -> zlib compress -> base64url
+# QUIZ FILE + MINI APP LINK — this replaces the old zlib+base64 URL encoding
 # ==========================================================================
-# This is the entire "backend": there is no database and no server. The
-# quiz lives nowhere except inside this URL. index.html reverses every one
-# of these steps client-side (pako.inflate + atob + JSON.parse).
+# The quiz now travels as a small plain-JSON file (quizzes/<id>.json)
+# instead of being packed into the URL. The Telegram message links to a
+# Mini App **direct link** (https://t.me/<bot>/<shortname>?startapp=<id>),
+# which Telegram opens natively — no external-link warning, no browser
+# chrome — because it recognizes the t.me/ domain as its own Mini App
+# launch mechanism rather than an arbitrary external URL.
 
-def encode_quiz_payload(questions: list, meta: dict) -> str:
-    compact = {
+def quiz_id_for_date(d: date) -> str:
+    """A short id safe for the startapp parameter (only A-Z a-z 0-9 _ -
+    are allowed there) and safe as a filename."""
+    return d.strftime("%Y%m%d")
+
+
+def save_quiz_file(quiz_id: str, questions: list, meta: dict) -> str:
+    os.makedirs(QUIZZES_DIR, exist_ok=True)
+    payload = {
         "meta": meta,
         "qs": [
             {"q": item["question"], "o": item["options"], "a": item["correct_index"], "e": item["explanation"]}
             for item in questions
         ],
     }
-    raw_json = json.dumps(compact, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-    compressed = zlib.compress(raw_json, level=9)
-    b64 = base64.urlsafe_b64encode(compressed).decode("ascii").rstrip("=")
-    return b64
+    path = os.path.join(QUIZZES_DIR, f"{quiz_id}.json")
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
+    log.info(f"Wrote {path} ({os.path.getsize(path)} bytes) — the GitHub Action will commit this automatically.")
+    return path
+
+
+def validate_miniapp_config() -> None:
+    """Fails fast with one clear message instead of letting a missing
+    TELEGRAM_BOT_USERNAME / MINIAPP_SHORT_NAME surface as a confusing
+    Telegram 400 error, or a link that opens as a generic external page."""
+    problems = []
+    if not TELEGRAM_BOT_USERNAME:
+        problems.append(
+            "TELEGRAM_BOT_USERNAME is not set (your bot's @username, without the @, "
+            "e.g. \"wb_quiz_bot\")."
+        )
+    if not MINIAPP_SHORT_NAME:
+        problems.append(
+            "MINIAPP_SHORT_NAME is not set (the short name you gave BotFather when "
+            "you ran /newapp)."
+        )
+    if problems:
+        raise RuntimeError(
+            "Mini App isn't fully configured yet:\n- " + "\n- ".join(problems) +
+            "\nSee DEPLOYMENT_GUIDE.md → 'Register your Mini App with BotFather'."
+        )
+
+
+def build_miniapp_url(quiz_id: str) -> str:
+    return f"https://t.me/{TELEGRAM_BOT_USERNAME}/{MINIAPP_SHORT_NAME}?startapp={quiz_id}"
 
 
 # ==========================================================================
@@ -455,28 +508,6 @@ def esc(text) -> str:
     this, Telegram rejects the whole message with a 400 'can't parse
     entities' error instead of just showing the raw character."""
     return html.escape(str(text), quote=False)
-
-
-def validate_quiz_page_url(url: str) -> None:
-    """Fails fast with one clear line instead of letting a missing/broken
-    QUIZ_PAGE_URL surface as a confusing Telegram 400 error after 4 retries
-    (this is exactly what happened when the env var existed but was blank —
-    the resulting button URL was just '?data=...' with no host at all)."""
-    parsed = urlparse(url)
-    if not parsed.scheme or not parsed.netloc:
-        raise RuntimeError(
-            f"QUIZ_PAGE_URL is missing or malformed (got {url!r}). "
-            "quiz_scheduler.yml's 'Compute QUIZ_PAGE_URL' step normally sets "
-            "this automatically from your repo name — check that step's log. "
-            "If you're using a custom Pages domain, set the QUIZ_PAGE_URL "
-            "repo Variable yourself (Settings → Secrets and variables → "
-            "Actions → Variables)."
-        )
-    if "your-username" in url:
-        raise RuntimeError(
-            f"QUIZ_PAGE_URL is still the placeholder value ({url!r}). "
-            "Set it to your real GitHub Pages URL."
-        )
 
 
 def telegram_api(method: str, payload: dict) -> dict:
@@ -525,7 +556,7 @@ def send_daily_quiz():
         log.info("Today is Sunday — no quiz scheduled. Skipping.")
         return
 
-    validate_quiz_page_url(GITHUB_PAGES_QUIZ_URL)  # fail fast, before any API calls
+    validate_miniapp_config()  # fail fast, before any Gemini/Telegram calls
 
     state = load_state()
     state, _ = ensure_current_week(state)  # self-healing: generates the week if Sunday's job hasn't run
@@ -541,10 +572,11 @@ def send_daily_quiz():
     )
     log.info(f"Got {len(questions)} validated questions from Gemini.")
 
-    meta = {"subject": subject, "chapter": chapter, "date": date.today().isoformat()}
-    payload = encode_quiz_payload(questions, meta)
-    quiz_url = f"{GITHUB_PAGES_QUIZ_URL}?data={payload}"
-    log.info(f"Encoded quiz URL length: {len(quiz_url)} characters.")
+    quiz_id = quiz_id_for_date(date.today())
+    meta = {"subject": subject, "chapter": chapter, "date": date.today().isoformat(), "quiz_id": quiz_id}
+    save_quiz_file(quiz_id, questions, meta)
+    quiz_url = build_miniapp_url(quiz_id)
+    log.info(f"Mini App URL: {quiz_url}")
 
     chat_id = os.environ["TELEGRAM_CHAT_ID"]
     text = (
