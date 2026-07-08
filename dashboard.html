@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>মেধা তালিকা — টপ ২০</title>
+
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Tiro+Bangla&family=Noto+Sans+Bengali:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+
+<style>
+  :root{
+    --paper:      #E9ECDF;
+    --card:       #F8F9F3;
+    --ink:        #1D2B36;
+    --ink-soft:   #55636B;
+    --line:       #C9CDBC;
+    --stamp-red:  #A6342A;
+    --seal-gold:  #B08526;
+    --seal-gold-soft: #EADFBC;
+    --success:    #2F6B4A;
+    --rank-gold:  #C9A227;
+    --rank-silver:#93A0A8;
+    --rank-bronze:#B0703F;
+
+    --font-display: 'Tiro Bangla', 'Noto Serif Bengali', serif;
+    --font-body: 'Noto Sans Bengali', 'Noto Sans', system-ui, sans-serif;
+
+    --shadow: 0 1px 2px rgba(29,43,54,.05), 0 8px 20px rgba(29,43,54,.08), 0 28px 48px -16px rgba(29,43,54,.14);
+    --radius: 18px;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ height:100%; }
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 15% 8%, rgba(176,133,38,.07), transparent 40%),
+      radial-gradient(circle at 90% 90%, rgba(166,52,42,.05), transparent 45%),
+      var(--paper);
+    color:var(--ink);
+    font-family: var(--font-body);
+    -webkit-font-smoothing:antialiased;
+    min-height:100%;
+    display:flex; justify-content:center;
+    padding: 18px 12px 40px;
+  }
+  .app{ width:100%; max-width:460px; }
+  h1,h2{ font-family: var(--font-display); margin:0; }
+  .num{ font-family:'Noto Sans Bengali', system-ui, sans-serif; font-variant-numeric: tabular-nums; }
+
+  .sheet{
+    position:relative; background:var(--card); border-radius:var(--radius);
+    box-shadow:var(--shadow); border:1px solid var(--line); overflow:hidden;
+  }
+  .sheet::before{
+    content:""; display:block; height:14px;
+    background-image: radial-gradient(circle, var(--paper) 3.5px, transparent 3.6px);
+    background-size: 22px 14px; background-position: 11px center; background-repeat: repeat-x;
+    border-bottom: 1px dashed var(--line);
+  }
+  .sheet-body{ padding:22px 20px 24px; }
+
+  .eyebrow{
+    font-size:12.5px; letter-spacing:.06em; color:var(--ink-soft); text-transform:uppercase;
+    display:flex; align-items:center; gap:8px; justify-content:center;
+  }
+  .eyebrow .dot{ width:6px;height:6px;border-radius:50%;background:var(--stamp-red); }
+  h1{ font-size:24px; text-align:center; margin:12px 0 4px; }
+  .sub{ text-align:center; color:var(--ink-soft); font-size:14px; margin-bottom:6px; }
+  .live-badge{
+    display:inline-flex; align-items:center; gap:6px; font-size:12px; color:var(--success);
+    justify-content:center; width:100%; margin-bottom:18px; font-weight:600;
+  }
+  .live-dot{ width:7px; height:7px; border-radius:50%; background:var(--success); animation: pulse 1.6s ease infinite; }
+  @keyframes pulse{ 0%,100%{ opacity:1; } 50%{ opacity:.35; } }
+
+  .row{
+    display:flex; align-items:center; gap:12px;
+    padding:12px 8px; border-bottom:1px dashed var(--line);
+  }
+  .row:last-child{ border-bottom:none; }
+
+  .rank{
+    flex:0 0 auto; width:34px; height:34px; border-radius:50%;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:14px; color:var(--ink-soft);
+    border:2px solid var(--line); background:var(--card);
+  }
+  .rank.medal-1{ background: radial-gradient(circle at 35% 30%, #F3D879, var(--rank-gold) 60%, #8F6A1D 100%); border-color:var(--rank-gold); color:#3A2B08; }
+  .rank.medal-2{ background: radial-gradient(circle at 35% 30%, #E6EAEC, var(--rank-silver) 65%, #6B767C 100%); border-color:var(--rank-silver); color:#26313A; }
+  .rank.medal-3{ background: radial-gradient(circle at 35% 30%, #E3B98A, var(--rank-bronze) 60%, #7A4A26 100%); border-color:var(--rank-bronze); color:#fff; }
+
+  .avatar{
+    flex:0 0 auto; width:38px; height:38px; border-radius:50%;
+    background:var(--seal-gold-soft); color:#5B4110;
+    display:flex; align-items:center; justify-content:center;
+    font-weight:700; font-size:15px; border:1px solid #DFCB8E;
+  }
+
+  .who{ flex:1 1 auto; min-width:0; }
+  .who .name{ font-weight:600; font-size:15px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .who .meta{ font-size:12.5px; color:var(--ink-soft); margin-top:1px; }
+
+  .stat{ flex:0 0 auto; text-align:right; }
+  .stat .correct{ font-weight:700; font-size:16px; }
+  .stat .acc{ font-size:12px; color:var(--ink-soft); }
+
+  .center-screen{ text-align:center; padding: 40px 8px; }
+  .center-screen .big-emoji{ font-size:40px; margin-bottom:10px; }
+  .muted{ color:var(--ink-soft); }
+
+  .back-link{
+    display:block; text-align:center; margin-top:16px; font-size:14px;
+    color:var(--ink-soft); text-decoration:none; padding:10px;
+  }
+  .back-link:hover{ color:var(--ink); }
+
+  .hidden{ display:none !important; }
+  @media (prefers-reduced-motion: reduce){ *{ animation:none !important; transition:none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="sheet">
+    <div class="sheet-body">
+      <div class="eyebrow"><span class="dot"></span> সরকারি চাকরি প্রস্তুতি</div>
+      <h1>সর্বমোট মেধা তালিকা</h1>
+      <p class="sub">সব কুইজ মিলিয়ে টপ ২০ শিক্ষার্থী</p>
+      <div class="live-badge" id="live-badge"><span class="live-dot"></span> লাইভ আপডেট হচ্ছে</div>
+
+      <div id="state-loading" class="center-screen">
+        <div class="big-emoji">🏅</div>
+        <p class="muted">তালিকা লোড হচ্ছে...</p>
+      </div>
+
+      <div id="state-empty" class="center-screen hidden">
+        <div class="big-emoji">🗒️</div>
+        <p class="muted" style="line-height:1.6;">
+          এখনও কোনো ফলাফল জমা হয়নি। আজকের কুইজ শেষ করো — তুমিই হতে পারো
+          এই তালিকার প্রথম নাম!
+        </p>
+      </div>
+
+      <div id="state-error" class="center-screen hidden">
+        <div class="big-emoji">⚠️</div>
+        <p class="muted" style="line-height:1.6;">
+          লিডারবোর্ড লোড করা যায়নি। Firebase সেটআপ এখনও সম্পূর্ণ না হলে এটা
+          স্বাভাবিক — DEPLOYMENT_GUIDE.md দেখো।
+        </p>
+      </div>
+
+      <div id="list" style="margin-top:6px;"></div>
+
+      <a class="back-link" href="index.html">← কুইজে ফিরে যাও</a>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+  if (tg) { try { tg.ready(); tg.expand(); } catch(e){} }
+
+  var BN_DIGITS = ['০','১','২','৩','৪','৫','৬','৭','৮','৯'];
+  function bn(n) { return String(n).replace(/[0-9]/g, function (d) { return BN_DIGITS[+d]; }); }
+
+  // Same placeholders as index.html — paste your real Firebase web config
+  // into BOTH files (they're separate static pages, so each needs its own copy).
+  var firebaseConfig = {
+    apiKey: "PASTE_YOUR_FIREBASE_API_KEY",
+    authDomain: "PASTE_YOUR_PROJECT.firebaseapp.com",
+    projectId: "PASTE_YOUR_PROJECT_ID",
+    storageBucket: "PASTE_YOUR_PROJECT.appspot.com",
+    messagingSenderId: "PASTE_YOUR_SENDER_ID",
+    appId: "PASTE_YOUR_APP_ID"
+  };
+
+  function showState(name) {
+    ['loading', 'empty', 'error'].forEach(function (s) {
+      document.getElementById('state-' + s).classList.toggle('hidden', s !== name);
+    });
+    document.getElementById('live-badge').classList.toggle('hidden', name !== 'ok');
+  }
+
+  function initial(name) {
+    var trimmed = (name || '').trim();
+    return trimmed ? trimmed[0].toUpperCase() : '?';
+  }
+
+  function render(rows) {
+    var list = document.getElementById('list');
+    list.innerHTML = '';
+    if (!rows.length) { showState('empty'); return; }
+    showState('ok');
+
+    rows.forEach(function (r, i) {
+      var rank = i + 1;
+      var total = r.totalQuestions || 0;
+      var correct = r.totalCorrect || 0;
+      var acc = total ? Math.round((correct / total) * 100) : 0;
+
+      var row = document.createElement('div');
+      row.className = 'row';
+
+      var rankEl = document.createElement('div');
+      rankEl.className = 'rank num' + (rank <= 3 ? ' medal-' + rank : '');
+      rankEl.textContent = rank <= 3 ? ['🥇','🥈','🥉'][rank-1] : bn(rank);
+      row.appendChild(rankEl);
+
+      var avatarEl = document.createElement('div');
+      avatarEl.className = 'avatar';
+      avatarEl.textContent = initial(r.name);
+      row.appendChild(avatarEl);
+
+      var whoEl = document.createElement('div');
+      whoEl.className = 'who';
+      whoEl.innerHTML = '<div class="name"></div><div class="meta num"></div>';
+      whoEl.querySelector('.name').textContent = r.name || 'শিক্ষার্থী';
+      whoEl.querySelector('.meta').textContent = bn(r.quizzesTaken || 0) + 'টি কুইজ দিয়েছে';
+      row.appendChild(whoEl);
+
+      var statEl = document.createElement('div');
+      statEl.className = 'stat';
+      statEl.innerHTML = '<div class="correct num"></div><div class="acc num"></div>';
+      statEl.querySelector('.correct').textContent = bn(correct) + ' ✓';
+      statEl.querySelector('.acc').textContent = bn(acc) + '% সঠিক';
+      row.appendChild(statEl);
+
+      list.appendChild(row);
+    });
+  }
+
+  if (firebaseConfig.apiKey.indexOf('PASTE_YOUR') === 0) {
+    showState('error');
+    return;
+  }
+
+  try {
+    firebase.initializeApp(firebaseConfig);
+    var db = firebase.firestore();
+    db.collection('leaderboard')
+      .orderBy('totalCorrect', 'desc')
+      .limit(20)
+      .onSnapshot(function (snap) {
+        var rows = [];
+        snap.forEach(function (doc) { rows.push(doc.data()); });
+        render(rows);
+      }, function (err) {
+        console.error('Leaderboard listener failed:', err);
+        showState('error');
+      });
+  } catch (e) {
+    console.error('Firebase init failed:', e);
+    showState('error');
+  }
+})();
+</script>
+</body>
+</html>
