@@ -1,5 +1,6 @@
 """HTTP API and static Mini App host for the DB-backed quiz pack bot."""
 
+
 from __future__ import annotations
 
 import json
@@ -95,18 +96,20 @@ def get_quiz(quiz_id: str) -> dict:
 
 
 @app.post("/api/quiz/{quiz_id}/submit")
-def submit_quiz(quiz_id: str, payload: SubmitQuizRequest) -> dict:
+def submit_quiz(quiz_id: str, payload: SubmitQuizPayload) -> dict:
+    LOG.warning(
+        "SUBMIT HIT quiz_id=%s answers=%s has_init_data=%s",
+        quiz_id,
+        len(payload.answers),
+        bool(payload.init_data),
+    )
+
     try:
-        clean_quiz_id = _clean_quiz_id(quiz_id)
-        _ensure_quiz_pack(clean_quiz_id, allow_readonly_legacy=False)
-        telegram_user = _telegram_user_from_payload(payload)
-        return quiz_pack_service.submit_quiz_attempts(clean_quiz_id, telegram_user, payload.answers)
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
+        return quiz_pack_service.submit_quiz_attempts(quiz_id, payload)
+
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     except (Exception, SystemExit) as exc:
         raise HTTPException(
             status_code=503,
