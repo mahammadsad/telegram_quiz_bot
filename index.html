@@ -500,7 +500,7 @@
   }
 
   function loadLegacyQuiz(){
-    fetch("quizzes/" + encodeURIComponent(quizId) + ".json")
+    fetch("quizzes/" + encodeURIComponent(quizId) + ".json?v=" + Date.now(), {cache:"no-store"})
       .then(function(resp){
         if (!resp.ok) throw new Error("Legacy quiz returned " + resp.status);
         return resp.json();
