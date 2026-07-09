@@ -394,6 +394,7 @@
   var timeLeft = 0;
   var timerHandle = null;
   var screen = "loading";
+  var lastApiError = null;
 
   var screens = {
     loading: byId("screen-loading"),
@@ -473,6 +474,7 @@
 
   function loadQuiz(){
     byId("loading-message").textContent = "কুইজ তৈরি/লোড হচ্ছে...";
+    lastApiError = null;
     fetch(api("/api/quiz/" + encodeURIComponent(quizId)))
       .then(function(resp){ return jsonOrThrow(resp, "Quiz API"); })
       .then(function(data){
@@ -488,6 +490,7 @@
       })
       .catch(function(err){
         console.error(err);
+        lastApiError = err;
         if (err.status === 404) {
           loadLegacyQuiz();
           return;
@@ -511,8 +514,15 @@
       })
       .catch(function(err){
         console.error(err);
-        showError("এই কুইজটি এখন খোলা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন, অথবা গ্রুপের নতুন কুইজ বাটন থেকে খুলুন।");
+        showError(buildMissingQuizMessage());
       });
+  }
+
+  function buildMissingQuizMessage(){
+    var apiText = lastApiError && lastApiError.status
+      ? "API status: " + lastApiError.status + ". "
+      : "";
+    return apiText + "আজকের কুইজ ডেটা এখনও পাওয়া যায়নি। Bot workflow আবার চালালে Gemini কুইজ তৈরি করবে, Supabase-এ রাখবে, এবং static fallback ফাইল বানাবে।";
   }
 
   function renderIntro(){

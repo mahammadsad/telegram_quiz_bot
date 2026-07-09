@@ -26,6 +26,7 @@ import re
 import sys
 import time
 from datetime import date, timedelta
+from pathlib import Path
 
 import requests
 from google import genai
@@ -40,6 +41,7 @@ from config.settings import (
     SYLLABUS_STATE_KEY,
     TELEGRAM_BOT_USERNAME,
     TELEGRAM_CHAT_ID,
+    WRITE_STATIC_QUIZ_JSON,
     require_env,
 )
 from services import quiz_pack_service
@@ -133,6 +135,7 @@ _WHITESPACE_RE = re.compile(r"\s+")
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 log = logging.getLogger("wb_quiz_pack_bot")
+ROOT = Path(__file__).resolve().parent
 
 
 def bn_num(n: int) -> str:
@@ -644,6 +647,42 @@ def ensure_quiz_pack_for_date(target_date: date, chat_id: int = 0) -> dict:
     )
 
 
+def export_static_quiz_json(pack: dict) -> Path | None:
+    if not WRITE_STATIC_QUIZ_JSON:
+        return None
+
+    payload = {
+        "meta": pack.get("meta") or {},
+        "qs": [],
+    }
+    for item in pack.get("items", []):
+        question = item.get("question") or {}
+        options = [
+            question.get("option_a") or "",
+            question.get("option_b") or "",
+            question.get("option_c") or "",
+            question.get("option_d") or "",
+        ]
+        correct = str(question.get("correct_option") or "").strip().upper()
+        payload["qs"].append({
+            "q": question.get("question_text") or "",
+            "o": options,
+            "a": "ABCD".find(correct),
+            "e": question.get("detailed_explanation") or question.get("explanation") or "",
+        })
+
+    quiz_id = str(payload["meta"].get("quiz_id") or pack.get("quiz_id") or "").strip()
+    if not quiz_id or not payload["qs"]:
+        return None
+
+    payload["meta"]["quiz_id"] = quiz_id
+    path = ROOT / "quizzes" / f"{quiz_id}.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
+    log.info("Wrote static quiz fallback %s.", path)
+    return path
+
+
 def validate_runtime_config() -> None:
     require_env("GEMINI_API_KEY")
     require_env("TELEGRAM_BOT_TOKEN")
@@ -715,6 +754,7 @@ def send_daily_quiz() -> None:
 
     quiz_id = quiz_id_for_date(today)
     pack = ensure_quiz_pack_for_date(today, chat_id=_chat_id_as_int(TELEGRAM_CHAT_ID))
+    export_static_quiz_json(pack)
     meta = pack["meta"]
     quiz_url = build_miniapp_url(quiz_id)
     text = (

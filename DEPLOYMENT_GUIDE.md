@@ -56,6 +56,8 @@ Optional:
 GEMINI_MODEL=gemini-2.5-flash
 DEV_ALLOW_UNVERIFIED_TELEGRAM=false
 CORS_ALLOWED_ORIGINS=https://your-pages-domain.example
+APP_TIMEZONE=Asia/Kolkata
+WRITE_STATIC_QUIZ_JSON=true
 ```
 
 ## 3. Deploy the Mini App API
@@ -85,6 +87,12 @@ Important: if BotFather still points to a GitHub Pages URL, the browser will
 try to call `/api/quiz/<quiz_id>` on GitHub Pages and the quiz will not load.
 The simplest production setup is to point BotFather directly at the FastAPI
 root URL above.
+
+As a safety net, `bot.py --mode quiz` also writes `quizzes/<quiz_id>.json`
+after the Gemini quiz is stored in Supabase. The GitHub Actions workflow
+commits that generated fallback file automatically, so GitHub Pages can still
+display the quiz if the FastAPI URL is not wired yet. In that static fallback
+mode, result submission will be local-only until the FastAPI API is deployed.
 
 If you intentionally keep `index.html` on GitHub Pages and run the API
 elsewhere, edit both `index.html` and `dashboard.html`:
@@ -134,8 +142,9 @@ Add these GitHub Variables:
 - `TELEGRAM_BOT_USERNAME`
 - `MINIAPP_SHORT_NAME`
 
-The workflow no longer commits generated files. Quiz packs and syllabus state
-are written to Supabase.
+Quiz packs and syllabus state are still written to Supabase. The workflow
+commits only the small generated `quizzes/<quiz_id>.json` fallback file for
+static Mini App compatibility.
 
 ## 6. Import Old JSON Quiz Packs
 

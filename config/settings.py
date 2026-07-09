@@ -69,6 +69,11 @@ CORS_ALLOWED_ORIGINS = [
 # default timezone. GitHub Actions and many Python hosts run in UTC.
 APP_TIMEZONE = os.environ.get("APP_TIMEZONE", "Asia/Kolkata").strip() or "Asia/Kolkata"
 
+# Static hosting fallback. When true, bot.py also writes quizzes/<quiz_id>.json
+# after storing the generated pack in Supabase, so GitHub Pages can still show
+# the quiz even when the FastAPI Mini App URL is not wired yet.
+WRITE_STATIC_QUIZ_JSON = os.environ.get("WRITE_STATIC_QUIZ_JSON", "true").strip().lower() == "true"
+
 # --------------------------------------------------------------------------
 # Bot identity. repo_1 uses "daily_mcq"; this repo writes quiz packs as the
 # second shared bot type already present in database/schema.sql.

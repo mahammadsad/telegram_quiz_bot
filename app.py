@@ -224,9 +224,11 @@ def _generate_today_pack(quiz_id: str) -> dict:
         raise HTTPException(status_code=400, detail="Invalid quiz id.")
 
     try:
-        from bot import ensure_quiz_pack_for_date
+        from bot import ensure_quiz_pack_for_date, export_static_quiz_json
 
-        return ensure_quiz_pack_for_date(target_date, chat_id=0)
+        pack = ensure_quiz_pack_for_date(target_date, chat_id=0)
+        export_static_quiz_json(pack)
+        return pack
     except HTTPException:
         raise
     except ValueError as exc:
