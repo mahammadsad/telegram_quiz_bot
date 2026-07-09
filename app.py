@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
-import os
 import json
+import logging
+import os
+from datetime import date
 from pathlib import Path
 
 from fastapi import FastAPI, HTTPException
@@ -19,8 +21,10 @@ from config.settings import (
 from services import quiz_pack_service
 from storage import stats_repo
 from telegram.auth import TelegramAuthError, verify_init_data
+from utils.local_time import local_today
 
 ROOT = Path(__file__).resolve().parent
+LOG = logging.getLogger("app")
 
 app = FastAPI(title="WB Exam Quiz Pack API", version="2.0.0")
 
@@ -66,12 +70,23 @@ def legacy_quiz_file(quiz_file: str) -> FileResponse:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"ok": True}
+    today = local_today()
+    return {
+        "ok": True,
+        "today_quiz_id": today.strftime("%Y%m%d"),
+        "supabase_configured": bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY")),
+        "gemini_configured": bool(os.environ.get("GEMINI_API_KEY")),
+        "telegram_configured": bool(os.environ.get("TELEGRAM_BOT_TOKEN")),
+    }
 
 
 @app.get("/api/quiz/{quiz_id}")
 def get_quiz(quiz_id: str) -> dict:
-    pack, legacy_payload = _ensure_quiz_pack(_clean_quiz_id(quiz_id), allow_readonly_legacy=True)
+    pack, legacy_payload = _ensure_quiz_pack(
+        _clean_quiz_id(quiz_id),
+        allow_readonly_legacy=True,
+        allow_generate_today=True,
+    )
     if not pack:
         if legacy_payload:
             return _public_legacy_payload(legacy_payload)
@@ -132,11 +147,17 @@ def _clean_quiz_id(value: str) -> str:
     return quiz_id[:64]
 
 
-def _ensure_quiz_pack(quiz_id: str, allow_readonly_legacy: bool) -> tuple[dict | None, dict | None]:
-    """Find a DB pack, or import a legacy JSON pack into the DB if present."""
+def _ensure_quiz_pack(
+    quiz_id: str,
+    allow_readonly_legacy: bool,
+    allow_generate_today: bool = False,
+) -> tuple[dict | None, dict | None]:
+    """Find a DB pack, generate today's missing pack, or import legacy JSON."""
     try:
         pack = quiz_pack_service.get_quiz_pack(quiz_id)
     except (Exception, SystemExit) as exc:
+        if allow_generate_today and _is_today_quiz_id(quiz_id):
+            return _generate_today_pack(quiz_id), None
         legacy_payload = _load_legacy_payload(quiz_id)
         if allow_readonly_legacy and legacy_payload:
             return None, legacy_payload
@@ -147,6 +168,9 @@ def _ensure_quiz_pack(quiz_id: str, allow_readonly_legacy: bool) -> tuple[dict |
 
     if pack:
         return pack, None
+
+    if allow_generate_today and _is_today_quiz_id(quiz_id):
+        return _generate_today_pack(quiz_id), None
 
     legacy_payload = _load_legacy_payload(quiz_id)
     if not legacy_payload:
@@ -166,6 +190,52 @@ def _ensure_quiz_pack(quiz_id: str, allow_readonly_legacy: bool) -> tuple[dict |
         raise HTTPException(
             status_code=503,
             detail="কুইজটি এখন খোলা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।",
+        ) from exc
+
+
+def _is_today_quiz_id(quiz_id: str) -> bool:
+    parsed = _quiz_date_from_id(quiz_id)
+    return bool(parsed and parsed == local_today() and parsed.weekday() != 6)
+
+
+def _quiz_date_from_id(quiz_id: str) -> date | None:
+    if len(quiz_id) != 8 or not quiz_id.isdigit():
+        return None
+    try:
+        return date(int(quiz_id[:4]), int(quiz_id[4:6]), int(quiz_id[6:8]))
+    except ValueError:
+        return None
+
+
+def _generate_today_pack(quiz_id: str) -> dict:
+    missing = [
+        name
+        for name in ("GEMINI_API_KEY", "SUPABASE_URL", "SUPABASE_SERVICE_KEY")
+        if not os.environ.get(name)
+    ]
+    if missing:
+        raise HTTPException(
+            status_code=503,
+            detail="Server setup incomplete. Missing: " + ", ".join(missing),
+        )
+
+    target_date = _quiz_date_from_id(quiz_id)
+    if not target_date:
+        raise HTTPException(status_code=400, detail="Invalid quiz id.")
+
+    try:
+        from bot import ensure_quiz_pack_for_date
+
+        return ensure_quiz_pack_for_date(target_date, chat_id=0)
+    except HTTPException:
+        raise
+    except ValueError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except (Exception, SystemExit) as exc:
+        LOG.exception("Failed to auto-generate quiz pack %s.", quiz_id)
+        raise HTTPException(
+            status_code=503,
+            detail="আজকের কুইজ তৈরি করা যায়নি। Gemini/Supabase সেটিংস ঠিক আছে কি না দেখে আবার চেষ্টা করুন।",
         ) from exc
 
 

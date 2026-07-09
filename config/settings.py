@@ -65,6 +65,10 @@ CORS_ALLOWED_ORIGINS = [
     if origin.strip()
 ]
 
+# All daily quiz IDs are based on the audience timezone, not the server's
+# default timezone. GitHub Actions and many Python hosts run in UTC.
+APP_TIMEZONE = os.environ.get("APP_TIMEZONE", "Asia/Kolkata").strip() or "Asia/Kolkata"
+
 # --------------------------------------------------------------------------
 # Bot identity. repo_1 uses "daily_mcq"; this repo writes quiz packs as the
 # second shared bot type already present in database/schema.sql.

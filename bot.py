@@ -25,7 +25,7 @@ import random
 import re
 import sys
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 import requests
 from google import genai
@@ -44,6 +44,7 @@ from config.settings import (
 )
 from services import quiz_pack_service
 from storage import bot_state_repo
+from utils.local_time import local_today
 
 MAX_RETRIES = 4
 RETRY_BASE_DELAY = 3
@@ -429,14 +430,19 @@ def plan_weekly_topics(exam_focus: str, state: dict, monday: date) -> list[dict]
     return fill_missing_weekly_topics(best, state, monday)
 
 
-def remember_planned_topics(state: dict, topics: list[dict], monday: date) -> dict:
+def remember_planned_topics(
+    state: dict,
+    topics: list[dict],
+    monday: date,
+    planned_at_date: date | None = None,
+) -> dict:
     history = state.get("history") or {}
     events = topic_events_from_state(state)
     existing_markers = {
         (event.get("key"), event.get("planned_for"))
         for event in events
     }
-    planned_at = date.today().isoformat()
+    planned_at = (planned_at_date or local_today()).isoformat()
 
     for i, topic in enumerate(topics):
         subject = topic["subject"]
@@ -461,8 +467,8 @@ def remember_planned_topics(state: dict, topics: list[dict], monday: date) -> di
     return state
 
 
-def ensure_current_week(state: dict) -> tuple[dict, bool]:
-    today = date.today()
+def ensure_current_week(state: dict, today: date | None = None) -> tuple[dict, bool]:
+    today = today or local_today()
     monday = today - timedelta(days=today.weekday())
     if (
         state.get("week_start_date") == monday.isoformat()
@@ -486,7 +492,7 @@ def ensure_current_week(state: dict) -> tuple[dict, bool]:
         chapter = topic["chapter"]
         days[str(i)] = {"day_bn": BN_WEEKDAY_NAMES[i], "subject": subject, "chapter": chapter}
 
-    state = remember_planned_topics(state, topics, monday)
+    state = remember_planned_topics(state, topics, monday, planned_at_date=today)
 
     state.update({
         "exam_focus": exam_focus,
@@ -590,6 +596,54 @@ def quiz_id_for_date(d: date) -> str:
     return d.strftime("%Y%m%d")
 
 
+def quiz_date_from_id(quiz_id: str) -> date | None:
+    if len(quiz_id) != 8 or not quiz_id.isdigit():
+        return None
+    try:
+        return date(int(quiz_id[:4]), int(quiz_id[4:6]), int(quiz_id[6:8]))
+    except ValueError:
+        return None
+
+
+def ensure_quiz_pack_for_date(target_date: date, chat_id: int = 0) -> dict:
+    quiz_id = quiz_id_for_date(target_date)
+    pack = quiz_pack_service.get_quiz_pack(quiz_id)
+    if pack:
+        return pack
+
+    today_idx = target_date.weekday()
+    if today_idx == 6:
+        raise ValueError("Sunday quiz generation is skipped.")
+
+    state, _ = ensure_current_week(load_state(), today=target_date)
+    day_info = (state.get("days") or {}).get(str(today_idx))
+    if not day_info:
+        raise ValueError(f"No topic plan found for {target_date.isoformat()}.")
+
+    subject, chapter = day_info["subject"], day_info["chapter"]
+    log.info("Generating %d MCQs for %s / %s.", QUESTIONS_PER_RUN, subject, chapter)
+    questions = retry_with_backoff(
+        generate_mcqs,
+        subject,
+        chapter,
+        state["exam_focus"],
+        QUESTIONS_PER_RUN,
+        what="Gemini MCQ generation",
+    )
+    meta = {
+        "subject": subject,
+        "chapter": chapter,
+        "date": target_date.isoformat(),
+        "quiz_id": quiz_id,
+    }
+    return quiz_pack_service.record_quiz_pack(
+        quiz_id,
+        questions,
+        meta,
+        chat_id=chat_id,
+    )
+
+
 def validate_runtime_config() -> None:
     require_env("GEMINI_API_KEY")
     require_env("TELEGRAM_BOT_TOKEN")
@@ -653,40 +707,14 @@ def send_sunday_announcement() -> None:
 
 def send_daily_quiz() -> None:
     validate_runtime_config()
-    today_idx = datetime.now().weekday()
+    today = local_today()
+    today_idx = today.weekday()
     if today_idx == 6:
         log.info("Today is Sunday; quiz generation skipped.")
         return
 
-    quiz_id = quiz_id_for_date(date.today())
-    pack = quiz_pack_service.get_quiz_pack(quiz_id)
-
-    if not pack:
-        state, _ = ensure_current_week(load_state())
-        day_info = state["days"][str(today_idx)]
-        subject, chapter = day_info["subject"], day_info["chapter"]
-        log.info("Generating %d MCQs for %s / %s.", QUESTIONS_PER_RUN, subject, chapter)
-        questions = retry_with_backoff(
-            generate_mcqs,
-            subject,
-            chapter,
-            state["exam_focus"],
-            QUESTIONS_PER_RUN,
-            what="Gemini MCQ generation",
-        )
-        meta = {
-            "subject": subject,
-            "chapter": chapter,
-            "date": date.today().isoformat(),
-            "quiz_id": quiz_id,
-        }
-        pack = quiz_pack_service.record_quiz_pack(
-            quiz_id,
-            questions,
-            meta,
-            chat_id=_chat_id_as_int(TELEGRAM_CHAT_ID),
-        )
-
+    quiz_id = quiz_id_for_date(today)
+    pack = ensure_quiz_pack_for_date(today, chat_id=_chat_id_as_int(TELEGRAM_CHAT_ID))
     meta = pack["meta"]
     quiz_url = build_miniapp_url(quiz_id)
     text = (

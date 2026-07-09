@@ -303,7 +303,7 @@
 
   <section id="screen-loading" class="surface section center">
     <div class="loader"></div>
-    <p class="muted">কুইজ লোড হচ্ছে...</p>
+    <p class="muted" id="loading-message">কুইজ তৈরি/লোড হচ্ছে...</p>
   </section>
 
   <section id="screen-error" class="surface section hidden">
@@ -432,6 +432,14 @@
   function bn(value){ return String(value).replace(/[0-9]/g, function(d){ return BN[+d]; }); }
   function pad2(n){ return n < 10 ? "0" + n : "" + n; }
   function api(path){ return API_BASE + path; }
+  function jsonOrThrow(resp, label){
+    if (resp.ok) return resp.json();
+    return resp.json().catch(function(){ return {}; }).then(function(body){
+      var err = new Error(body.detail || (label + " returned " + resp.status));
+      err.status = resp.status;
+      throw err;
+    });
+  }
 
   function getQuizId(){
     var params = new URLSearchParams(window.location.search);
@@ -464,11 +472,9 @@
   }
 
   function loadQuiz(){
+    byId("loading-message").textContent = "কুইজ তৈরি/লোড হচ্ছে...";
     fetch(api("/api/quiz/" + encodeURIComponent(quizId)))
-      .then(function(resp){
-        if (!resp.ok) throw new Error("Quiz API returned " + resp.status);
-        return resp.json();
-      })
+      .then(function(resp){ return jsonOrThrow(resp, "Quiz API"); })
       .then(function(data){
         if (!data.qs || !data.qs.length) throw new Error("Empty quiz");
         if (data.legacy) {
@@ -482,7 +488,11 @@
       })
       .catch(function(err){
         console.error(err);
-        loadLegacyQuiz();
+        if (err.status === 404) {
+          loadLegacyQuiz();
+          return;
+        }
+        showError(err.message || "কুইজ লোড করা যায়নি। একটু পরে আবার চেষ্টা করুন।");
       });
   }
 
@@ -591,7 +601,7 @@
   function finishQuiz(){
     clearInterval(timerHandle);
     show("loading");
-    screens.loading.querySelector(".muted").textContent = "উত্তর সাবমিট হচ্ছে...";
+    byId("loading-message").textContent = "উত্তর সাবমিট হচ্ছে...";
     fetch(api("/api/quiz/" + encodeURIComponent(quizId) + "/submit"), {
       method:"POST",
       headers:{"Content-Type":"application/json"},
@@ -603,9 +613,7 @@
     })
       .then(function(resp){
         if (!resp.ok) {
-          return resp.json().catch(function(){ return {}; }).then(function(body){
-            throw new Error(body.detail || ("Submit API returned " + resp.status));
-          });
+          return jsonOrThrow(resp, "Submit API");
         }
         return resp.json();
       })
