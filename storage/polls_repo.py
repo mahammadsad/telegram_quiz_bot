@@ -62,3 +62,7 @@ def get_by_run_slot(run_slot: str, bot_type: str) -> list[dict]:
         .execute()
     )
     return res.data or []
+
+
+def delete_by_run_slot(run_slot: str, bot_type: str) -> None:
+    get_client().table("polls").delete().eq("bot_type", bot_type).eq("run_slot", run_slot).execute()

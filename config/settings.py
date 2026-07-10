@@ -41,7 +41,41 @@ SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
 # --------------------------------------------------------------------------
 # Gemini
 # --------------------------------------------------------------------------
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+# API keys are intentionally resolved inside services/gemini_provider_pool.py.
+# Keeping them out of module-level constants makes it much harder for an
+# accidental settings dump/repr to disclose a credential and lets tests inject
+# a private environment mapping without mutating global state.
+GEMINI_MODEL_PRIMARY = os.environ.get(
+    "GEMINI_MODEL_PRIMARY",
+    os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite"),
+).strip() or "gemini-2.5-flash-lite"
+GEMINI_MODEL_FALLBACK = os.environ.get(
+    "GEMINI_MODEL_FALLBACK", "gemini-2.5-flash"
+).strip() or "gemini-2.5-flash"
+
+# Backward-compatible alias for older modules/database provenance. New
+# generation code always uses the explicit primary/fallback names above.
+GEMINI_MODEL = GEMINI_MODEL_PRIMARY
+
+GEMINI_FAILOVER_ENABLED = os.environ.get(
+    "GEMINI_FAILOVER_ENABLED", "true"
+).strip().lower() == "true"
+GEMINI_MAX_ATTEMPTS_PER_KEY = max(
+    1, int(os.environ.get("GEMINI_MAX_ATTEMPTS_PER_KEY", "2"))
+)
+GEMINI_REQUEST_TIMEOUT_SECONDS = max(
+    1, int(os.environ.get("GEMINI_REQUEST_TIMEOUT_SECONDS", "120"))
+)
+GEMINI_KEY_COOLDOWN_SECONDS = max(
+    0, int(os.environ.get("GEMINI_KEY_COOLDOWN_SECONDS", "900"))
+)
+GEMINI_BACKOFF_BASE_SECONDS = max(
+    0.0, float(os.environ.get("GEMINI_BACKOFF_BASE_SECONDS", "2"))
+)
+GEMINI_MAX_BACKOFF_SECONDS = max(
+    GEMINI_BACKOFF_BASE_SECONDS,
+    float(os.environ.get("GEMINI_MAX_BACKOFF_SECONDS", "60")),
+)
 
 # --------------------------------------------------------------------------
 # Telegram
@@ -49,8 +83,16 @@ GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 # Mini App direct-link identity. The public username/short name are used to
 # build https://t.me/<bot>/<shortname>?startapp=<quiz_id> links.
 TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 MINIAPP_SHORT_NAME = os.environ.get("MINIAPP_SHORT_NAME", "").strip()
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
+TELEGRAM_FORUM_TOPICS_JSON = os.environ.get("TELEGRAM_FORUM_TOPICS_JSON", "").strip()
+# Telegram's General forum topic sometimes expects no message_thread_id. Set
+# this only after discovering a real numeric ID; an empty value deliberately
+# means announcements are sent without message_thread_id.
+TELEGRAM_GENERAL_THREAD_ID = os.environ.get("TELEGRAM_GENERAL_THREAD_ID", "").strip()
+TELEGRAM_ADMIN_CHAT_ID = os.environ.get("TELEGRAM_ADMIN_CHAT_ID", "").strip()
+TELEGRAM_ADMIN_USER_IDS = os.environ.get("TELEGRAM_ADMIN_USER_IDS", "").strip()
 
 # The API validates Telegram Mini App initData before accepting answers.
 # Set DEV_ALLOW_UNVERIFIED_TELEGRAM=true only for local browser testing.
@@ -84,14 +126,14 @@ SESSION_TYPE = "mock_test"
 # --------------------------------------------------------------------------
 # Quiz-pack generation behavior
 # --------------------------------------------------------------------------
-QUESTIONS_PER_RUN = int(os.environ.get("QUESTIONS_PER_RUN", "10"))
+QUESTIONS_PER_RUN = 10
 CURRENT_AFFAIRS_MIN = 2
 CURRENT_AFFAIRS_MAX = 3
 GEOGRAPHY_MIN = 1
 GEOGRAPHY_MAX = 2
 
 DUPLICATE_LOOKBACK_DAYS = 14     # "don't repeat these" window fed to Gemini
-SPACED_REPETITION_OFFSETS = (3, 7, 14)
+SPACED_REPETITION_OFFSETS = (3, 7, 14, 30)
 
 EXAM_TARGETS = "WBCS, WBP Constable/SI, Kolkata Police, PSC Clerkship, WB Miscellaneous, Primary TET"
 

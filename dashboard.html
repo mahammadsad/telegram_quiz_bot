@@ -184,7 +184,7 @@
   <header class="topbar">
     <div class="brand">
       <small>লাইভ স্কোরবোর্ড</small>
-      <h1>মক টেস্ট ড্যাশবোর্ড</h1>
+      <h1 id="board-title">মক টেস্ট ড্যাশবোর্ড</h1>
     </div>
     <a class="nav-link" href="index.html">কুইজে ফিরুন</a>
   </header>
@@ -225,6 +225,7 @@
 
   var API_BASE = (window.QUIZ_API_BASE || document.querySelector('meta[name="quiz-api-base"]').content || "").replace(/\/$/, "");
   var BN = ["০","১","২","৩","৪","৫","৬","৭","৮","৯"];
+  var quizId = new URLSearchParams(window.location.search).get("quiz") || "";
   function byId(id){ return document.getElementById(id); }
   function bn(value){ return String(value).replace(/[0-9]/g, function(d){ return BN[+d]; }); }
   function api(path){ return API_BASE + path; }
@@ -240,7 +241,9 @@
   }
 
   function load(){
-    fetch(api("/api/leaderboard?limit=20"))
+    var path = quizId ? "/api/quiz/" + encodeURIComponent(quizId) + "/leaderboard?limit=20" : "/api/leaderboard?limit=20";
+    if (quizId) byId("board-title").textContent = "এই কুইজের Leaderboard";
+    fetch(api(path))
       .then(function(resp){
         if (!resp.ok) throw new Error("Leaderboard API returned " + resp.status);
         return resp.json();
@@ -261,8 +264,8 @@
   }
 
   function render(rows){
-    var totalAttempts = rows.reduce(function(sum,row){ return sum + (row.total_attempts || 0); }, 0);
-    var best = rows.length ? rows[0].correct_attempts || 0 : 0;
+    var totalAttempts = rows.reduce(function(sum,row){ return sum + (quizId ? (row.answered || 0) : (row.total_attempts || 0)); }, 0);
+    var best = rows.length ? (quizId ? rows[0].score : rows[0].correct_attempts) || 0 : 0;
     setMetrics(rows.length, totalAttempts, best);
 
     if (!rows.length) {
@@ -273,9 +276,11 @@
     var list = byId("list");
     list.innerHTML = "";
     rows.forEach(function(row, index){
-      var rank = index + 1;
+      var rank = row.rank || index + 1;
       var name = displayName(row);
-      var accuracy = row.total_attempts ? Math.round((row.correct_attempts / row.total_attempts) * 100) : 0;
+      var score = quizId ? row.score : row.correct_attempts;
+      var total = quizId ? row.total : row.total_attempts;
+      var accuracy = total ? Math.round((score / total) * 100) : 0;
       var item = document.createElement("article");
       item.className = "row";
       item.innerHTML =
@@ -288,8 +293,8 @@
       rankEl.textContent = bn(rank);
       item.querySelector(".avatar").textContent = initial(name);
       item.querySelector(".name").textContent = name;
-      item.querySelector(".meta").textContent = bn(row.total_attempts || 0) + "টি উত্তর জমা";
-      item.querySelector(".score strong").textContent = bn(row.correct_attempts || 0);
+      item.querySelector(".meta").textContent = quizId ? bn(row.answered || 0) + "/১০টি উত্তর" : bn(row.total_attempts || 0) + "টি উত্তর জমা";
+      item.querySelector(".score strong").textContent = bn(score || 0);
       item.querySelector(".score span").textContent = bn(accuracy) + "% সঠিক";
       list.appendChild(item);
     });
@@ -303,6 +308,7 @@
   }
 
   function displayName(row){
+    if (row.display_name) return row.display_name;
     var full = [row.first_name, row.last_name].filter(Boolean).join(" ").trim();
     if (full) return full;
     if (row.username) return "@" + row.username;

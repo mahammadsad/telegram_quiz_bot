@@ -1,7 +1,8 @@
 # Migrations
 
-`001_init.sql` is the initial schema — identical to `database/schema.sql` at
-the time it was written. `database/schema.sql` always reflects the full
+`001_init.sql` is the initial schema. `002_subject_quiz_runs.sql` adds the
+subject-run lifecycle, chapter history, immutable quiz submissions, and
+recovery/leaderboard indexes. `database/schema.sql` always reflects the full
 **current** schema (apply that one for a brand-new Supabase project); this
 folder is the incremental history for projects that are already running.
 

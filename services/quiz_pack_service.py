@@ -20,11 +20,14 @@ from config.settings import (
     TELEGRAM_OPTION_LIMIT,
     TELEGRAM_QUESTION_LIMIT,
 )
+from config.subjects import SUBJECTS
 from models.attempt import Attempt
 from models.poll import Poll
 from models.question import Question
 from models.user import User
-from storage import attempts_repo, polls_repo, questions_repo, users_repo
+from storage import attempts_repo, polls_repo, questions_repo, stats_repo, submissions_repo, users_repo
+from services.question_validation import QUESTION_COUNT, validate_questions
+from utils.quiz_ids import parse_quiz_id
 from utils.hashing import normalize_text, question_hash
 from utils.iso_week import iso_week_number
 
@@ -57,14 +60,20 @@ def get_quiz_pack(quiz_id: str) -> dict | None:
         return None
 
     first_question = items[0]["question"]
+    try:
+        quiz_date, subject_key = parse_quiz_id(quiz_id)
+    except ValueError:
+        quiz_date, subject_key = date.today(), None
+    configured = SUBJECTS.get(subject_key or "")
     return {
         "quiz_id": quiz_id,
         "session_id": deliveries[0]["session_id"],
         "meta": {
             "quiz_id": quiz_id,
-            "subject": first_question.get("subject") or "",
+            "subject_key": subject_key,
+            "subject": configured.telegram_display_name if configured else first_question.get("subject") or "",
             "chapter": first_question.get("topic") or "",
-            "date": _date_from_quiz_id(quiz_id),
+            "date": quiz_date.isoformat() if quiz_date else _date_from_quiz_id(quiz_id),
         },
         "items": items,
     }
@@ -76,9 +85,12 @@ def record_quiz_pack(quiz_id: str, raw_questions: list[dict], meta: dict, chat_i
         LOG.info("Quiz pack %s already exists in Supabase; reusing it.", quiz_id)
         return existing
 
+    subject_key = str(meta.get("subject_key") or meta.get("subject") or "").strip()
+    chapter = str(meta.get("chapter") or "").strip()
+    clean_questions = validate_questions(raw_questions, subject_key, chapter)
     session_id = session_id_for_quiz(quiz_id)
     rows: list[dict] = []
-    for index, item in enumerate(raw_questions):
+    for index, item in enumerate(clean_questions):
         question_row = _get_or_insert_question(quiz_id, item, meta)
         delivery = Poll(
             telegram_poll_id=f"miniapp:{quiz_id}:{index + 1}",
@@ -98,7 +110,8 @@ def record_quiz_pack(quiz_id: str, raw_questions: list[dict], meta: dict, chat_i
         "session_id": session_id,
         "meta": {
             "quiz_id": quiz_id,
-            "subject": meta.get("subject", ""),
+            "subject_key": subject_key,
+            "subject": meta.get("subject_display_name") or meta.get("subject", ""),
             "chapter": meta.get("chapter", ""),
             "date": meta.get("date") or _date_from_quiz_id(quiz_id),
         },
@@ -140,13 +153,19 @@ def submit_quiz_attempts(quiz_id: str, telegram_user: dict, answers: list[int | 
     if not pack:
         raise ValueError("Quiz pack was not found.")
 
-    user_row = users_repo.upsert_user(User.from_telegram(telegram_user))
     items = pack["items"]
+    if len(items) != QUESTION_COUNT:
+        raise ValueError("Quiz data is incomplete; submission is disabled.")
+    _validate_answers(answers)
+    user_row = users_repo.upsert_user(User.from_telegram(telegram_user))
+    existing_submission = submissions_repo.get(quiz_id, user_row["id"])
+    if existing_submission:
+        if existing_submission.get("answers") != answers:
+            raise ValueError("This quiz has already been submitted; completed attempts are immutable.")
+        return _submission_result(quiz_id, items, answers, existing_submission)
 
-    for index, selected_index in enumerate(answers[:len(items)]):
+    for index, selected_index in enumerate(answers):
         if selected_index is None:
-            continue
-        if not isinstance(selected_index, int) or not (0 <= selected_index <= 3):
             continue
 
         item = items[index]
@@ -163,41 +182,61 @@ def submit_quiz_attempts(quiz_id: str, telegram_user: dict, answers: list[int | 
             session_type=SESSION_TYPE,
         ))
 
-    persisted_attempts = attempts_repo.get_for_user_by_poll_ids(
-        user_row["id"], [item["poll"]["id"] for item in items]
+    score = sum(
+        selected is not None and OPTION_LETTERS[selected] == item["question"]["correct_option"]
+        for item, selected in zip(items, answers)
     )
-    attempts_by_poll = {row["poll_id"]: row for row in persisted_attempts}
+    submission_payload = {
+        "quiz_id": quiz_id,
+        "user_id": user_row["id"],
+        "answers": answers,
+        "score": score,
+        "total": QUESTION_COUNT,
+        "answered": sum(value is not None for value in answers),
+    }
+    try:
+        submission = submissions_repo.insert(submission_payload)
+    except Exception:
+        # A simultaneous identical browser retry may win the unique
+        # (quiz_id,user_id) race after the initial lookup.
+        submission = submissions_repo.get(quiz_id, user_row["id"])
+        if not submission or submission.get("answers") != answers:
+            raise
+    return _submission_result(quiz_id, items, answers, submission)
 
+
+def _validate_answers(answers: list[int | None]) -> None:
+    if not isinstance(answers, list) or len(answers) != QUESTION_COUNT:
+        raise ValueError("answers must contain exactly 10 entries.")
+    for value in answers:
+        if value is not None and (isinstance(value, bool) or not isinstance(value, int) or value not in range(4)):
+            raise ValueError("Each answer must be 0, 1, 2, 3, or null.")
+
+
+def _submission_result(quiz_id: str, items: list[dict], answers: list[int | None], submission: dict) -> dict:
     review = []
-    score = 0
-    for item in items:
+    for item, selected_index in zip(items, answers):
         question = item["question"]
-        poll = item["poll"]
-        attempt = attempts_by_poll.get(poll["id"])
-        selected_option = attempt["selected_option"] if attempt else None
-        selected_index = OPTION_LETTERS.index(selected_option) if selected_option in OPTION_LETTERS else None
         correct_index = OPTION_LETTERS.index(question["correct_option"])
-        is_correct = bool(attempt and attempt.get("is_correct"))
-        if is_correct:
-            score += 1
         review.append({
             "q": question["question_text"],
-            "o": [
-                question["option_a"],
-                question["option_b"],
-                question["option_c"],
-                question["option_d"],
-            ],
+            "o": [question["option_a"], question["option_b"], question["option_c"], question["option_d"]],
             "selectedIndex": selected_index,
             "correctIndex": correct_index,
-            "isCorrect": is_correct,
+            "isCorrect": selected_index is not None and selected_index == correct_index,
             "explanation": question.get("detailed_explanation") or question.get("explanation") or "",
         })
-
+    board = stats_repo.quiz_leaderboard(quiz_id, limit=100)
+    same = submissions_repo.list_for_quiz(quiz_id, limit=10000)
+    same.sort(key=lambda row: (-int(row.get("score") or 0), str(row.get("completed_at") or ""), str(row.get("user_id") or "")))
+    user_rank = next((i + 1 for i, row in enumerate(same) if row.get("user_id") == submission.get("user_id")), None)
     return {
         "quiz_id": quiz_id,
-        "score": score,
-        "total": len(items),
+        "score": int(submission.get("score") or 0),
+        "total": QUESTION_COUNT,
+        "answered": int(submission.get("answered") or sum(value is not None for value in answers)),
+        "rank": user_rank,
+        "participants": board["participants"],
         "review": review,
     }
 
@@ -207,6 +246,8 @@ def _get_or_insert_question(quiz_id: str, item: dict, meta: dict) -> dict:
 
     exact = questions_repo.get_by_hash_any_bot(question.question_hash)
     if exact:
+        if exact.get("subject") != question.subject or exact.get("topic") != question.topic:
+            raise ValueError(f"Question classification collision in {quiz_id}; refusing cross-subject reuse.")
         LOG.info("Quiz %s reused exact duplicate question %s.", quiz_id, exact["id"])
         return exact
 
@@ -219,6 +260,8 @@ def _get_or_insert_question(quiz_id: str, item: dict, meta: dict) -> dict:
     if similar:
         row = questions_repo.get_by_id(similar[0]["id"])
         if row:
+            if row.get("subject") != question.subject or row.get("topic") != question.topic:
+                raise ValueError(f"Similar question classification mismatch in {quiz_id}.")
             LOG.info("Quiz %s reused similar question %s.", quiz_id, row["id"])
             return row
 
@@ -226,8 +269,8 @@ def _get_or_insert_question(quiz_id: str, item: dict, meta: dict) -> dict:
 
 
 def _build_question(quiz_id: str, item: dict, meta: dict) -> Question:
-    question_text = _str(item.get("question", item.get("q")))[:TELEGRAM_QUESTION_LIMIT]
-    options = [_str(option)[:TELEGRAM_OPTION_LIMIT] for option in item.get("options", item.get("o", []))]
+    question_text = _str(item.get("question", item.get("q")))
+    options = [_str(option) for option in item.get("options", item.get("o", []))]
     if len(options) != 4 or not question_text or any(not option for option in options):
         raise ValueError(f"Invalid quiz question in {quiz_id}: expected question text and 4 options.")
 
@@ -235,9 +278,9 @@ def _build_question(quiz_id: str, item: dict, meta: dict) -> Question:
     if not (0 <= correct_index <= 3):
         raise ValueError(f"Invalid correct option in {quiz_id}: {correct_index}")
 
-    explanation = _str(item.get("explanation", item.get("e")))[:TELEGRAM_EXPLANATION_LIMIT]
-    detailed = _str(item.get("detailed_explanation", explanation))[:TELEGRAM_DETAILED_EXPLANATION_LIMIT]
-    subject = _str(meta.get("subject") or item.get("subject") or "Miscellaneous")
+    explanation = _str(item.get("explanation", item.get("e")))
+    detailed = _str(item.get("detailed_explanation", explanation))
+    subject = _str(meta.get("subject_key") or item.get("subject_key") or item.get("subject"))
     topic = _str(meta.get("chapter") or item.get("topic") or item.get("subtopic") or "General")[:150]
     normalized = normalize_text(question_text)
 
@@ -253,7 +296,7 @@ def _build_question(quiz_id: str, item: dict, meta: dict) -> Question:
         subject=subject,
         topic=topic,
         difficulty=_str(item.get("difficulty") or "medium"),
-        gemini_model=GEMINI_MODEL,
+        gemini_model=_str(meta.get("generation_model") or GEMINI_MODEL),
         source=quiz_source(quiz_id),
         week_number=iso_week_number(),
         bot_type=BOT_TYPE,
@@ -263,11 +306,10 @@ def _build_question(quiz_id: str, item: dict, meta: dict) -> Question:
 
 
 def _date_from_quiz_id(quiz_id: str) -> str:
-    if len(quiz_id) == 8 and quiz_id.isdigit():
-        try:
-            return date(int(quiz_id[:4]), int(quiz_id[4:6]), int(quiz_id[6:8])).isoformat()
-        except ValueError:
-            pass
+    try:
+        return parse_quiz_id(quiz_id)[0].isoformat()
+    except ValueError:
+        pass
     return date.today().isoformat()
 
 

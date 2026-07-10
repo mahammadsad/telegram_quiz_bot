@@ -11,6 +11,7 @@ sys.path.insert(0, str(ROOT))
 
 from config.settings import require_env  # noqa: E402
 from services import quiz_pack_service  # noqa: E402
+from utils.quiz_ids import parse_quiz_id  # noqa: E402
 
 QUIZZES_DIR = ROOT / "quizzes"
 
@@ -32,7 +33,32 @@ def main() -> None:
         if not questions:
             print(f"Skipped {path.name}: no questions.")
             continue
-        quiz_pack_service.record_quiz_pack(quiz_id, questions, meta, chat_id=0)
+        try:
+            _, id_subject_key = parse_quiz_id(quiz_id)
+        except ValueError:
+            id_subject_key = None
+        subject_key = meta.get("subject_key") or id_subject_key
+        if not subject_key:
+            print(f"Skipped {path.name}: add an explicit canonical meta.subject_key; display names are not used for routing/classification.")
+            continue
+        if any("a" not in item and "correct_index" not in item for item in questions):
+            print(f"Skipped {path.name}: public fallback intentionally contains no server-side answer key.")
+            continue
+        chapter = str(meta.get("chapter") or "").strip()
+        normalized = []
+        for item in questions:
+            explanation = item.get("explanation") or item.get("e") or ""
+            normalized.append({
+                "question": item.get("question") or item.get("q"),
+                "options": item.get("options") or item.get("o"),
+                "correct_index": item.get("correct_index", item.get("a")),
+                "explanation": explanation,
+                "detailed_explanation": item.get("detailed_explanation") or explanation,
+                "difficulty": item.get("difficulty") or "medium",
+                "subject_key": subject_key,
+                "chapter": chapter,
+            })
+        quiz_pack_service.record_quiz_pack(quiz_id, normalized, {**meta, "subject_key": subject_key}, chat_id=0)
         imported += 1
         print(f"Imported {path.name} as quiz pack {quiz_id}.")
 

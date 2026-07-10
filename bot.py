@@ -1,18 +1,4 @@
-"""
-WB Exam Quiz Pack Bot
-=====================
-Generates Bengali mock-test quiz packs, stores them in the same Supabase
-Postgres schema used by repo_1, then posts a Telegram Mini App direct link.
-
-Required environment variables:
-  GEMINI_API_KEY
-  TELEGRAM_BOT_TOKEN
-  TELEGRAM_CHAT_ID
-  TELEGRAM_BOT_USERNAME
-  MINIAPP_SHORT_NAME
-  SUPABASE_URL
-  SUPABASE_SERVICE_KEY
-"""
+"""Generate, persist, post, and recover one subject-scoped quiz at a time."""
 
 from __future__ import annotations
 
@@ -21,506 +7,38 @@ import html
 import json
 import logging
 import os
-import random
-import re
 import sys
-import time
-from datetime import date, timedelta
+from datetime import date, datetime, timezone
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 import requests
-from google import genai
-from google.genai import types
 
 from config.settings import (
-    GEMINI_MODEL,
+    APP_TIMEZONE,
     MINIAPP_SHORT_NAME,
-    QUESTIONS_PER_RUN,
     SUPABASE_SERVICE_KEY,
     SUPABASE_URL,
-    SYLLABUS_STATE_KEY,
+    TELEGRAM_ADMIN_CHAT_ID,
     TELEGRAM_BOT_USERNAME,
     TELEGRAM_CHAT_ID,
+    TELEGRAM_FORUM_TOPICS_JSON,
+    TELEGRAM_GENERAL_THREAD_ID,
     WRITE_STATIC_QUIZ_JSON,
     require_env,
 )
-from services import quiz_pack_service
-from storage import bot_state_repo
+from config.subjects import QUIZ_SUBJECTS, get_subject
+from services import chapter_selector, quiz_pack_service
+from services.gemini_provider_pool import GeminiGenerationError, GeminiProviderPool
+from services.question_validation import QUESTION_COUNT, QuizValidationError, checksum_for_pack, content_checksum, validate_questions
+from storage import chapter_history_repo, polls_repo, quiz_runs_repo
+from telegram.routing import ForumRouter
 from utils.local_time import local_today
+from utils.quiz_ids import build_quiz_id
 
-MAX_RETRIES = 4
-RETRY_BASE_DELAY = 3
-TELEGRAM_API_BASE = "https://api.telegram.org/bot{token}/{method}"
-
-DEFAULT_EXAM_FOCUS = (
-    "WBCS, WBPSC Clerkship/Miscellaneous, WB Police, Kolkata Police, SSC, Railway, "
-    "Banking, Primary TET/School Service এবং অন্যান্য ভারতীয় competitive exams"
-)
-
-# Gemini uses this broad map as the syllabus universe. It is deliberately
-# written as an exam-oriented topic map instead of a narrow weekly routine.
-COMPETITIVE_EXAM_TOPIC_SCOPE = {
-    "History": [
-        "প্রাচীন ভারত", "মধ্যযুগীয় ভারত", "আধুনিক ভারত", "বাংলার ইতিহাস",
-        "জাতীয় আন্দোলন", "গভর্নর জেনারেল ও ভাইসরয়", "সামাজিক-ধর্মীয় সংস্কার আন্দোলন",
-        "সংবিধান গঠনের পটভূমি",
-    ],
-    "Geography": [
-        "ভারতের ভৌগোলিক অবস্থান", "পশ্চিমবঙ্গের ভূগোল", "নদী ও জলসম্পদ",
-        "জলবায়ু", "মাটি", "কৃষি", "খনিজ ও শিল্প", "জনসংখ্যা",
-        "বিশ্ব ভূগোলের মৌলিক ধারণা",
-    ],
-    "Polity": [
-        "ভারতীয় সংবিধানের বৈশিষ্ট্য", "মৌলিক অধিকার ও কর্তব্য",
-        "রাষ্ট্র পরিচালনার নির্দেশমূলক নীতি", "রাষ্ট্রপতি", "প্রধানমন্ত্রী ও মন্ত্রিসভা",
-        "সংসদ", "সুপ্রিম কোর্ট ও হাইকোর্ট", "নির্বাচন কমিশন",
-        "পঞ্চায়েত ও পৌরসভা", "সাংবিধানিক সংস্থা",
-    ],
-    "Economics": [
-        "ভারতীয় অর্থনীতির মৌলিক ধারণা", "পরিকল্পনা ও নীতি আয়োগ",
-        "জাতীয় আয়", "ব্যাংকিং", "RBI", "মুদ্রাস্ফীতি", "বাজেট",
-        "করব্যবস্থা", "দারিদ্র্য ও বেকারত্ব", "সরকারি প্রকল্প",
-    ],
-    "General Science": [
-        "পদার্থবিদ্যা", "রসায়ন", "জীববিদ্যা", "মানবদেহ",
-        "রোগ ও পুষ্টি", "পরিবেশ বিজ্ঞান", "দৈনন্দিন জীবনে বিজ্ঞান",
-        "পরিমাপের একক ও যন্ত্র", "মহাকাশ ও প্রযুক্তি",
-    ],
-    "Mathematics": [
-        "সংখ্যা পদ্ধতি", "শতকরা", "লাভ-ক্ষতি", "সরল ও চক্রবৃদ্ধি সুদ",
-        "অনুপাত-সমানুপাত", "সময় ও কাজ", "সময়-দূরত্ব", "গড়",
-        "মিশ্রণ", "সরলীকরণ", "ডেটা ইন্টারপ্রিটেশন",
-    ],
-    "Reasoning": [
-        "সিরিজ", "অ্যানালজি", "কোডিং-ডিকোডিং", "রক্তের সম্পর্ক",
-        "দিক নির্ণয়", "সিলজিজম", "ভেন ডায়াগ্রাম", "বসার বিন্যাস",
-        "নন-ভার্বাল রিজনিং",
-    ],
-    "English": [
-        "synonym-antonym", "one word substitution", "idioms and phrases",
-        "preposition", "article", "voice", "narration", "tense",
-        "subject-verb agreement", "error spotting",
-    ],
-    "Bengali": [
-        "ব্যাকরণ", "সমার্থক-বিপরীতার্থক শব্দ", "বাগধারা", "কারক-বিভক্তি",
-        "সমাস", "সন্ধি", "শুদ্ধ বানান", "বাক্য সংশোধন", "বাংলা সাহিত্য",
-    ],
-    "Computer": [
-        "কম্পিউটারের মৌলিক ধারণা", "হার্ডওয়্যার-সফটওয়্যার", "ইন্টারনেট",
-        "MS Office", "সাইবার নিরাপত্তা", "ডেটাবেস", "অপারেটিং সিস্টেম",
-    ],
-    "Current Affairs": [
-        "জাতীয় ঘটনা", "আন্তর্জাতিক ঘটনা", "পশ্চিমবঙ্গ", "পুরস্কার",
-        "খেলাধুলা", "বিজ্ঞান ও প্রযুক্তি", "নিয়োগ ও সরকারি প্রকল্প",
-    ],
-}
-WEEKLY_TOPIC_COUNT = 6
-TOPIC_PLANNER_VERSION = 4
-TOPIC_REPEAT_COOLDOWN_DAYS = 21
-TOPIC_SPACED_REVIEW_DAYS = (3, 7, 14, 30)
-TOPIC_EVENT_LIMIT = 300
-POSTED_QUIZ_STATE_PREFIX = "mock_test_posted_quiz"
-
-BN_WEEKDAY_NAMES = {
-    0: "সোমবার", 1: "মঙ্গলবার", 2: "বুধবার",
-    3: "বৃহস্পতিবার", 4: "শুক্রবার", 5: "শনিবার",
-}
-BN_MONTHS = [
-    "জানুয়ারি", "ফেব্রুয়ারি", "মার্চ", "এপ্রিল", "মে", "জুন",
-    "জুলাই", "আগস্ট", "সেপ্টেম্বর", "অক্টোবর", "নভেম্বর", "ডিসেম্বর",
-]
-_BN_DIGIT_MAP = str.maketrans("0123456789", "০১২৩৪৫৬৭৮৯")
-_TOPIC_PUNCT_RE = re.compile(r"[।,.!?\"'‘’“”:;()\[\]{}—–\-_/|]+")
-_WHITESPACE_RE = re.compile(r"\s+")
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
-log = logging.getLogger("wb_quiz_pack_bot")
+LOG = logging.getLogger("subject_quiz_bot")
 ROOT = Path(__file__).resolve().parent
-
-
-def bn_num(n: int) -> str:
-    return str(n).translate(_BN_DIGIT_MAP)
-
-
-def format_week_label_bn(monday: date) -> str:
-    saturday = monday + timedelta(days=5)
-    if monday.year == saturday.year and monday.month == saturday.month:
-        return f"{bn_num(monday.day)} – {bn_num(saturday.day)} {BN_MONTHS[monday.month - 1]}, {bn_num(monday.year)}"
-    if monday.year == saturday.year:
-        return (
-            f"{bn_num(monday.day)} {BN_MONTHS[monday.month - 1]} – "
-            f"{bn_num(saturday.day)} {BN_MONTHS[saturday.month - 1]}, {bn_num(monday.year)}"
-        )
-    return (
-        f"{bn_num(monday.day)} {BN_MONTHS[monday.month - 1]}, {bn_num(monday.year)} – "
-        f"{bn_num(saturday.day)} {BN_MONTHS[saturday.month - 1]}, {bn_num(saturday.year)}"
-    )
-
-
-def topic_key(subject: str, chapter: str) -> str:
-    text = f"{subject} {chapter}".strip().lower()
-    text = _TOPIC_PUNCT_RE.sub(" ", text)
-    text = _WHITESPACE_RE.sub(" ", text)
-    return text.strip()
-
-
-def parse_iso_date(value: str | None) -> date | None:
-    if not value:
-        return None
-    try:
-        return date.fromisoformat(str(value)[:10])
-    except ValueError:
-        return None
-
-
-def topic_events_from_state(state: dict) -> list[dict]:
-    events = []
-    seen = set()
-    keys_with_dated_events = set()
-    for raw in state.get("topic_events") or []:
-        if not isinstance(raw, dict):
-            continue
-        subject = str(raw.get("subject", "")).strip()
-        chapter = str(raw.get("chapter", "")).strip()
-        if not subject or not chapter:
-            continue
-        key = str(raw.get("key") or topic_key(subject, chapter))
-        event = {
-            "subject": subject,
-            "chapter": chapter,
-            "key": key,
-            "planned_for": raw.get("planned_for"),
-            "planned_at": raw.get("planned_at"),
-        }
-        marker = (key, event.get("planned_for"), event.get("planned_at"))
-        if marker not in seen:
-            events.append(event)
-            seen.add(marker)
-            keys_with_dated_events.add(key)
-
-    # Backfill older state shape. Those entries may not have dates, but they
-    # still help block exact repeats after upgrading from the older planner.
-    for subject, chapters in (state.get("history") or {}).items():
-        if not isinstance(chapters, list):
-            continue
-        for chapter in chapters:
-            chapter_text = str(chapter).strip()
-            if not chapter_text:
-                continue
-            key = topic_key(str(subject), chapter_text)
-            if key in keys_with_dated_events:
-                continue
-            marker = (key, None, None)
-            if marker in seen:
-                continue
-            events.append({
-                "subject": str(subject),
-                "chapter": chapter_text,
-                "key": key,
-                "planned_for": None,
-                "planned_at": None,
-            })
-            seen.add(marker)
-    return events[-TOPIC_EVENT_LIMIT:]
-
-
-def event_topic_date(event: dict) -> date | None:
-    return parse_iso_date(event.get("planned_for")) or parse_iso_date(event.get("planned_at"))
-
-
-def is_review_due(event_date: date, planned_for: date) -> bool:
-    return (planned_for - event_date).days in TOPIC_SPACED_REVIEW_DAYS
-
-
-def is_topic_allowed(key: str, events: list[dict], planned_for: date, selected_keys: set[str]) -> bool:
-    if key in selected_keys:
-        return False
-    for event in events:
-        if event.get("key") != key:
-            continue
-        event_date = event_topic_date(event)
-        if event_date is None:
-            return False
-        age_days = (planned_for - event_date).days
-        if age_days < 0:
-            return False
-        if age_days < TOPIC_REPEAT_COOLDOWN_DAYS and not is_review_due(event_date, planned_for):
-            return False
-    return True
-
-
-def topic_memory_blocks(state: dict, monday: date) -> tuple[str, str]:
-    events = topic_events_from_state(state)
-    saturday = monday + timedelta(days=5)
-    recent_lines = []
-    review_lines = []
-
-    for event in reversed(events[-80:]):
-        event_date = event_topic_date(event)
-        label = f"{event['subject']} — {event['chapter']}"
-        if event_date is None:
-            recent_lines.append(f"- {label}")
-            continue
-
-        due_this_week = False
-        for offset in TOPIC_SPACED_REVIEW_DAYS:
-            due_date = event_date + timedelta(days=offset)
-            if monday <= due_date <= saturday:
-                review_lines.append(f"- {due_date.isoformat()}: {label}")
-                due_this_week = True
-                break
-
-        age_days = (monday - event_date).days
-        if 0 <= age_days < TOPIC_REPEAT_COOLDOWN_DAYS and not due_this_week:
-            recent_lines.append(f"- {event_date.isoformat()}: {label}")
-
-    recent_text = "\n".join(recent_lines[:60]) or "(কোনো recent topic নেই)"
-    review_text = "\n".join(review_lines[:20]) or "(এই সপ্তাহে নির্দিষ্ট revision topic নেই)"
-    return recent_text, review_text
-
-
-def load_state() -> dict:
-    raw = bot_state_repo.get_value(SYLLABUS_STATE_KEY)
-    if raw:
-        try:
-            return json.loads(raw)
-        except json.JSONDecodeError:
-            log.warning("Invalid JSON in bot_state[%s]; starting fresh.", SYLLABUS_STATE_KEY)
-    return {"exam_focus": DEFAULT_EXAM_FOCUS, "history": {}}
-
-
-def save_state(state: dict) -> None:
-    bot_state_repo.set_value(SYLLABUS_STATE_KEY, json.dumps(state, ensure_ascii=False, separators=(",", ":")))
-    log.info("Saved syllabus state in Supabase bot_state[%s].", SYLLABUS_STATE_KEY)
-
-
-WEEKLY_TOPICS_SCHEMA = {
-    "type": "ARRAY",
-    "items": {
-        "type": "OBJECT",
-        "properties": {
-            "subject": {"type": "STRING"},
-            "chapter": {"type": "STRING"},
-        },
-        "required": ["subject", "chapter"],
-    },
-}
-
-
-def _build_syllabus_prompt(exam_focus: str, state: dict, monday: date) -> str:
-    scope_lines = []
-    for subject, topics in COMPETITIVE_EXAM_TOPIC_SCOPE.items():
-        scope_lines.append(f"- {subject}: {', '.join(topics)}")
-
-    recent_text, review_text = topic_memory_blocks(state, monday)
-
-    return f"""তুমি একজন অভিজ্ঞ প্রশ্নপত্র/সিলেবাস পরিকল্পনাকারী।
-লক্ষ্য পরীক্ষা: {exam_focus}
-
-এই bot-এর কাজ হলো competitive exam-এ আসতে পারে এমন সব গুরুত্বপূর্ণ বিষয়ে
-বাংলা MCQ practice করানো। নিচের syllabus universe থেকে আগামী ৬ দিনের জন্য
-ঠিক {WEEKLY_TOPIC_COUNT}টি fresh quiz topic বেছে নাও।
-
-=== Syllabus universe ===
-{chr(10).join(scope_lines)}
-
-=== Blocked recent topics: এগুলো repeat করবে না ===
-{recent_text}
-
-=== Spaced-repetition review topics: চাইলে এগুলো revision হিসেবে নেওয়া যাবে ===
-{review_text}
-
-নিয়ম:
-1. Blocked recent topics থেকে কোনো topic repeat করবে না।
-2. Spaced-repetition list থেকে topic নিলে সেটি revision হিসেবে নেওয়া যাবে,
-   কিন্তু একই wording নয়; একটু ভিন্ন angle/subtopic করবে।
-3. সপ্তাহে subject mix balanced রাখবে: static GK, math/reasoning, language,
-   science/current affairs — সব দিক ঘুরে আসবে।
-4. chapter খুব নির্দিষ্ট হবে, যেমন "মৌলিক অধিকার: Article 14-18" বা
-   "সময় ও কাজ: pipe and cistern"। অস্পষ্ট "History" টাইপ topic নয়।
-5. প্রশ্ন WBCS/WBPSC/WB Police/SSC/Railway/Banking/TET ধরনের পরীক্ষার উপযোগী হবে।
-6. আউটপুট অবশ্যই ঠিক {WEEKLY_TOPIC_COUNT}টি object সহ JSON array হবে।
-7. প্রতিটি object-এ থাকবে "subject" এবং "chapter"। subject ইংরেজি category
-   name হতে পারে, chapter বাংলা হবে। শুধুমাত্র JSON ফেরত দাও।
-"""
-
-
-def generate_weekly_topics(exam_focus: str, state: dict, monday: date) -> list[dict]:
-    client = genai.Client(api_key=require_env("GEMINI_API_KEY"))
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=_build_syllabus_prompt(exam_focus, state, monday),
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=WEEKLY_TOPICS_SCHEMA,
-            temperature=0.8,
-        ),
-    )
-    raw = json.loads(response.text)
-    topics = []
-    for item in raw:
-        subject = str(item.get("subject", "")).strip()
-        chapter = str(item.get("chapter", "")).strip()
-        if subject and chapter:
-            topics.append({"subject": subject, "chapter": chapter})
-    if len(topics) != WEEKLY_TOPIC_COUNT:
-        raise ValueError(f"Expected {WEEKLY_TOPIC_COUNT} topics from Gemini, got {len(topics)}.")
-    return topics
-
-
-def validate_weekly_topics(raw_topics: list[dict], state: dict, monday: date) -> list[dict]:
-    events = topic_events_from_state(state)
-    selected_keys: set[str] = set()
-    accepted: list[dict] = []
-
-    for raw in raw_topics:
-        if len(accepted) >= WEEKLY_TOPIC_COUNT:
-            break
-        subject = str(raw.get("subject", "")).strip()
-        chapter = str(raw.get("chapter", "")).strip()
-        if not subject or not chapter:
-            continue
-        planned_for = monday + timedelta(days=len(accepted))
-        key = topic_key(subject, chapter)
-        if not is_topic_allowed(key, events, planned_for, selected_keys):
-            log.info("Rejected repeated topic from planner: %s / %s", subject, chapter)
-            continue
-        accepted.append({"subject": subject, "chapter": chapter, "key": key})
-        selected_keys.add(key)
-
-    return accepted
-
-
-def fill_missing_weekly_topics(topics: list[dict], state: dict, monday: date) -> list[dict]:
-    events = topic_events_from_state(state)
-    selected_keys = {topic["key"] for topic in topics}
-    candidates = [
-        {"subject": subject, "chapter": chapter, "key": topic_key(subject, chapter)}
-        for subject, chapters in COMPETITIVE_EXAM_TOPIC_SCOPE.items()
-        for chapter in chapters
-    ]
-    random.shuffle(candidates)
-
-    for candidate in candidates:
-        if len(topics) >= WEEKLY_TOPIC_COUNT:
-            break
-        planned_for = monday + timedelta(days=len(topics))
-        if not is_topic_allowed(candidate["key"], events, planned_for, selected_keys):
-            continue
-        topics.append(candidate)
-        selected_keys.add(candidate["key"])
-
-    if len(topics) < WEEKLY_TOPIC_COUNT:
-        raise ValueError("Could not build enough non-repeating weekly topics.")
-    return topics
-
-
-def plan_weekly_topics(exam_focus: str, state: dict, monday: date) -> list[dict]:
-    best: list[dict] = []
-    for attempt in range(1, 4):
-        raw_topics = generate_weekly_topics(exam_focus, state, monday)
-        topics = validate_weekly_topics(raw_topics, state, monday)
-        if len(topics) > len(best):
-            best = topics
-        if len(topics) == WEEKLY_TOPIC_COUNT:
-            return topics
-        log.warning(
-            "Topic planner returned %d/%d usable non-repeating topics on attempt %d.",
-            len(topics),
-            WEEKLY_TOPIC_COUNT,
-            attempt,
-        )
-    return fill_missing_weekly_topics(best, state, monday)
-
-
-def remember_planned_topics(
-    state: dict,
-    topics: list[dict],
-    monday: date,
-    planned_at_date: date | None = None,
-) -> dict:
-    history = state.get("history") or {}
-    events = topic_events_from_state(state)
-    existing_markers = {
-        (event.get("key"), event.get("planned_for"))
-        for event in events
-    }
-    planned_at = (planned_at_date or local_today()).isoformat()
-
-    for i, topic in enumerate(topics):
-        subject = topic["subject"]
-        chapter = topic["chapter"]
-        planned_for = (monday + timedelta(days=i)).isoformat()
-        key = topic.get("key") or topic_key(subject, chapter)
-        history.setdefault(subject, []).append(chapter)
-        history[subject] = history[subject][-50:]
-        marker = (key, planned_for)
-        if marker not in existing_markers:
-            events.append({
-                "subject": subject,
-                "chapter": chapter,
-                "key": key,
-                "planned_for": planned_for,
-                "planned_at": planned_at,
-            })
-            existing_markers.add(marker)
-
-    state["history"] = history
-    state["topic_events"] = events[-TOPIC_EVENT_LIMIT:]
-    return state
-
-
-def ensure_current_week(state: dict, today: date | None = None) -> tuple[dict, bool]:
-    today = today or local_today()
-    monday = today - timedelta(days=today.weekday())
-    if (
-        state.get("week_start_date") == monday.isoformat()
-        and state.get("days")
-        and state.get("planner_version") == TOPIC_PLANNER_VERSION
-    ):
-        return state, False
-
-    exam_focus = state.get("exam_focus") or DEFAULT_EXAM_FOCUS
-    topics = retry_with_backoff(
-        plan_weekly_topics,
-        exam_focus,
-        state,
-        monday,
-        what="Gemini weekly competitive-topic planning",
-    )
-
-    days = {}
-    for i, topic in enumerate(topics):
-        subject = topic["subject"]
-        chapter = topic["chapter"]
-        days[str(i)] = {"day_bn": BN_WEEKDAY_NAMES[i], "subject": subject, "chapter": chapter}
-
-    state = remember_planned_topics(state, topics, monday, planned_at_date=today)
-
-    state.update({
-        "exam_focus": exam_focus,
-        "week_start_date": monday.isoformat(),
-        "week_label_bn": format_week_label_bn(monday),
-        "days": days,
-        "planner_version": TOPIC_PLANNER_VERSION,
-    })
-    save_state(state)
-    return state, True
-
-
-def retry_with_backoff(fn, *args, retries=MAX_RETRIES, base_delay=RETRY_BASE_DELAY, what="operation", **kwargs):
-    last_err = None
-    for attempt in range(1, retries + 1):
-        try:
-            return fn(*args, **kwargs)
-        except Exception as exc:  # noqa: BLE001
-            last_err = exc
-            wait = base_delay * (2 ** (attempt - 1)) + random.uniform(0, 1)
-            log.warning("%s failed (attempt %d/%d): %s", what, attempt, retries, exc)
-            if attempt < retries:
-                time.sleep(wait)
-    raise last_err
-
+TELEGRAM_API_BASE = "https://api.telegram.org/bot{token}/{method}"
 
 MCQ_JSON_SCHEMA = {
     "type": "ARRAY",
@@ -532,248 +50,366 @@ MCQ_JSON_SCHEMA = {
             "correct_index": {"type": "INTEGER"},
             "explanation": {"type": "STRING"},
             "detailed_explanation": {"type": "STRING"},
+            "difficulty": {"type": "STRING"},
+            "subject_key": {"type": "STRING"},
+            "chapter": {"type": "STRING"},
         },
-        "required": ["question", "options", "correct_index", "explanation", "detailed_explanation"],
+        "required": ["question", "options", "correct_index", "explanation", "detailed_explanation", "difficulty", "subject_key", "chapter"],
     },
 }
 
 
-def _build_mcq_prompt(subject: str, chapter: str, exam_focus: str, num_questions: int) -> str:
-    return f"""You are an expert Bengali MCQ question setter for Indian and West Bengal competitive exams.
-Target difficulty: {exam_focus}
-
-Create exactly {num_questions} MCQs for:
-Subject: {subject}
-Chapter/topic: {chapter}
+def build_mcq_prompt(subject_key: str, chapter: str) -> str:
+    subject = get_subject(subject_key, require_quiz_enabled=True)
+    return f"""You are an expert Bengali question setter for Indian and West Bengal competitive exams.
+Create exactly 10 MCQs for the single scheduled subject and chapter below.
+Canonical subject key: {subject.key}
+Internal subject: {subject.internal_subject}
+Chapter: {chapter}
 
 Rules:
-1. The question, explanation, and detailed_explanation must be in Bengali.
-   If the subject is English grammar/vocabulary, the tested word/sentence/options may contain English,
-   but the instruction/explanation must still be Bengali.
-2. Exactly 4 plausible options per question.
-3. correct_index is 0, 1, 2, or 3.
-4. Questions must match WBCS/WBPSC/WB Police/Kolkata Police/SSC/Railway/Banking/TET exam style.
-5. explanation: one short Bengali sentence.
-6. detailed_explanation: 2-4 useful Bengali sentences for result review.
-7. Avoid vague trivia. Ask exam-relevant, factual, unambiguous questions.
-8. Return only the JSON array described by the schema.
+1. Return one JSON array containing exactly 10 objects and nothing else.
+2. Every question must test only this subject and chapter.
+3. Bengali question text, a short Bengali explanation, and a detailed Bengali explanation are mandatory.
+4. English tests may contain English tested text; Bengali instructions and explanations remain mandatory.
+5. Supply exactly four unique non-empty options and correct_index 0..3.
+6. Every object must repeat subject_key exactly as {subject.key} and chapter exactly as {chapter}.
+7. Use difficulty easy, medium, or hard. Avoid duplicates, truncation, answer-revealing wording, and ambiguity.
+8. Questions must suit WBCS, WBPSC, WBP, SSC, Railway, Banking, or TET preparation.
 """
 
 
-def generate_mcqs(subject: str, chapter: str, exam_focus: str, num_questions: int = QUESTIONS_PER_RUN) -> list[dict]:
-    client = genai.Client(api_key=require_env("GEMINI_API_KEY"))
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=_build_mcq_prompt(subject, chapter, exam_focus, num_questions),
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=MCQ_JSON_SCHEMA,
-            temperature=0.9,
-        ),
-    )
-    raw = json.loads(response.text)
-    clean = []
-    for item in raw:
-        try:
-            question = str(item["question"]).strip()
-            options = [str(option).strip() for option in item["options"]]
-            correct_index = int(item["correct_index"])
-            explanation = str(item.get("explanation", "")).strip()
-            detailed = str(item.get("detailed_explanation", explanation)).strip()
-            if question and len(options) == 4 and 0 <= correct_index <= 3:
-                clean.append({
-                    "question": question,
-                    "options": options,
-                    "correct_index": correct_index,
-                    "explanation": explanation,
-                    "detailed_explanation": detailed,
-                })
-        except (KeyError, TypeError, ValueError):
-            continue
-    if len(clean) < 5:
-        raise ValueError(f"Gemini returned only {len(clean)} usable questions.")
-    return clean
-
-
-def quiz_id_for_date(d: date) -> str:
-    return d.strftime("%Y%m%d")
-
-
-def quiz_date_from_id(quiz_id: str) -> date | None:
-    if len(quiz_id) != 8 or not quiz_id.isdigit():
-        return None
+def generate_mcqs(
+    subject_key: str,
+    chapter: str,
+    *,
+    pool: GeminiProviderPool | None = None,
+) -> tuple[list[dict], dict]:
+    pool = pool or GeminiProviderPool()
+    prompt = build_mcq_prompt(subject_key, chapter)
+    raw_text, generation = pool.generate_subject_quiz(prompt=prompt, response_schema=MCQ_JSON_SCHEMA)
     try:
-        return date(int(quiz_id[:4]), int(quiz_id[4:6]), int(quiz_id[6:8]))
-    except ValueError:
-        return None
+        raw = json.loads(raw_text)
+    except (TypeError, json.JSONDecodeError):
+        repair_prompt = (
+            prompt
+            + "\nThe prior output was malformed JSON. Repair it once. Return only a valid JSON array; "
+            + "do not add, remove, or partially return questions."
+        )
+        repaired_text, generation = pool.generate_subject_quiz(prompt=repair_prompt, response_schema=MCQ_JSON_SCHEMA)
+        try:
+            raw = json.loads(repaired_text)
+        except (TypeError, json.JSONDecodeError) as exc:
+            raise QuizValidationError("Gemini returned malformed JSON after one repair request.") from exc
+    if not isinstance(raw, list):
+        raise QuizValidationError("Gemini response must be a JSON array.")
+    enriched = []
+    for item in raw:
+        if isinstance(item, dict):
+            enriched.append({"subject_key": subject_key, "chapter": chapter, **item})
+        else:
+            enriched.append(item)
+    return validate_questions(enriched, subject_key, chapter), generation
 
 
-def ensure_quiz_pack_for_date(target_date: date, chat_id: int = 0) -> dict:
-    quiz_id = quiz_id_for_date(target_date)
+def valid_saved_pack(quiz_id: str, run: dict | None = None) -> dict | None:
     pack = quiz_pack_service.get_quiz_pack(quiz_id)
-    if pack:
-        return pack
-
-    today_idx = target_date.weekday()
-    if today_idx == 6:
-        raise ValueError("Sunday quiz generation is skipped.")
-
-    state, _ = ensure_current_week(load_state(), today=target_date)
-    day_info = (state.get("days") or {}).get(str(today_idx))
-    if not day_info:
-        raise ValueError(f"No topic plan found for {target_date.isoformat()}.")
-
-    subject, chapter = day_info["subject"], day_info["chapter"]
-    log.info("Generating %d MCQs for %s / %s.", QUESTIONS_PER_RUN, subject, chapter)
-    questions = retry_with_backoff(
-        generate_mcqs,
-        subject,
-        chapter,
-        state["exam_focus"],
-        QUESTIONS_PER_RUN,
-        what="Gemini MCQ generation",
-    )
-    meta = {
-        "subject": subject,
-        "chapter": chapter,
-        "date": target_date.isoformat(),
-        "quiz_id": quiz_id,
-    }
-    return quiz_pack_service.record_quiz_pack(
-        quiz_id,
-        questions,
-        meta,
-        chat_id=chat_id,
-    )
+    if not pack or len(pack.get("items") or []) != QUESTION_COUNT:
+        return None
+    meta = pack.get("meta") or {}
+    subject_key = meta.get("subject_key") or meta.get("subject")
+    chapter = meta.get("chapter") or ""
+    raw = []
+    for item in pack["items"]:
+        question = item.get("question") or {}
+        raw.append({
+            "question": question.get("question_text"),
+            "options": [question.get("option_a"), question.get("option_b"), question.get("option_c"), question.get("option_d")],
+            "correct_index": "ABCD".find(str(question.get("correct_option") or "")),
+            "explanation": question.get("explanation"),
+            "detailed_explanation": question.get("detailed_explanation"),
+            "subject_key": subject_key,
+            "chapter": chapter,
+            "difficulty": question.get("difficulty"),
+        })
+    try:
+        validate_questions(raw, subject_key, chapter)
+    except (QuizValidationError, ValueError):
+        return None
+    checksum = checksum_for_pack(pack)
+    if not run or not run.get("content_checksum") or run["content_checksum"] != checksum:
+        return None
+    return pack
 
 
 def export_static_quiz_json(pack: dict) -> Path | None:
+    """Write only public question data—never answers or explanations."""
     if not WRITE_STATIC_QUIZ_JSON:
         return None
-
-    payload = {
-        "meta": pack.get("meta") or {},
-        "qs": [],
-    }
-    for item in pack.get("items", []):
-        question = item.get("question") or {}
-        options = [
-            question.get("option_a") or "",
-            question.get("option_b") or "",
-            question.get("option_c") or "",
-            question.get("option_d") or "",
-        ]
-        correct = str(question.get("correct_option") or "").strip().upper()
-        payload["qs"].append({
-            "q": question.get("question_text") or "",
-            "o": options,
-            "a": "ABCD".find(correct),
-            "e": question.get("detailed_explanation") or question.get("explanation") or "",
-        })
-
-    quiz_id = str(payload["meta"].get("quiz_id") or pack.get("quiz_id") or "").strip()
-    if not quiz_id or not payload["qs"]:
-        return None
-
-    payload["meta"]["quiz_id"] = quiz_id
+    payload = quiz_pack_service.public_quiz_payload(pack)
+    quiz_id = str(pack.get("quiz_id") or (pack.get("meta") or {}).get("quiz_id") or "")
+    if not quiz_id or len(payload.get("qs") or []) != QUESTION_COUNT:
+        raise QuizValidationError("Refusing to export an incomplete public fallback.")
     path = ROOT / "quizzes" / f"{quiz_id}.json"
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
-    log.info("Wrote static quiz fallback %s.", path)
+    LOG.info("STATIC_QUIZ_EXPORTED quiz_id=%s answer_key_included=false", quiz_id)
     return path
 
 
-def validate_runtime_config() -> None:
-    require_env("GEMINI_API_KEY")
+def forum_router() -> ForumRouter:
+    return ForumRouter.from_values(TELEGRAM_FORUM_TOPICS_JSON, TELEGRAM_GENERAL_THREAD_ID)
+
+
+def validate_runtime_config(*, require_gemini: bool = True) -> ForumRouter:
     require_env("TELEGRAM_BOT_TOKEN")
     require_env("TELEGRAM_CHAT_ID")
     require_env("SUPABASE_URL")
     require_env("SUPABASE_SERVICE_KEY")
+    if require_gemini:
+        _require_gemini_provider()
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
-        raise RuntimeError("SUPABASE_URL and SUPABASE_SERVICE_KEY are required.")
+        raise RuntimeError("Supabase is not configured.")
     if not TELEGRAM_BOT_USERNAME or not MINIAPP_SHORT_NAME:
-        raise RuntimeError("TELEGRAM_BOT_USERNAME and MINIAPP_SHORT_NAME are required for Mini App links.")
+        raise RuntimeError("TELEGRAM_BOT_USERNAME and MINIAPP_SHORT_NAME are required.")
+    return forum_router()
+
+
+def _require_gemini_provider() -> None:
+    if not any(os.environ.get(name) for name in ("GEMINI_API_KEY_PRIMARY", "GEMINI_API_KEY_SECONDARY", "GEMINI_API_KEY")):
+        raise RuntimeError("No Gemini provider is configured.")
+
+
+def run_subject_quiz(
+    subject_key: str,
+    *,
+    target_date: date | None = None,
+    force_post: bool = False,
+    force_regenerate: bool = False,
+    pool: GeminiProviderPool | None = None,
+) -> str:
+    subject = get_subject(subject_key, require_quiz_enabled=True)
+    router = validate_runtime_config(require_gemini=False)
+    thread_id = router.for_subject(subject_key)  # validated before spending Gemini quota
+    target_date = target_date or local_today()
+    quiz_id = build_quiz_id(target_date, subject_key)
+    run = quiz_runs_repo.get(quiz_id)
+    if run and run.get("status") == "posted" and not force_post and not force_regenerate:
+        LOG.info("QUIZ_ALREADY_POSTED subject=%s quiz_id=%s", subject_key, quiz_id)
+        return "already_posted"
+
+    pack = None if force_regenerate else valid_saved_pack(quiz_id, run)
+    used_saved_pack = pack is not None
+    if force_post and not pack:
+        raise RuntimeError("--force-post requires an existing valid generated quiz and matching checksum.")
+
+    if pack is None:
+        _require_gemini_provider()
+        chapter = chapter_selector.select_chapter(subject_key, target_date)
+        quiz_runs_repo.upsert({
+            "quiz_id": quiz_id,
+            "quiz_date": target_date.isoformat(),
+            "subject_key": subject_key,
+            "subject_display_name": subject.telegram_display_name,
+            "internal_subject": subject.internal_subject,
+            "chapter": chapter,
+            "status": "generating",
+            "question_count": 0,
+        })
+        try:
+            questions, generation = generate_mcqs(subject_key, chapter, pool=pool)
+            # A prior interrupted save may have left partial delivery rows.
+            # Remove only this quiz's delivery set after replacement content
+            # has validated, then write all ten rows afresh.
+            polls_repo.delete_by_run_slot(quiz_id, "mock_test")
+            pack = quiz_pack_service.record_quiz_pack(
+                quiz_id,
+                questions,
+                {
+                    "quiz_id": quiz_id,
+                    "date": target_date.isoformat(),
+                    "subject_key": subject_key,
+                    "subject_display_name": subject.telegram_display_name,
+                    "chapter": chapter,
+                    "generation_model": generation["model"],
+                },
+                chat_id=_chat_id_as_int(TELEGRAM_CHAT_ID),
+            )
+            checksum = checksum_for_pack(pack)
+            quiz_runs_repo.update_status(
+                quiz_id,
+                "generating",
+                question_count=QUESTION_COUNT,
+                generation_provider=generation["provider"],
+                generation_model=generation["model"],
+                providers_attempted=generation.get("providers_attempted") or [generation["provider"]],
+                generation_attempt_count=generation["attempts"],
+                retryable=False,
+                generated_at=datetime.now(timezone.utc).isoformat(),
+                last_error_category=None,
+            )
+            chapter_history_repo.record(subject_key, chapter, target_date.isoformat(), quiz_id)
+            export_static_quiz_json(pack)
+            quiz_runs_repo.update_status(quiz_id, "generated", content_checksum=checksum)
+            LOG.info(
+                "GEMINI_GENERATION_SUCCESS subject=%s quiz_id=%s provider=%s model=%s attempts=%s question_count=10",
+                subject_key, quiz_id, generation["provider"], generation["model"], generation["attempts"],
+            )
+        except Exception as exc:
+            category = getattr(exc, "category", "validation_failed" if isinstance(exc, QuizValidationError) else "generation_error")
+            safe_attempts = getattr(exc, "attempts", [])
+            quiz_runs_repo.update_status(
+                quiz_id,
+                "generation_failed",
+                last_error_category=category,
+                last_error_at=datetime.now(timezone.utc).isoformat(),
+                providers_attempted=list(dict.fromkeys(row.get("provider") for row in safe_attempts if row.get("provider"))),
+                generation_attempt_count=len(safe_attempts),
+                retryable=bool(getattr(exc, "retryable", False)),
+            )
+            send_failure_alert(subject_key, quiz_id, router)
+            raise
+
+    chapter = (pack.get("meta") or {}).get("chapter") or (run or {}).get("chapter") or ""
+    quiz_runs_repo.update_status(quiz_id, "posting")
+    try:
+        response = telegram_api("sendMessage", {
+            "chat_id": TELEGRAM_CHAT_ID,
+            "message_thread_id": thread_id,
+            "text": _quiz_post_text(subject.telegram_display_name, chapter),
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+            "reply_markup": {"inline_keyboard": [[{"text": "কুইজ শুরু করুন", "url": build_miniapp_url(quiz_id)}]]},
+        })
+        message = response.get("result") or {}
+        quiz_runs_repo.update_status(
+            quiz_id,
+            "posted",
+            posted_at=datetime.now(timezone.utc).isoformat(),
+            telegram_chat_id=(message.get("chat") or {}).get("id", _chat_id_as_int(TELEGRAM_CHAT_ID)),
+            telegram_thread_id=message.get("message_thread_id", thread_id),
+            telegram_message_id=message.get("message_id"),
+            last_error_category=None,
+        )
+        try:
+            quiz_pack_service.mark_pack_posted(pack)
+        except Exception:
+            # Delivery is already confirmed and persisted. Question-usage
+            # metadata is secondary and must never turn this into a repost.
+            LOG.warning("QUESTION_USAGE_UPDATE_FAILED subject=%s quiz_id=%s", subject_key, quiz_id)
+        LOG.info("TELEGRAM_QUIZ_POSTED subject=%s quiz_id=%s thread_id_configured=true message_id=%s", subject_key, quiz_id, message.get("message_id"))
+        return "posted_from_saved_quiz" if used_saved_pack else "generated_and_posted"
+    except Exception:
+        quiz_runs_repo.update_status(
+            quiz_id,
+            "posting_failed",
+            last_error_category="telegram_posting_failed",
+            last_error_at=datetime.now(timezone.utc).isoformat(),
+        )
+        raise
+
+
+def recover_missed_quizzes(*, now: datetime | None = None, pool: GeminiProviderPool | None = None) -> tuple[dict[str, str], bool]:
+    current = now or datetime.now(ZoneInfo(APP_TIMEZONE))
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=ZoneInfo(APP_TIMEZONE))
+    today = current.astimezone(ZoneInfo(APP_TIMEZONE)).date()
+    current_hhmm = current.astimezone(ZoneInfo(APP_TIMEZONE)).strftime("%H:%M")
+    summary: dict[str, str] = {}
+    unresolved = False
+    for subject in QUIZ_SUBJECTS:
+        if subject.scheduled_time_ist > current_hhmm:
+            summary[subject.key] = "not_due"
+            continue
+        quiz_id = build_quiz_id(today, subject.key)
+        run = quiz_runs_repo.get(quiz_id)
+        if run and run.get("status") == "posted":
+            summary[subject.key] = "already_posted"
+            continue
+        had_saved = bool(valid_saved_pack(quiz_id, run))
+        try:
+            result = run_subject_quiz(subject.key, target_date=today, pool=pool)
+            summary[subject.key] = "posted_from_saved_quiz" if had_saved else "recovered_and_posted"
+        except Exception as exc:
+            summary[subject.key] = "generation_failed_retryable" if getattr(exc, "retryable", True) else "failed_non_retryable"
+            unresolved = unresolved or getattr(exc, "retryable", True)
+    LOG.info("RECOVERY_SUMMARY %s", " ".join(f"{key}={value}" for key, value in summary.items()))
+    return summary, unresolved
+
+
+def telegram_api(method: str, payload: dict) -> dict:
+    token = require_env("TELEGRAM_BOT_TOKEN")
+    try:
+        response = requests.post(TELEGRAM_API_BASE.format(token=token, method=method), json=payload, timeout=30)
+    except requests.RequestException:
+        raise RuntimeError(f"Telegram {method} network request failed.") from None
+    try:
+        result = response.json()
+    except ValueError as exc:
+        raise RuntimeError(f"Telegram {method} failed with status {response.status_code}.") from exc
+    if not response.ok or not result.get("ok"):
+        raise RuntimeError(f"Telegram {method} failed with status {response.status_code}.")
+    return result
+
+
+def send_failure_alert(subject_key: str, quiz_id: str, router: ForumRouter | None = None) -> None:
+    subject = get_subject(subject_key, require_quiz_enabled=True)
+    text = (
+        "⚠️ Mock Test তৈরি করা যায়নি\n\n"
+        f"বিষয়: {subject.telegram_display_name}\nQuiz ID: {quiz_id}\n\n"
+        "Primary ও Secondary Gemini provider সাময়িকভাবে ব্যর্থ হয়েছে।\n"
+        "অসম্পূর্ণ Quiz পোস্ট করা হয়নি।\nRecovery process পরে আবার চেষ্টা করবে।"
+    )
+    payload: dict = {"chat_id": TELEGRAM_ADMIN_CHAT_ID or TELEGRAM_CHAT_ID, "text": text}
+    if not TELEGRAM_ADMIN_CHAT_ID and router and router.general_thread_id:
+        payload["message_thread_id"] = router.general_thread_id
+    try:
+        telegram_api("sendMessage", payload)
+    except Exception:
+        LOG.warning("ADMIN_ALERT_FAILED subject=%s quiz_id=%s", subject_key, quiz_id)
+
+
+def send_schedule_announcement() -> None:
+    router = validate_runtime_config(require_gemini=False)
+    lines = ["📌 <b>দৈনিক Mock Test সূচি</b>", ""]
+    for subject in QUIZ_SUBJECTS:
+        lines.append(f"{subject.scheduled_time_ist} IST · {html.escape(subject.telegram_display_name)}")
+    payload: dict = {"chat_id": TELEGRAM_CHAT_ID, "text": "\n".join(lines), "parse_mode": "HTML"}
+    if router.general_thread_id:
+        payload["message_thread_id"] = router.general_thread_id
+    telegram_api("sendMessage", payload)
+
+
+def preflight() -> dict[str, bool]:
+    topics_ok = False
+    try:
+        forum_router()
+        topics_ok = True
+    except Exception:
+        pass
+    values = {
+        "primary_key_configured": bool(os.environ.get("GEMINI_API_KEY_PRIMARY") or os.environ.get("GEMINI_API_KEY")),
+        "secondary_key_configured": bool(os.environ.get("GEMINI_API_KEY_SECONDARY")),
+        "failover_enabled": os.environ.get("GEMINI_FAILOVER_ENABLED", "true").lower() == "true",
+        "telegram_topics_configured": topics_ok,
+        "supabase_configured": bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY")),
+    }
+    for key, value in values.items():
+        print(f"{key}={str(value).lower()}")
+    return values
 
 
 def build_miniapp_url(quiz_id: str) -> str:
     return f"https://t.me/{TELEGRAM_BOT_USERNAME}/{MINIAPP_SHORT_NAME}?startapp={quiz_id}"
 
 
-def esc(text) -> str:
-    return html.escape(str(text), quote=False)
-
-
-def telegram_api(method: str, payload: dict) -> dict:
-    token = require_env("TELEGRAM_BOT_TOKEN")
-    url = TELEGRAM_API_BASE.format(token=token, method=method)
-    resp = requests.post(url, json=payload, timeout=30)
-    result = resp.json()
-    if not result.get("ok"):
-        raise RuntimeError(f"Telegram API error on {method}: {result}")
-    return result
-
-
-def send_sunday_announcement() -> None:
-    validate_runtime_config()
-    state, _ = ensure_current_week(load_state())
-    lines = [
-        "📌 <b>এই সপ্তাহের Competitive Exam Topic Plan</b>",
-        f"🎯 <b>লক্ষ্য পরীক্ষা:</b> {esc(state['exam_focus'])}",
-        f"🗓️ <b>{esc(state['week_label_bn'])}</b>",
-        "",
-    ]
-    for i in range(6):
-        d = state["days"][str(i)]
-        lines.append(f"<b>{esc(d['day_bn'])}</b> · {esc(d['subject'])} — {esc(d['chapter'])}")
-    lines.extend([
-        "",
-        "ধীরে ধীরে History, Polity, Geography, Science, Math, Reasoning, Language, Computer, Current Affairs সব গুরুত্বপূর্ণ অংশ কভার হবে।",
-        "প্রতিদিনের কুইজ Mini App-এ খুলবে, স্কোর সরাসরি ড্যাশবোর্ডে জমা হবে।",
-    ])
-    retry_with_backoff(
-        telegram_api,
-        "sendMessage",
-        {
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": "\n".join(lines),
-            "parse_mode": "HTML",
-            "disable_web_page_preview": True,
-        },
-        what="Sunday announcement",
-    )
-    log.info("Sunday syllabus announcement sent.")
-
-
-def send_daily_quiz() -> None:
-    validate_runtime_config()
-    today = local_today()
-    today_idx = today.weekday()
-    if today_idx == 6:
-        log.info("Today is Sunday; quiz generation skipped.")
-        return
-
-    quiz_id = quiz_id_for_date(today)
-    pack = ensure_quiz_pack_for_date(today, chat_id=_chat_id_as_int(TELEGRAM_CHAT_ID))
-    export_static_quiz_json(pack)
-    meta = pack["meta"]
-    quiz_url = build_miniapp_url(quiz_id)
-    text = (
+def _quiz_post_text(display_name: str, chapter: str) -> str:
+    return (
         "📝 <b>আজকের মক টেস্ট প্রস্তুত</b>\n\n"
-        f"📚 <b>বিষয়:</b> {esc(meta.get('subject', ''))}\n"
-        f"📖 <b>চ্যাপ্টার:</b> {esc(meta.get('chapter', ''))}\n"
-        f"🔢 <b>প্রশ্ন:</b> {len(pack['items'])}টি\n\n"
-        "প্রশ্নগুলো competitive-exam practice-এর জন্য সাজানো। "
-        "স্কোর ও উত্তরপত্র সাবমিটের পর ড্যাশবোর্ডে আপডেট হবে।"
+        f"📚 <b>বিষয়:</b> {html.escape(display_name)}\n"
+        f"📖 <b>চ্যাপ্টার:</b> {html.escape(chapter)}\n"
+        "🔢 <b>প্রশ্ন:</b> ১০টি\n\nসাবমিটের পর স্কোর, ব্যাখ্যা ও এই কুইজের leaderboard দেখুন।"
     )
-    keyboard = {"inline_keyboard": [[{"text": "কুইজ শুরু করুন", "url": quiz_url}]]}
-    retry_with_backoff(
-        telegram_api,
-        "sendMessage",
-        {"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML", "reply_markup": keyboard},
-        what="Daily quiz post",
-    )
-    quiz_pack_service.mark_pack_posted(pack)
-    log.info("Daily quiz %s posted and marked used.", quiz_id)
 
 
 def _chat_id_as_int(chat_id: str) -> int:
@@ -783,48 +419,37 @@ def _chat_id_as_int(chat_id: str) -> int:
         return 0
 
 
-def _safe_run(fn) -> None:
-    try:
-        fn()
-    except Exception:
-        log.exception("Unhandled error while running %s", fn.__name__)
-
-
-def run_scheduler_daemon() -> None:
-    import schedule
-
-    schedule.every().sunday.at("20:00").do(_safe_run, send_sunday_announcement)
-    for day_scheduler in (
-        schedule.every().monday,
-        schedule.every().tuesday,
-        schedule.every().wednesday,
-        schedule.every().thursday,
-        schedule.every().friday,
-        schedule.every().saturday,
-    ):
-        day_scheduler.at("18:30").do(_safe_run, send_daily_quiz)
-
-    log.info("Scheduler daemon started. Use TZ=Asia/Kolkata if the host is not already on IST.")
-    while True:
-        schedule.run_pending()
-        time.sleep(30)
-
-
 def main() -> None:
-    parser = argparse.ArgumentParser(description="WB Govt Exam Telegram Quiz Pack Bot")
-    parser.add_argument("--mode", choices=["announce", "quiz", "daemon"], required=True)
+    parser = argparse.ArgumentParser(description="Subject-scoped Telegram quiz bot")
+    parser.add_argument("--mode", required=True, choices=["subject-quiz", "recover-missed-quizzes", "announce", "preflight"])
+    parser.add_argument("--subject")
+    parser.add_argument("--force-post", action="store_true")
+    parser.add_argument("--force-regenerate", action="store_true")
     args = parser.parse_args()
+    if args.force_post and args.force_regenerate:
+        parser.error("--force-post and --force-regenerate are mutually exclusive.")
+    if args.mode != "subject-quiz" and (args.force_post or args.force_regenerate):
+        parser.error("Force flags apply only to subject-quiz mode.")
     try:
-        if args.mode == "announce":
-            send_sunday_announcement()
-        elif args.mode == "quiz":
-            send_daily_quiz()
+        if args.mode == "subject-quiz":
+            if not args.subject:
+                parser.error("--subject is required for subject-quiz mode.")
+            run_subject_quiz(args.subject, force_post=args.force_post, force_regenerate=args.force_regenerate)
+        elif args.mode == "recover-missed-quizzes":
+            _, unresolved = recover_missed_quizzes()
+            if unresolved:
+                raise RuntimeError("Recovery finished with unresolved retryable failures.")
+        elif args.mode == "announce":
+            send_schedule_announcement()
         else:
-            run_scheduler_daemon()
-    except Exception:
-        log.exception("Fatal error.")
+            values = preflight()
+            if not values["telegram_topics_configured"] or not values["supabase_configured"]:
+                raise RuntimeError("Configuration preflight failed.")
+    except Exception as exc:
+        LOG.error("RUN_FAILED category=%s", getattr(exc, "category", type(exc).__name__))
         sys.exit(1)
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s")
     main()

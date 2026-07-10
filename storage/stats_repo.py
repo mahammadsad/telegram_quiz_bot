@@ -6,6 +6,7 @@ from collections import defaultdict
 
 from config.settings import SESSION_TYPE
 from database.client import get_client
+from storage import submissions_repo
 
 
 def leaderboard(limit: int = 20, session_type: str = SESSION_TYPE) -> list[dict]:
@@ -76,3 +77,33 @@ def leaderboard(limit: int = 20, session_type: str = SESSION_TYPE) -> list[dict]
         reverse=True,
     )
     return rows[:limit]
+
+
+def quiz_leaderboard(quiz_id: str, limit: int = 20) -> dict:
+    """Return a leaderboard isolated to one completed quiz."""
+    submissions = submissions_repo.list_for_quiz(quiz_id, limit=10000)
+    submissions.sort(key=lambda row: (-int(row.get("score") or 0), str(row.get("completed_at") or ""), str(row.get("user_id") or "")))
+    rows = []
+    seen: set[str] = set()
+    for submission in submissions:
+        user_id = str(submission.get("user_id") or "")
+        if not user_id or user_id in seen:
+            continue
+        seen.add(user_id)
+        user = submission.get("users") or {}
+        if isinstance(user, list):
+            user = user[0] if user else {}
+        display_name = " ".join(filter(None, [user.get("first_name"), user.get("last_name")])).strip()
+        if not display_name:
+            display_name = f"@{user['username']}" if user.get("username") else "Telegram User"
+        rows.append({
+            "rank": len(rows) + 1,
+            "telegram_user_id": user.get("telegram_id"),
+            "display_name": display_name,
+            "username": user.get("username"),
+            "score": int(submission.get("score") or 0),
+            "total": int(submission.get("total") or 10),
+            "answered": int(submission.get("answered") or 0),
+            "completed_at": submission.get("completed_at"),
+        })
+    return {"quiz_id": quiz_id, "participants": len(rows), "rows": rows[:limit]}

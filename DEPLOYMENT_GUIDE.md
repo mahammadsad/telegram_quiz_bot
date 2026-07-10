@@ -1,199 +1,119 @@
-# WB Exam Quiz Pack Bot - Deployment Guide
+# Deployment Guide
 
-This repo now uses the same Supabase/Postgres architecture as
-`mahammadsad/telegram_mcq_bot`:
+## 1. Apply the Supabase migration
 
-- `questions`: shared question bank
-- `polls`: per-question quiz-pack delivery/session records
-- `users`: Telegram Mini App users
-- `user_attempts`: raw answer events
-- `bot_state`: operational state, including weekly syllabus memory
+Existing projects: open Supabase SQL Editor and run `database/migrations/002_subject_quiz_runs.sql`. New projects can run `database/schema.sql`. Both are safe to rerun and preserve existing `questions`, `polls`, `users`, and `user_attempts`.
 
-Firebase, Firestore rules, committed quiz JSON files, and committed syllabus
-state are no longer part of this project.
+The migration adds:
 
-Gemini now acts as the topic planner and Bengali question setter. Each week it
-chooses fresh topics from a broad competitive-exam syllabus universe:
-History, Geography, Polity, Economics, General Science, Mathematics,
-Reasoning, English, Bengali, Computer, and Current Affairs. Each quiz then
-uses Gemini to create Bengali MCQs for that selected topic, while Supabase
-tracks covered topics to reduce repetition.
+- `quiz_runs`: date-subject lifecycle, checksum, provider/model, safe error, and Telegram response metadata; unique `(quiz_date, subject_key)`.
+- `chapter_history`: deterministic chapter history; unique `(subject_key, selected_for)`.
+- `quiz_submissions`: one immutable completion per `(quiz_id, user_id)`, including the 10-position answer array.
+- recovery, chapter, leaderboard, and `polls(run_slot)` indexes.
 
-The planner also enforces a topic cooldown. A recently used topic is blocked
-from normal selection, and it can return only when it is due for spaced
-revision after `3`, `7`, `14`, or `30` days.
+`user_attempts` already has unique `(user_id, poll_id)`. Answered questions create raw attempt rows; `null` positions remain `null` in `quiz_submissions.answers` and do not invent attempt choices.
 
-## 1. Create / Reuse Supabase
+## 2. GitHub secrets and variables
 
-Use the same Supabase project as repo_1 if you want unified analytics.
+Required GitHub Secrets:
 
-1. Open Supabase SQL Editor.
-2. Paste and run `database/schema.sql`.
-3. In Project Settings -> API, copy:
-   - `SUPABASE_URL`
-   - `service_role` key as `SUPABASE_SERVICE_KEY`
+```text
+GEMINI_API_KEY_PRIMARY
+GEMINI_API_KEY_SECONDARY
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
+TELEGRAM_FORUM_TOPICS_JSON
+SUPABASE_URL
+SUPABASE_SERVICE_KEY
+```
 
-Use the service role key only on GitHub Actions and the FastAPI server. Never
-put it in browser JavaScript.
+Optional GitHub Secrets:
 
-## 2. Environment Variables
+```text
+TELEGRAM_GENERAL_THREAD_ID
+TELEGRAM_ADMIN_CHAT_ID
+TELEGRAM_ADMIN_USER_IDS
+```
 
-Set these on the API host and GitHub Actions:
+GitHub Variables:
 
-```bash
-GEMINI_API_KEY=...
-TELEGRAM_BOT_TOKEN=...
-TELEGRAM_CHAT_ID=...
-TELEGRAM_BOT_USERNAME=your_bot_username_without_at
-MINIAPP_SHORT_NAME=quiz
-SUPABASE_URL=...
-SUPABASE_SERVICE_KEY=...
+```text
+TELEGRAM_BOT_USERNAME
+MINIAPP_SHORT_NAME
+```
+
+The workflow has 13 exact UTC subject crons plus `0 15 * * *` for recovery. It maps `github.event.schedule` directly, runs a sanitized preflight, and stages only `quizzes/????????-*.json`. Manual examples:
+
+```text
+mode=subject-quiz, subject=history, force_post=false, force_regenerate=false
+mode=subject-quiz, subject=history, force_post=true, force_regenerate=false
+mode=subject-quiz, subject=history, force_post=false, force_regenerate=true
+mode=recover-missed-quizzes
+```
+
+## 3. Render environment
+
+Required:
+
+```text
+SUPABASE_URL
+SUPABASE_SERVICE_KEY
+TELEGRAM_BOT_TOKEN
+TELEGRAM_CHAT_ID
+TELEGRAM_BOT_USERNAME
+MINIAPP_SHORT_NAME
+TELEGRAM_FORUM_TOPICS_JSON
+GEMINI_API_KEY_PRIMARY
+GEMINI_API_KEY_SECONDARY
+GEMINI_MODEL_PRIMARY=gemini-2.5-flash-lite
+GEMINI_MODEL_FALLBACK=gemini-2.5-flash
+GEMINI_FAILOVER_ENABLED=true
+GEMINI_MAX_ATTEMPTS_PER_KEY=2
+GEMINI_REQUEST_TIMEOUT_SECONDS=120
+GEMINI_KEY_COOLDOWN_SECONDS=900
+GEMINI_BACKOFF_BASE_SECONDS=2
+GEMINI_MAX_BACKOFF_SECONDS=60
 ```
 
 Optional:
 
-```bash
-GEMINI_MODEL=gemini-2.5-flash
+```text
+TELEGRAM_GENERAL_THREAD_ID
+TELEGRAM_ADMIN_CHAT_ID
+TELEGRAM_ADMIN_USER_IDS
 DEV_ALLOW_UNVERIFIED_TELEGRAM=false
-CORS_ALLOWED_ORIGINS=https://your-pages-domain.example
-APP_TIMEZONE=Asia/Kolkata
-WRITE_STATIC_QUIZ_JSON=true
+CORS_ALLOWED_ORIGINS
 ```
 
-## 3. Deploy the Mini App API
-
-Deploy this repo as a Python web service. The start command is:
+Keep `DEV_ALLOW_UNVERIFIED_TELEGRAM=false` in production. Start the web service with:
 
 ```bash
 uvicorn app:app --host 0.0.0.0 --port $PORT
 ```
 
-The included `Procfile` works for hosts that support it. After deploy, your
-Mini App URL will be:
+Point the BotFather Mini App URL at the FastAPI root and set the public bot username/short name. Secrets must remain server-side environment values.
 
-```text
-https://your-api-domain.example/
-```
+## 4. Production verification
 
-The same server also serves:
+1. Run `python scripts/discover_topic_ids.py`. In every Telegram forum thread send `/topicid <canonical-key>`, then combine the 13 snippets into `TELEGRAM_FORUM_TOPICS_JSON`.
+2. Run `python bot.py --mode preflight`; it prints only configured true/false flags.
+3. Run `python bot.py --mode subject-quiz --subject history`.
+4. In `quiz_runs`, confirm `20260710-history`-style ID, `question_count=10`, checksum, `status=posted`, and the returned numeric chat/thread/message IDs.
+5. Confirm the Telegram message is inside the ইতিহাস thread and opens `startapp=<date>-history`.
+6. In the Mini App, confirm exactly 10 questions render and the loading/retry states work.
+7. Submit `{initData, answers}`. Confirm the authenticated Telegram user in `users`, one `user_attempts` row for every non-null answer, and one `quiz_submissions` row.
+8. Open `/api/quiz/<quiz-id>/leaderboard`; verify only that quiz's users appear once, ordered by score then completion time.
+9. Fetch `/api/quiz/<quiz-id>` and the matching `quizzes/*.json`; verify there are no correct indexes or explanations.
+10. Temporarily replace only `GEMINI_API_KEY_PRIMARY` with an invalid value and run a new due test subject. Confirm safe logs show primary key failure followed by `provider=secondary` success. Never paste either key into logs or commands captured by history.
+11. Restore the real primary key, run another new subject/date, and confirm primary succeeds without calling secondary.
+12. Search logs for the exact known secret values using the hosting provider's private log search. There must be no matches; rotate a credential immediately if one is found.
 
-- `/` -> quiz Mini App
-- `/dashboard.html` -> leaderboard dashboard
-- `/api/quiz/{quiz_id}` -> question fetch
-- `/api/quiz/{quiz_id}/submit` -> verified answer submission
-- `/api/leaderboard` -> live leaderboard
+## 5. Provider-project checks
 
-Important: if BotFather still points to a GitHub Pages URL, the browser will
-try to call `/api/quiz/<quiz_id>` on GitHub Pages and the quiz will not load.
-The simplest production setup is to point BotFather directly at the FastAPI
-root URL above.
+In Google AI Studio/Cloud Console, verify each environment value belongs to its intended separate project, both APIs are enabled, and both projects can access the configured primary/fallback models. The bot does not rotate successful calls and makes no claim that two keys multiply quota.
 
-As a safety net, `bot.py --mode quiz` also writes `quizzes/<quiz_id>.json`
-after the Gemini quiz is stored in Supabase. The GitHub Actions workflow
-commits that generated fallback file automatically, so GitHub Pages can still
-display the quiz if the FastAPI URL is not wired yet. In that static fallback
-mode, result submission will be local-only until the FastAPI API is deployed.
+## 6. Submission and recovery checks
 
-If you intentionally keep `index.html` on GitHub Pages and run the API
-elsewhere, edit both `index.html` and `dashboard.html`:
+An identical second submit returns the existing result and writes no duplicate attempts. A different answer array after completion returns `400` by the documented immutable policy. Production browser-supplied user IDs are ignored; only verified Telegram `initData` is trusted.
 
-```html
-<meta name="quiz-api-base" content="https://your-api-domain.example" />
-```
-
-Then set this on the API host:
-
-```bash
-CORS_ALLOWED_ORIGINS=https://your-github-username.github.io
-```
-
-## 4. Register the Telegram Mini App
-
-In BotFather:
-
-1. Run `/newapp` or edit the existing app with `/myapps`.
-2. Set the Web App URL to your deployed API root URL, for example:
-   `https://your-api-domain.example/`
-3. Save the short name as `MINIAPP_SHORT_NAME`.
-
-`bot.py` posts links in this format:
-
-```text
-https://t.me/<TELEGRAM_BOT_USERNAME>/<MINIAPP_SHORT_NAME>?startapp=<quiz_id>
-```
-
-## 5. GitHub Actions Scheduler
-
-The workflow `.github/workflows/main.yml` runs:
-
-- Sunday 20:00 IST: `python bot.py --mode announce`
-- Monday-Saturday 18:30 IST: `python bot.py --mode quiz`
-
-Add these GitHub Secrets:
-
-- `GEMINI_API_KEY`
-- `TELEGRAM_BOT_TOKEN`
-- `TELEGRAM_CHAT_ID`
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_KEY`
-
-Add these GitHub Variables:
-
-- `TELEGRAM_BOT_USERNAME`
-- `MINIAPP_SHORT_NAME`
-
-Quiz packs and syllabus state are still written to Supabase. The workflow
-commits only the small generated `quizzes/<quiz_id>.json` fallback file for
-static Mini App compatibility.
-
-## 6. Import Old JSON Quiz Packs
-
-If you still have old `quizzes/*.json` files, import them once:
-
-```bash
-python scripts/import_legacy_quizzes.py
-```
-
-The script writes each pack into `questions` and `polls`. It is safe to skip
-if you do not need old packs.
-
-Old Telegram posts may still open URLs like `startapp=20260708`. This repo
-keeps `quizzes/20260708.json` as a legacy fallback so that old link can still
-open. The API also attempts to import a matching legacy JSON file into
-Supabase on demand.
-
-## 7. Local Development
-
-Install and run:
-
-```bash
-pip install -r requirements.txt
-DEV_ALLOW_UNVERIFIED_TELEGRAM=true uvicorn app:app --reload
-```
-
-Open a known quiz id:
-
-```text
-http://127.0.0.1:8000/?quiz=20260708
-```
-
-Generate/post today:
-
-```bash
-python bot.py --mode quiz
-```
-
-## 8. Data Flow
-
-1. `bot.py --mode announce` asks Gemini to plan six fresh competitive-exam
-   topics for the week and stores that plan in `bot_state`.
-2. `bot.py --mode quiz` asks Gemini to generate Bengali MCQs for today's
-   selected topic.
-3. Each unique MCQ is inserted or reused in `questions`.
-4. Each quiz-pack question gets a delivery row in `polls` with
-   `bot_type='mock_test'` and `run_slot=<quiz_id>`.
-5. The Telegram button opens the Mini App with `startapp=<quiz_id>`.
-6. The Mini App fetches questions from the API without correct answers.
-7. On submit, the API verifies Telegram `initData`, upserts the user, and
-   writes one raw `user_attempts` row per answered question.
-8. The dashboard computes leaderboard totals from raw attempts at read time.
+For a posting-failure drill, block Telegram temporarily, run a subject, restore Telegram, and use `--force-post`. Confirm no new Gemini generation log appears. At 20:30 IST, recovery skips `posted` and future subjects, reuses `generated`/`posting_failed` packs, and returns nonzero only if retryable failures remain unresolved.

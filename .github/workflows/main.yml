@@ -1,69 +1,153 @@
-name: WB Exam Quiz Pack Bot Scheduler
+name: Subject Quiz Scheduler
 
 permissions:
   contents: write
 
 on:
   schedule:
-    - cron: "30 14 * * 0"   # Sunday   20:00 IST → syllabus announcement
-    - cron: "0 13 * * 1-6"  # Mon–Sat  18:30 IST → daily quiz
+    - cron: "30 1 * * *"
+    - cron: "30 2 * * *"
+    - cron: "30 3 * * *"
+    - cron: "30 4 * * *"
+    - cron: "30 5 * * *"
+    - cron: "30 6 * * *"
+    - cron: "30 7 * * *"
+    - cron: "30 8 * * *"
+    - cron: "30 9 * * *"
+    - cron: "30 10 * * *"
+    - cron: "30 11 * * *"
+    - cron: "30 12 * * *"
+    - cron: "30 13 * * *"
+    - cron: "0 15 * * *"
   workflow_dispatch:
     inputs:
       mode:
-        description: "Which job to run"
+        description: Job mode
         required: true
-        default: "quiz"
+        default: subject-quiz
         type: choice
-        options:
-          - announce
-          - quiz
+        options: [subject-quiz, recover-missed-quizzes, announce]
+      subject:
+        description: Canonical subject key (required for subject-quiz)
+        required: false
+        type: string
+      force_post:
+        description: Repost saved validated content without Gemini
+        required: false
+        default: false
+        type: boolean
+      force_regenerate:
+        description: Explicitly replace generated content
+        required: false
+        default: false
+        type: boolean
 
 jobs:
   run-bot:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out repo
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Decide which mode to run
-        id: decide
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "mode=${{ inputs.mode }}" >> "$GITHUB_OUTPUT"
-          elif [ "${{ github.event.schedule }}" = "30 14 * * 0" ]; then
-            echo "mode=announce" >> "$GITHUB_OUTPUT"
-          else
-            echo "mode=quiz" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Run bot.py
+      - name: Resolve immutable schedule mapping
+        id: job
         env:
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_SUBJECT: ${{ inputs.subject }}
+          FORCE_POST: ${{ inputs.force_post }}
+          FORCE_REGENERATE: ${{ inputs.force_regenerate }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            mode="$INPUT_MODE"
+            subject="$INPUT_SUBJECT"
+          else
+            mode="subject-quiz"
+            case "$EVENT_SCHEDULE" in
+              "30 1 * * *") subject="computer" ;;
+              "30 2 * * *") subject="bengali" ;;
+              "30 3 * * *") subject="reasoning" ;;
+              "30 4 * * *") subject="mathematics" ;;
+              "30 5 * * *") subject="english" ;;
+              "30 6 * * *") subject="miscellaneous" ;;
+              "30 7 * * *") subject="polity" ;;
+              "30 8 * * *") subject="geography" ;;
+              "30 9 * * *") subject="science" ;;
+              "30 10 * * *") subject="economics" ;;
+              "30 11 * * *") subject="history" ;;
+              "30 12 * * *") subject="environment" ;;
+              "30 13 * * *") subject="current-affairs" ;;
+              "0 15 * * *") mode="recover-missed-quizzes"; subject="" ;;
+              *) echo "Unknown schedule" >&2; exit 2 ;;
+            esac
+          fi
+          if [ "$mode" = "subject-quiz" ] && [ -z "$subject" ]; then
+            echo "subject is required" >&2; exit 2
+          fi
+          if [ "$mode" = "subject-quiz" ]; then
+            case "$subject" in
+              computer|bengali|reasoning|mathematics|english|miscellaneous|polity|geography|science|economics|history|environment|current-affairs) ;;
+              *) echo "invalid canonical subject" >&2; exit 2 ;;
+            esac
+          fi
+          if [ "$FORCE_POST" = "true" ] && [ "$FORCE_REGENERATE" = "true" ]; then
+            echo "force flags are mutually exclusive" >&2; exit 2
+          fi
+          if [ "$mode" != "subject-quiz" ] && { [ "$FORCE_POST" = "true" ] || [ "$FORCE_REGENERATE" = "true" ]; }; then
+            echo "force flags apply only to subject-quiz" >&2; exit 2
+          fi
+          echo "mode=$mode" >> "$GITHUB_OUTPUT"
+          echo "subject=$subject" >> "$GITHUB_OUTPUT"
+          echo "force_post=$FORCE_POST" >> "$GITHUB_OUTPUT"
+          echo "force_regenerate=$FORCE_REGENERATE" >> "$GITHUB_OUTPUT"
+
+      - name: Sanitized configuration preflight
+        env: &bot-env
+          GEMINI_API_KEY_PRIMARY: ${{ secrets.GEMINI_API_KEY_PRIMARY }}
+          GEMINI_API_KEY_SECONDARY: ${{ secrets.GEMINI_API_KEY_SECONDARY }}
+          GEMINI_MODEL_PRIMARY: gemini-2.5-flash-lite
+          GEMINI_MODEL_FALLBACK: gemini-2.5-flash
+          GEMINI_FAILOVER_ENABLED: "true"
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_FORUM_TOPICS_JSON: ${{ secrets.TELEGRAM_FORUM_TOPICS_JSON }}
+          TELEGRAM_GENERAL_THREAD_ID: ${{ secrets.TELEGRAM_GENERAL_THREAD_ID }}
+          TELEGRAM_ADMIN_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
+          TELEGRAM_ADMIN_USER_IDS: ${{ secrets.TELEGRAM_ADMIN_USER_IDS }}
           TELEGRAM_BOT_USERNAME: ${{ vars.TELEGRAM_BOT_USERNAME }}
           MINIAPP_SHORT_NAME: ${{ vars.MINIAPP_SHORT_NAME }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python bot.py --mode ${{ steps.decide.outputs.mode }}
+        run: python bot.py --mode preflight
 
-      - name: Commit generated static quiz fallback
-        if: steps.decide.outputs.mode == 'quiz'
+      - name: Run exactly one mapped job
+        env: *bot-env
+        run: |
+          args=(--mode "${{ steps.job.outputs.mode }}")
+          if [ -n "${{ steps.job.outputs.subject }}" ]; then args+=(--subject "${{ steps.job.outputs.subject }}"); fi
+          if [ "${{ steps.job.outputs.force_post }}" = "true" ]; then args+=(--force-post); fi
+          if [ "${{ steps.job.outputs.force_regenerate }}" = "true" ]; then args+=(--force-regenerate); fi
+          python bot.py "${args[@]}"
+
+      - name: Commit only new public fallback files
+        if: steps.job.outputs.mode == 'subject-quiz' || steps.job.outputs.mode == 'recover-missed-quizzes'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add quizzes/*.json
-          if git diff --cached --quiet; then
-            echo "No static quiz fallback changes to commit."
-          else
-            git commit -m "Add generated quiz fallback"
-            git push
-          fi
+          git add -- 'quizzes/????????-*.json'
+          if git diff --cached --quiet; then exit 0; fi
+          git commit -m "Add public subject quiz fallback"
+          for attempt in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}"
+            git push && exit 0
+          done
+          exit 1
