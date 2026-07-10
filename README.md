@@ -78,6 +78,10 @@ python bot.py --mode announce
 python bot.py --mode preflight
 ```
 
+In GitHub Actions, choose `Run workflow` and `mode=preflight` to validate
+required secret presence and forum-routing structure without generating or
+posting anything.
+
 `--force-post` requires and reposts a checksum-valid saved quiz without Gemini. `--force-regenerate` explicitly replaces the delivery content; the two flags are mutually exclusive. Recovery considers today's IST schedule, skips future and posted subjects, posts valid generated content first, and generates only genuinely missing/corrupt content.
 
 ## Database and local API

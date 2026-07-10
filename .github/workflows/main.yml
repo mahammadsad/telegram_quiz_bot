@@ -26,7 +26,7 @@ on:
         required: true
         default: subject-quiz
         type: choice
-        options: [subject-quiz, recover-missed-quizzes, announce]
+        options: [preflight, subject-quiz, recover-missed-quizzes, announce]
       subject:
         description: Canonical subject key (required for subject-quiz)
         required: false

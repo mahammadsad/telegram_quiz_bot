@@ -443,7 +443,21 @@ def main() -> None:
             send_schedule_announcement()
         else:
             values = preflight()
-            if not values["telegram_topics_configured"] or not values["supabase_configured"]:
+            telegram_runtime_configured = all(
+                os.environ.get(name)
+                for name in (
+                    "TELEGRAM_BOT_TOKEN",
+                    "TELEGRAM_CHAT_ID",
+                    "TELEGRAM_BOT_USERNAME",
+                    "MINIAPP_SHORT_NAME",
+                )
+            )
+            if (
+                not values["primary_key_configured"]
+                or not values["telegram_topics_configured"]
+                or not values["supabase_configured"]
+                or not telegram_runtime_configured
+            ):
                 raise RuntimeError("Configuration preflight failed.")
     except Exception as exc:
         LOG.error("RUN_FAILED category=%s", getattr(exc, "category", type(exc).__name__))

@@ -49,7 +49,11 @@ mode=subject-quiz, subject=history, force_post=false, force_regenerate=false
 mode=subject-quiz, subject=history, force_post=true, force_regenerate=false
 mode=subject-quiz, subject=history, force_post=false, force_regenerate=true
 mode=recover-missed-quizzes
+mode=preflight
 ```
+
+Run `mode=preflight` first. It performs no Gemini request and posts no Telegram
+message; it exits nonzero when required runtime configuration is incomplete.
 
 ## 3. Render environment
 
