@@ -70,5 +70,13 @@ def test_health_is_safe_and_never_returns_secret_values(monkeypatch):
     assert "thread_ids" not in response.text
 
 
+def test_health_reports_safe_forum_configuration_error(monkeypatch):
+    monkeypatch.setattr(api_module, "TELEGRAM_FORUM_TOPICS_JSON", "not-json")
+    response = client.get("/api/health")
+    assert response.status_code == 200
+    assert response.json()["forum_topics_error"] == "invalid_json"
+    assert "not-json" not in response.text
+
+
 def test_obsolete_submit_payload_class_does_not_exist():
     assert not hasattr(api_module, "SubmitQuizPayload")

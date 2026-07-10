@@ -112,6 +112,9 @@ Endpoints:
 - `GET /api/leaderboard` — backward-compatible global dashboard.
 - `GET /api/health` — safe configuration booleans; it consumes no Gemini quota.
 
+When forum routing is invalid, health also returns a safe
+`forum_topics_error` code without exposing thread IDs.
+
 To confirm public fallbacks contain no answers:
 
 ```bash

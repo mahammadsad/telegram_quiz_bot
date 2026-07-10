@@ -27,7 +27,7 @@ from config.subjects import QUIZ_SUBJECTS
 from services import quiz_pack_service
 from storage import stats_repo
 from telegram.auth import TelegramAuthError, verify_init_data
-from telegram.routing import ForumRouter
+from telegram.routing import ForumRouter, ForumRoutingError
 from utils.quiz_ids import parse_quiz_id
 
 ROOT = Path(__file__).resolve().parent
@@ -85,11 +85,13 @@ def legacy_quiz_file(quiz_file: str) -> JSONResponse:
 
 @app.get("/api/health")
 def health() -> dict:
+    topics_error = None
     try:
         ForumRouter.from_values(TELEGRAM_FORUM_TOPICS_JSON, TELEGRAM_GENERAL_THREAD_ID)
         topics_configured = True
-    except ValueError:
+    except ForumRoutingError as exc:
         topics_configured = False
+        topics_error = _forum_topics_error_code(exc)
     return {
         "ok": True,
         "timezone": APP_TIMEZONE,
@@ -99,6 +101,7 @@ def health() -> dict:
         "gemini_failover_enabled": GEMINI_FAILOVER_ENABLED,
         "telegram_configured": bool(TELEGRAM_BOT_TOKEN),
         "forum_topics_configured": topics_configured,
+        "forum_topics_error": topics_error,
         "quiz_subject_count": len(QUIZ_SUBJECTS),
     }
 
@@ -193,3 +196,21 @@ def _load_public_fallback(quiz_id: str) -> dict | None:
         "legacy": len(quiz_id) == 8,
         "qs": [{"q": item.get("q") or item.get("question"), "o": item.get("o") or item.get("options")} for item in questions],
     }
+
+
+def _forum_topics_error_code(exc: ForumRoutingError) -> str:
+    """Convert routing errors to safe health codes without exposing IDs."""
+    if not TELEGRAM_FORUM_TOPICS_JSON:
+        return "missing"
+    message = str(exc).lower()
+    if "documentation-only" in message:
+        return "placeholder_mapping"
+    if "missing forum" in message:
+        return "missing_keys"
+    if "unknown subject" in message:
+        return "unknown_keys"
+    if "must be unique" in message:
+        return "duplicate_ids"
+    if "positive integer" in message:
+        return "invalid_id"
+    return "invalid_json"
