@@ -1,14 +1,16 @@
 # Migrations
 
 `001_init.sql` is the initial schema. `002_subject_quiz_runs.sql` adds the
-subject-run lifecycle, chapter history, immutable quiz submissions, and
-recovery/leaderboard indexes. `database/schema.sql` always reflects the full
+subject-run lifecycle, chapter history, initial quiz submissions, and
+recovery/leaderboard indexes. `003_repeat_quiz_attempts.sql` preserves those
+rows while allowing unlimited intentional retakes with an idempotent client
+attempt ID and best-score leaderboard indexes. `database/schema.sql` always reflects the full
 **current** schema (apply that one for a brand-new Supabase project); this
 folder is the incremental history for projects that are already running.
 
 Convention for future changes:
 
-1. Add a new file: `002_<short_description>.sql` (e.g. `002_add_mock_test_sessions.sql`).
+1. Add a new sequential file such as `004_<short_description>.sql`.
 2. Write it as `alter table ...` / `create table if not exists ...` — additive
    and idempotent, never a destructive rewrite of existing data.
 3. Also update `database/schema.sql` so it stays the single source of truth

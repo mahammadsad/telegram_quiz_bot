@@ -255,7 +255,7 @@ from questions
 group by subject;
 
 -- ============================================================================
--- 7. SUBJECT QUIZ RUNS, CHAPTER HISTORY, AND IMMUTABLE SUBMISSIONS
+-- 7. SUBJECT QUIZ RUNS, CHAPTER HISTORY, AND REPEATABLE SUBMISSIONS
 -- ============================================================================
 create table if not exists quiz_runs (
     quiz_id text primary key,
@@ -305,8 +305,15 @@ create table if not exists quiz_submissions (
     score integer not null check (score >= 0),
     total integer not null check (total = 10),
     answered integer not null check (answered between 0 and 10),
-    completed_at timestamptz not null default now(),
-    unique (quiz_id, user_id)
+    client_attempt_id text,
+    completed_at timestamptz not null default now()
 );
+alter table quiz_submissions drop constraint if exists quiz_submissions_quiz_id_user_id_key;
+alter table quiz_submissions add column if not exists client_attempt_id text;
 create index if not exists idx_quiz_submissions_leaderboard on quiz_submissions (quiz_id, score desc, completed_at asc);
+create unique index if not exists idx_quiz_submissions_client_attempt
+    on quiz_submissions (quiz_id, user_id, client_attempt_id)
+    where client_attempt_id is not null;
+create index if not exists idx_quiz_submissions_user_history
+    on quiz_submissions (quiz_id, user_id, completed_at desc);
 create index if not exists idx_polls_run_slot on polls (bot_type, run_slot);
