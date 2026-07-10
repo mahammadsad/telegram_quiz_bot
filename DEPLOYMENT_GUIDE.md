@@ -96,7 +96,21 @@ Keep `DEV_ALLOW_UNVERIFIED_TELEGRAM=false` in production. Start the web service 
 uvicorn app:app --host 0.0.0.0 --port $PORT
 ```
 
-Point the BotFather Mini App URL at the FastAPI root and set the public bot username/short name. Secrets must remain server-side environment values.
+`MINIAPP_SHORT_NAME` makes posted buttons use a named Mini App URL such as
+`https://t.me/<bot>/<short-name>?startapp=<quiz-id>`. Configure that exact named
+app in BotFather; changing only the bot's Main Mini App does not update it:
+
+1. Send `/myapps` to BotFather.
+2. Select the app belonging to `TELEGRAM_BOT_USERNAME`.
+3. Select the app whose short name equals `MINIAPP_SHORT_NAME`.
+4. Choose **Edit Web App URL** and enter the Render FastAPI root, including
+   `https://` (for example, `https://your-service.onrender.com/`).
+5. Save, close the open Telegram Mini App completely, and reopen the quiz.
+
+After reopening, Render application logs must show `GET /api/quiz/<quiz-id>`;
+after submission they must show `POST /api/quiz/<quiz-id>/submit` with `200`.
+If those requests are absent, Telegram is still opening a different Mini App
+deployment. Secrets must remain server-side environment values.
 
 ## 4. Production verification
 

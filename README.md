@@ -84,6 +84,13 @@ In GitHub Actions, choose `Run workflow` and `mode=preflight` to validate
 required secret presence, forum-routing structure, Supabase connectivity, and
 migration `002` tables without generating or posting anything.
 
+Because quiz buttons use the named path
+`https://t.me/<TELEGRAM_BOT_USERNAME>/<MINIAPP_SHORT_NAME>?startapp=...`, update
+that named app through BotFather `/myapps` and **Edit Web App URL**. Updating
+only BotFather's Main Mini App/Open App URL does not change named-app links.
+Point the named app at the deployed FastAPI root and confirm Render receives
+both the quiz `GET` and submission `POST` requests.
+
 `--force-post` requires and reposts a checksum-valid saved quiz without Gemini. `--force-regenerate` explicitly replaces the delivery content; the two flags are mutually exclusive. Recovery considers today's IST schedule, skips future and posted subjects, posts valid generated content first, and generates only genuinely missing/corrupt content.
 
 ## Database and local API
