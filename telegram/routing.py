@@ -7,6 +7,10 @@ from dataclasses import dataclass
 
 from config.subjects import QUIZ_SUBJECT_KEYS, get_subject
 
+_DOCUMENTATION_EXAMPLE_IDS = {
+    key: 101 + index for index, key in enumerate(QUIZ_SUBJECT_KEYS)
+}
+
 
 class ForumRoutingError(ValueError):
     pass
@@ -40,6 +44,10 @@ class ForumRouter:
             clean[key] = value
         if len(set(clean.values())) != len(clean):
             raise ForumRoutingError("Forum thread IDs must be unique.")
+        if clean == _DOCUMENTATION_EXAMPLE_IDS:
+            raise ForumRoutingError(
+                "The 101-113 forum mapping is documentation-only; discover real Telegram thread IDs."
+            )
         return cls(clean, _optional_positive_int(general_thread_id))
 
     def for_subject(self, subject_key: str) -> int:

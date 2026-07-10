@@ -44,6 +44,8 @@ TELEGRAM_FORUM_TOPICS_JSON={"computer":101,"bengali":102,"reasoning":103,"mathem
 ```
 
 IDs must be unique positive JSON integers. Missing keys, extra keys, booleans, strings, zero, negatives, and duplicates fail before Gemini is called. Runtime routing never matches Bengali display names.
+The exact `101` through `113` documentation example is also rejected; replace
+it with IDs discovered from the real forum threads.
 
 To discover IDs, set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and optionally comma-separated `TELEGRAM_ADMIN_USER_IDS`, then run:
 

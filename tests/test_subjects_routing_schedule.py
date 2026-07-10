@@ -59,6 +59,12 @@ def test_router_rejects_missing_unknown_and_duplicate():
         ForumRouter.from_values(__import__("json").dumps(values))
 
 
+def test_router_rejects_documentation_placeholder_mapping():
+    values = {subject.key: 101 + index for index, subject in enumerate(QUIZ_SUBJECTS)}
+    with pytest.raises(ForumRoutingError, match="documentation-only"):
+        ForumRouter.from_values(__import__("json").dumps(values))
+
+
 def test_display_name_change_cannot_change_routing():
     router = ForumRouter(routing())
     assert router.for_subject("history") == 110
