@@ -23,6 +23,22 @@ def test_valid_submission_contract_is_200_not_422_or_503(monkeypatch):
     assert captured == {"quiz_id": QUIZ_ID, "telegram_user": {"id": 123, "first_name": "Test"}, "answers": [0] * 10}
 
 
+def test_immutable_resubmission_returns_explanatory_400(monkeypatch):
+    monkeypatch.setattr(api_module, "verify_init_data", lambda *args: {"id": 123, "first_name": "Test"})
+    monkeypatch.setattr(
+        api_module.quiz_pack_service,
+        "submit_quiz_attempts",
+        lambda **kwargs: (_ for _ in ()).throw(
+            ValueError("This quiz has already been submitted; completed attempts are immutable.")
+        ),
+    )
+
+    response = client.post(f"/api/quiz/{QUIZ_ID}/submit", json={"initData": "signed", "answers": [1] * 10})
+
+    assert response.status_code == 400
+    assert "already been submitted" in response.json()["detail"]
+
+
 def test_answer_length_and_values_are_rejected():
     assert client.post(f"/api/quiz/{QUIZ_ID}/submit", json={"initData": "x", "answers": [0] * 9}).status_code == 422
     assert client.post(f"/api/quiz/{QUIZ_ID}/submit", json={"initData": "x", "answers": [0] * 11}).status_code == 422

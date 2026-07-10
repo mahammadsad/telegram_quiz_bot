@@ -409,14 +409,14 @@
   byId("btn-start").addEventListener("click", startQuiz);
   byId("btn-prev").addEventListener("click", goPrev);
   byId("btn-next").addEventListener("click", nextOrFinish);
-  byId("btn-dashboard").addEventListener("click", function(){ window.location.href = "dashboard.html?quiz=" + encodeURIComponent(quizId); });
+  byId("btn-dashboard").addEventListener("click", openDashboard);
   byId("btn-retry").addEventListener("click", function(){ retryAction(); });
 
   if (isTelegram) {
     tg.MainButton.onClick(function(){
       if (screen === "intro") startQuiz();
       else if (screen === "quiz") nextOrFinish();
-      else if (screen === "result") window.location.href = "dashboard.html?quiz=" + encodeURIComponent(quizId);
+      else if (screen === "result") openDashboard();
     });
     tg.BackButton.onClick(function(){
       if (screen === "quiz") goPrev();
@@ -476,6 +476,7 @@
 
   function loadQuiz(){
     retryAction = loadQuiz;
+    byId("btn-retry").textContent = "আবার চেষ্টা করুন";
     show("loading");
     byId("loading-message").textContent = "কুইজ তৈরি/লোড হচ্ছে...";
     lastApiError = null;
@@ -633,8 +634,24 @@
       .catch(function(err){
         submitting = false;
         console.error(err);
+        if (err.status === 400 && /already been submitted|immutable/i.test(err.message || "")) {
+          retryAction = openDashboard;
+          byId("btn-retry").textContent = "লিডারবোর্ড দেখুন";
+          showError("এই কুইজের উত্তর আগে জমা হয়েছে। জমা দেওয়া উত্তর ও স্কোর পরিবর্তন করা যাবে না। আগের স্কোর দেখতে লিডারবোর্ড খুলুন।");
+          return;
+        }
+        retryAction = finishQuiz;
+        byId("btn-retry").textContent = "আবার চেষ্টা করুন";
+        if (err.status === 401) {
+          showError("স্কোর জমা দিতে Telegram-এর কুইজ বাটন থেকে Mini App খুলুন।");
+          return;
+        }
         showError("উত্তর জমা করা যায়নি। একটু পরে আবার চেষ্টা করুন।");
       });
+  }
+
+  function openDashboard(){
+    window.location.href = "dashboard.html?quiz=" + encodeURIComponent(quizId);
   }
 
   function renderResult(result){
