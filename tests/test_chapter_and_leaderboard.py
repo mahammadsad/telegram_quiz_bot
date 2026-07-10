@@ -29,7 +29,7 @@ def test_chapter_selector_never_crosses_subject_catalogues():
     assert select_chapter("science", date(2026, 7, 10), []) != "প্রাচীন ভারত"
 
 
-def test_quiz_leaderboard_sorts_score_then_completion_and_deduplicates(monkeypatch):
+def test_quiz_leaderboard_uses_latest_attempt_then_sorts_score(monkeypatch):
     submissions = [
         {"user_id": "u2", "score": 8, "total": 10, "answered": 10, "completed_at": "2026-07-10T10:02:00Z", "users": {"telegram_id": 2, "first_name": "দুই"}},
         {"user_id": "u1", "score": 10, "total": 10, "answered": 10, "completed_at": "2026-07-10T10:03:00Z", "users": {"telegram_id": 1, "first_name": "এক"}},
@@ -38,9 +38,26 @@ def test_quiz_leaderboard_sorts_score_then_completion_and_deduplicates(monkeypat
     ]
     monkeypatch.setattr(stats_repo.submissions_repo, "list_for_quiz", lambda quiz_id, limit: submissions)
     board = stats_repo.quiz_leaderboard("20260710-history")
-    assert [row["telegram_user_id"] for row in board["rows"]] == [1, 3, 2]
+    assert [row["telegram_user_id"] for row in board["rows"]] == [1, 2, 3]
     assert [row["rank"] for row in board["rows"]] == [1, 2, 3]
+    assert [row["attempts_count"] for row in board["rows"]] == [1, 1, 2]
+    assert board["rows"][2]["score"] == 7
     assert board["participants"] == 3
+
+
+def test_quiz_leaderboard_replaces_displayed_score_with_latest_even_when_lower(monkeypatch):
+    submissions = [
+        {"user_id": "u1", "score": 10, "total": 10, "answered": 10, "completed_at": "2026-07-10T10:00:00Z", "users": {"telegram_id": 1}},
+        {"user_id": "u2", "score": 8, "total": 10, "answered": 10, "completed_at": "2026-07-10T10:01:00Z", "users": {"telegram_id": 2}},
+        {"user_id": "u1", "score": 6, "total": 10, "answered": 10, "completed_at": "2026-07-10T10:02:00Z", "users": {"telegram_id": 1}},
+    ]
+    monkeypatch.setattr(stats_repo.submissions_repo, "list_for_quiz", lambda quiz_id, limit: submissions)
+
+    board = stats_repo.quiz_leaderboard("20260710-history")
+
+    assert [row["telegram_user_id"] for row in board["rows"]] == [2, 1]
+    assert board["rows"][1]["score"] == 6
+    assert board["rows"][1]["attempts_count"] == 2
 
 
 def test_quiz_leaderboard_limit_does_not_change_participant_count(monkeypatch):

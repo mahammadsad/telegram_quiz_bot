@@ -31,7 +31,7 @@ Production-oriented Bengali Telegram Mini App quiz system. Every day it schedule
 4. The Gemini provider pool makes one normal generation request, strictly validates all 10 questions, and permits one structured repair request only for malformed JSON.
 5. Questions and `polls` delivery rows are stored, a public answer-free fallback is exported, and the run becomes `generated`.
 6. Telegram receives `sendMessage` with the subject's numeric `message_thread_id`. Only a successful response can mark the run `posted` and store message metadata.
-7. The Mini App loads a read-only public payload. FastAPI verifies Telegram `initData`, writes/upserts the user and answered `user_attempts`, stores one immutable `quiz_submissions` row, and calculates score/rank from server-side answers.
+7. The Mini App loads a read-only public payload. FastAPI verifies Telegram `initData`, writes/upserts the user, stores every intentional attempt in `quiz_submissions`, and calculates the current score, personal best, and latest-attempt rank from server-side answers. A client-generated `attemptId` makes HTTP retries idempotent without blocking intentional retakes.
 
 The public GET endpoint never invokes Gemini. New quiz IDs are always subject-scoped; historical `YYYYMMDD` IDs remain readable when a DB record or public static file exists.
 
@@ -82,7 +82,7 @@ python bot.py --mode preflight
 
 In GitHub Actions, choose `Run workflow` and `mode=preflight` to validate
 required secret presence, forum-routing structure, Supabase connectivity, and
-migration `002` tables without generating or posting anything.
+migration `003` columns without generating or posting anything.
 
 Because quiz buttons use the named path
 `https://t.me/<TELEGRAM_BOT_USERNAME>/<MINIAPP_SHORT_NAME>?startapp=...`, update
@@ -95,7 +95,10 @@ both the quiz `GET` and submission `POST` requests.
 
 ## Database and local API
 
-For a new database run `database/schema.sql`. For an existing installation run only `database/migrations/002_subject_quiz_runs.sql` in the Supabase SQL Editor; it is additive and idempotent.
+For a new database run `database/schema.sql`. For an existing installation run
+`database/migrations/002_subject_quiz_runs.sql` and then
+`database/migrations/003_repeat_quiz_attempts.sql` in the Supabase SQL Editor.
+The migrations preserve existing submissions and are safe to rerun.
 
 ```bash
 python -m venv .venv
@@ -108,14 +111,14 @@ pytest -q
 Submission JSON:
 
 ```json
-{"initData":"<Telegram WebApp initData>","answers":[0,2,1,null,3,0,1,2,3,0]}
+{"initData":"<Telegram WebApp initData>","attemptId":"<new UUID for each intentional retake>","answers":[0,2,1,null,3,0,1,2,3,0]}
 ```
 
 Endpoints:
 
 - `GET /api/quiz/{quiz_id}` — questions/options only; read-only.
-- `POST /api/quiz/{quiz_id}/submit` — authenticated immutable submission and answer review.
-- `GET /api/quiz/{quiz_id}/leaderboard?limit=20` — isolated score board ordered by score descending, completion time ascending.
+- `POST /api/quiz/{quiz_id}/submit` — authenticated repeatable submission, current result, personal best, and answer review.
+- `GET /api/quiz/{quiz_id}/leaderboard?limit=20` — one row per user using their latest completed attempt, ordered by latest score descending and completion time ascending.
 - `GET /api/leaderboard` — backward-compatible global dashboard.
 - `GET /api/health` — safe configuration booleans; it consumes no Gemini quota.
 

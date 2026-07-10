@@ -357,6 +357,7 @@
       </div>
     </div>
     <div class="actions">
+      <button class="btn btn-secondary" id="btn-retake">আবার পরীক্ষা দিন</button>
       <button class="btn btn-primary" id="btn-dashboard">ড্যাশবোর্ড দেখুন</button>
     </div>
     <div class="review-list" id="review-list"></div>
@@ -396,6 +397,7 @@
   var screen = "loading";
   var lastApiError = null;
   var submitting = false;
+  var attemptId = "";
   var retryAction = loadQuiz;
 
   var screens = {
@@ -409,6 +411,7 @@
   byId("btn-start").addEventListener("click", startQuiz);
   byId("btn-prev").addEventListener("click", goPrev);
   byId("btn-next").addEventListener("click", nextOrFinish);
+  byId("btn-retake").addEventListener("click", startQuiz);
   byId("btn-dashboard").addEventListener("click", openDashboard);
   byId("btn-retry").addEventListener("click", function(){ retryAction(); });
 
@@ -536,6 +539,7 @@
   }
 
   function startQuiz(){
+    attemptId = newAttemptId();
     answers = quiz.qs.map(function(){ return null; });
     current = 0;
     totalSeconds = Math.max(300, quiz.qs.length * 60);
@@ -621,7 +625,8 @@
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
         initData: isTelegram ? tg.initData : "",
-        answers: answers
+        answers: answers,
+        attemptId: attemptId
       })
     })
       .then(function(resp){
@@ -634,12 +639,6 @@
       .catch(function(err){
         submitting = false;
         console.error(err);
-        if (err.status === 400 && /already been submitted|immutable/i.test(err.message || "")) {
-          retryAction = openDashboard;
-          byId("btn-retry").textContent = "লিডারবোর্ড দেখুন";
-          showError("এই কুইজের উত্তর আগে জমা হয়েছে। জমা দেওয়া উত্তর ও স্কোর পরিবর্তন করা যাবে না। আগের স্কোর দেখতে লিডারবোর্ড খুলুন।");
-          return;
-        }
         retryAction = finishQuiz;
         byId("btn-retry").textContent = "আবার চেষ্টা করুন";
         if (err.status === 401) {
@@ -654,12 +653,21 @@
     window.location.href = "dashboard.html?quiz=" + encodeURIComponent(quizId);
   }
 
+  function newAttemptId(){
+    if (window.crypto && typeof window.crypto.randomUUID === "function") return window.crypto.randomUUID();
+    return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+  }
+
   function renderResult(result){
     var pct = result.total ? Math.round(result.score / result.total * 100) : 0;
     byId("score-ring").style.setProperty("--score-deg", (pct * 3.6) + "deg");
     byId("score-text").textContent = bn(result.score) + "/" + bn(result.total);
     byId("result-title").textContent = resultTitle(pct);
-    byId("result-subtitle").textContent = "স্কোর সংরক্ষণ হয়েছে। Rank: " + bn(result.rank || "-") + " / " + bn(result.participants || 0) + "। নিচে প্রশ্নভিত্তিক রিভিউ দেখুন।";
+    byId("result-subtitle").textContent =
+      "চেষ্টা " + bn(result.attempt_number || 1) + ": " + bn(result.score) + "/" + bn(result.total) +
+      "। আপনার সেরা স্কোর " + bn(result.best_score === undefined ? result.score : result.best_score) +
+      "/" + bn(result.total) + "; Rank: " + bn(result.rank || "-") + " / " +
+      bn(result.participants || 0) + "। ড্যাশবোর্ডে সর্বশেষ চেষ্টার স্কোর দেখাবে। আবার পরীক্ষা দিতে পারেন।";
 
     var list = byId("review-list");
     list.innerHTML = "";

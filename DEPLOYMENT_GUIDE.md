@@ -2,16 +2,22 @@
 
 ## 1. Apply the Supabase migration
 
-Existing projects: open Supabase SQL Editor and run `database/migrations/002_subject_quiz_runs.sql`. New projects can run `database/schema.sql`. Both are safe to rerun and preserve existing `questions`, `polls`, `users`, and `user_attempts`.
+Existing projects: open Supabase SQL Editor and run
+`database/migrations/002_subject_quiz_runs.sql`, followed by
+`database/migrations/003_repeat_quiz_attempts.sql`. New projects can run
+`database/schema.sql`. They are safe to rerun and preserve existing questions,
+polls, users, attempts, and scores.
 
 The migration adds:
 
 - `quiz_runs`: date-subject lifecycle, checksum, provider/model, safe error, and Telegram response metadata; unique `(quiz_date, subject_key)`.
 - `chapter_history`: deterministic chapter history; unique `(subject_key, selected_for)`.
-- `quiz_submissions`: one immutable completion per `(quiz_id, user_id)`, including the 10-position answer array.
+- `quiz_submissions`: complete history of intentional retakes, including every 10-position answer array; `client_attempt_id` prevents a network retry from creating another attempt.
 - recovery, chapter, leaderboard, and `polls(run_slot)` indexes.
 
-`user_attempts` already has unique `(user_id, poll_id)`. Answered questions create raw attempt rows; `null` positions remain `null` in `quiz_submissions.answers` and do not invent attempt choices.
+`user_attempts` retains its canonical one-answer-per-Telegram-poll constraint.
+Complete Mini App retake history lives in `quiz_submissions`; `null` positions
+remain `null` and do not invent choices.
 
 ## 2. GitHub secrets and variables
 
@@ -54,7 +60,8 @@ mode=preflight
 
 Run `mode=preflight` first. It performs no Gemini request and posts no Telegram
 message; it exits nonzero when required runtime configuration is incomplete or
-the migration `002` tables are unavailable through Supabase.
+the required migration tables/columns (through migration `003`) are unavailable
+through Supabase.
 
 ## 3. Render environment
 
@@ -120,12 +127,14 @@ deployment. Secrets must remain server-side environment values.
 4. In `quiz_runs`, confirm `20260710-history`-style ID, `question_count=10`, checksum, `status=posted`, and the returned numeric chat/thread/message IDs.
 5. Confirm the Telegram message is inside the ইতিহাস thread and opens `startapp=<date>-history`.
 6. In the Mini App, confirm exactly 10 questions render and the loading/retry states work.
-7. Submit `{initData, answers}`. Confirm the authenticated Telegram user in `users`, one `user_attempts` row for every non-null answer, and one `quiz_submissions` row.
-8. Open `/api/quiz/<quiz-id>/leaderboard`; verify only that quiz's users appear once, ordered by score then completion time.
-9. Fetch `/api/quiz/<quiz-id>` and the matching `quizzes/*.json`; verify there are no correct indexes or explanations.
-10. Temporarily replace only `GEMINI_API_KEY_PRIMARY` with an invalid value and run a new due test subject. Confirm safe logs show primary key failure followed by `provider=secondary` success. Never paste either key into logs or commands captured by history.
-11. Restore the real primary key, run another new subject/date, and confirm primary succeeds without calling secondary.
-12. Search logs for the exact known secret values using the hosting provider's private log search. There must be no matches; rotate a credential immediately if one is found.
+7. Submit `{initData, attemptId, answers}`. Confirm the authenticated Telegram user in `users` and a new `quiz_submissions` row.
+8. Retake with a new `attemptId`; confirm a second row is stored and the result reports `attempt_number` and `best_score`.
+9. Retry the same request with the same `attemptId`; confirm it returns the same result without adding a row.
+10. Open `/api/quiz/<quiz-id>/leaderboard`; verify each user appears once with their latest score and `attempts_count`.
+11. Fetch `/api/quiz/<quiz-id>` and the matching `quizzes/*.json`; verify there are no correct indexes or explanations.
+12. Temporarily replace only `GEMINI_API_KEY_PRIMARY` with an invalid value and run a new due test subject. Confirm safe logs show primary key failure followed by `provider=secondary` success. Never paste either key into logs or commands captured by history.
+13. Restore the real primary key, run another new subject/date, and confirm primary succeeds without calling secondary.
+14. Search logs for the exact known secret values using the hosting provider's private log search. There must be no matches; rotate a credential immediately if one is found.
 
 ## 5. Provider-project checks
 
@@ -133,6 +142,11 @@ In Google AI Studio/Cloud Console, verify each environment value belongs to its 
 
 ## 6. Submission and recovery checks
 
-An identical second submit returns the existing result and writes no duplicate attempts. A different answer array after completion returns `400` by the documented immutable policy. Production browser-supplied user IDs are ignored; only verified Telegram `initData` is trusted.
+Every new intentional retake uses a new `attemptId` and creates a submission.
+An identical HTTP retry reuses its `attemptId`, returns the stored result, and
+does not create a duplicate. The dashboard displays the user's latest score and
+attempt count; a new completion replaces the displayed score without deleting
+history. Production browser-supplied user IDs are ignored; only verified
+Telegram `initData` is trusted.
 
 For a posting-failure drill, block Telegram temporarily, run a subject, restore Telegram, and use `--force-post`. Confirm no new Gemini generation log appears. At 20:30 IST, recovery skips `posted` and future subjects, reuses `generated`/`posting_failed` packs, and returns nonzero only if retryable failures remain unresolved.

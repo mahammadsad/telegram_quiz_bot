@@ -25,7 +25,7 @@ from models.attempt import Attempt
 from models.poll import Poll
 from models.question import Question
 from models.user import User
-from storage import attempts_repo, polls_repo, questions_repo, stats_repo, submissions_repo, users_repo
+from storage import attempts_repo, polls_repo, questions_repo, submissions_repo, users_repo
 from services.question_validation import QUESTION_COUNT, validate_questions
 from utils.quiz_ids import parse_quiz_id
 from utils.hashing import normalize_text, question_hash
@@ -148,7 +148,12 @@ def public_quiz_payload(pack: dict) -> dict:
     }
 
 
-def submit_quiz_attempts(quiz_id: str, telegram_user: dict, answers: list[int | None]) -> dict:
+def submit_quiz_attempts(
+    quiz_id: str,
+    telegram_user: dict,
+    answers: list[int | None],
+    attempt_id: str = "",
+) -> dict:
     pack = get_quiz_pack(quiz_id)
     if not pack:
         raise ValueError("Quiz pack was not found.")
@@ -157,11 +162,15 @@ def submit_quiz_attempts(quiz_id: str, telegram_user: dict, answers: list[int | 
     if len(items) != QUESTION_COUNT:
         raise ValueError("Quiz data is incomplete; submission is disabled.")
     _validate_answers(answers)
+    clean_attempt_id = attempt_id.strip()
     user_row = users_repo.upsert_user(User.from_telegram(telegram_user))
-    existing_submission = submissions_repo.get(quiz_id, user_row["id"])
-    if existing_submission:
+    existing_submission = (
+        submissions_repo.get_by_attempt_id(quiz_id, user_row["id"], clean_attempt_id)
+        if clean_attempt_id else None
+    )
+    if existing_submission is not None:
         if existing_submission.get("answers") != answers:
-            raise ValueError("This quiz has already been submitted; completed attempts are immutable.")
+            raise ValueError("This attempt identifier was already used with different answers.")
         return _submission_result(quiz_id, items, answers, existing_submission)
 
     for index, selected_index in enumerate(answers):
@@ -193,14 +202,17 @@ def submit_quiz_attempts(quiz_id: str, telegram_user: dict, answers: list[int | 
         "score": score,
         "total": QUESTION_COUNT,
         "answered": sum(value is not None for value in answers),
+        "client_attempt_id": clean_attempt_id or None,
     }
     try:
         submission = submissions_repo.insert(submission_payload)
     except Exception:
-        # A simultaneous identical browser retry may win the unique
-        # (quiz_id,user_id) race after the initial lookup.
-        submission = submissions_repo.get(quiz_id, user_row["id"])
-        if not submission or submission.get("answers") != answers:
+        # A simultaneous HTTP retry may win the unique client-attempt race.
+        submission = (
+            submissions_repo.get_by_attempt_id(quiz_id, user_row["id"], clean_attempt_id)
+            if clean_attempt_id else None
+        )
+        if submission is None or submission.get("answers") != answers:
             raise
     return _submission_result(quiz_id, items, answers, submission)
 
@@ -226,17 +238,40 @@ def _submission_result(quiz_id: str, items: list[dict], answers: list[int | None
             "isCorrect": selected_index is not None and selected_index == correct_index,
             "explanation": question.get("detailed_explanation") or question.get("explanation") or "",
         })
-    board = stats_repo.quiz_leaderboard(quiz_id, limit=100)
     same = submissions_repo.list_for_quiz(quiz_id, limit=10000)
-    same.sort(key=lambda row: (-int(row.get("score") or 0), str(row.get("completed_at") or ""), str(row.get("user_id") or "")))
-    user_rank = next((i + 1 for i, row in enumerate(same) if row.get("user_id") == submission.get("user_id")), None)
+    best_by_user: dict[str, dict] = {}
+    latest_by_user: dict[str, dict] = {}
+    attempt_number = 0
+    submission_user_id = str(submission.get("user_id") or "")
+    for row in same:
+        user_id = str(row.get("user_id") or "")
+        if not user_id:
+            continue
+        if user_id == submission_user_id:
+            attempt_number += 1
+        latest = latest_by_user.get(user_id)
+        if latest is None or str(row.get("completed_at") or "") > str(latest.get("completed_at") or ""):
+            latest_by_user[user_id] = row
+        best = best_by_user.get(user_id)
+        candidate_key = (-int(row.get("score") or 0), str(row.get("completed_at") or ""))
+        best_key = (-int(best.get("score") or 0), str(best.get("completed_at") or "")) if best else None
+        if best is None or candidate_key < best_key:
+            best_by_user[user_id] = row
+    ranked = sorted(
+        latest_by_user.values(),
+        key=lambda row: (-int(row.get("score") or 0), str(row.get("completed_at") or ""), str(row.get("user_id") or "")),
+    )
+    user_rank = next((index + 1 for index, row in enumerate(ranked) if str(row.get("user_id") or "") == submission_user_id), None)
+    best_submission = best_by_user.get(submission_user_id) or submission
     return {
         "quiz_id": quiz_id,
         "score": int(submission.get("score") or 0),
+        "best_score": int(best_submission.get("score") or 0),
         "total": QUESTION_COUNT,
         "answered": int(submission.get("answered") or sum(value is not None for value in answers)),
+        "attempt_number": attempt_number,
         "rank": user_rank,
-        "participants": board["participants"],
+        "participants": len(latest_by_user),
         "review": review,
     }
 

@@ -30,8 +30,12 @@ def pack():
 def setup_common(monkeypatch, existing=None):
     monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: pack())
     monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
-    monkeypatch.setattr(service.submissions_repo, "get", lambda quiz_id, user_id: existing)
-    monkeypatch.setattr(service.stats_repo, "quiz_leaderboard", lambda quiz_id, limit: {"participants": 1, "rows": []})
+    monkeypatch.setattr(
+        service.submissions_repo,
+        "get_by_attempt_id",
+        lambda quiz_id, user_id, attempt_id: existing
+        if existing and existing.get("client_attempt_id") == attempt_id else None,
+    )
 
 
 def test_score_calculated_server_side_and_attempts_stored(monkeypatch):
@@ -58,15 +62,31 @@ def test_unanswered_are_preserved_and_not_inserted_as_attempts(monkeypatch):
     assert result["answered"] == 0 and inserted_attempts == []
 
 
-def test_identical_duplicate_is_idempotent_and_conflict_is_immutable(monkeypatch):
-    existing = {"user_id": "user-1", "answers": [0] * 10, "score": 3, "total": 10, "answered": 10, "completed_at": "now"}
+def test_http_retry_is_idempotent_but_new_attempt_can_improve_score(monkeypatch):
+    existing = {"user_id": "user-1", "answers": [0] * 10, "score": 3, "total": 10, "answered": 10, "client_attempt_id": "attempt-1", "completed_at": "2026-07-10T10:00:00Z"}
     setup_common(monkeypatch, existing=existing)
     monkeypatch.setattr(service.submissions_repo, "list_for_quiz", lambda *args, **kwargs: [existing])
     monkeypatch.setattr(service.attempts_repo, "insert_attempt", lambda _: pytest.fail("duplicate wrote an attempt"))
-    result = service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [0] * 10)
+    result = service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [0] * 10, attempt_id="attempt-1")
     assert result["score"] == 3
-    with pytest.raises(ValueError, match="immutable"):
-        service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [1] * 10)
+    assert result["attempt_number"] == 1
+
+    improved_answers = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1]
+    improved = {"user_id": "user-1", "answers": improved_answers, "score": 10, "total": 10, "answered": 10, "client_attempt_id": "attempt-2", "completed_at": "2026-07-10T10:05:00Z"}
+    monkeypatch.setattr(service.attempts_repo, "insert_attempt", lambda _: None)
+    monkeypatch.setattr(service.submissions_repo, "insert", lambda payload: improved)
+    monkeypatch.setattr(service.submissions_repo, "list_for_quiz", lambda *args, **kwargs: [existing, improved])
+    result = service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, improved_answers, attempt_id="attempt-2")
+    assert result["score"] == 10
+    assert result["best_score"] == 10
+    assert result["attempt_number"] == 2
+
+
+def test_same_attempt_id_rejects_changed_retry_payload(monkeypatch):
+    existing = {"user_id": "user-1", "answers": [0] * 10, "score": 3, "client_attempt_id": "attempt-1"}
+    setup_common(monkeypatch, existing=existing)
+    with pytest.raises(ValueError, match="identifier"):
+        service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [1] * 10, attempt_id="attempt-1")
 
 
 @pytest.mark.parametrize("answers", [[0] * 9, [0] * 11, [4] * 10, [True] * 10])

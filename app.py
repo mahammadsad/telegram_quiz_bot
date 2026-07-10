@@ -47,6 +47,7 @@ class SubmitQuizRequest(BaseModel):
     init_data: str = Field(default="", alias="initData")
     answers: list[int | None]
     dev_user: dict | None = Field(default=None, alias="devUser")
+    attempt_id: str = Field(default="", alias="attemptId", max_length=80)
 
     model_config = {"populate_by_name": True}
 
@@ -135,6 +136,7 @@ def submit_quiz(quiz_id: str, payload: SubmitQuizRequest) -> dict:
             quiz_id=clean_quiz_id,
             telegram_user=telegram_user,
             answers=payload.answers,
+            attempt_id=payload.attempt_id,
         )
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc

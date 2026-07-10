@@ -401,12 +401,12 @@ def preflight() -> dict[str, bool]:
 
 
 def validate_database_schema() -> None:
-    """Read-only verification that migration 002 is available through PostgREST."""
+    """Read-only verification that all required migrations are available."""
     client = get_client()
     for table, identifier in (
         ("quiz_runs", "quiz_id"),
         ("chapter_history", "id"),
-        ("quiz_submissions", "id"),
+        ("quiz_submissions", "id,client_attempt_id"),
     ):
         client.table(table).select(identifier).limit(1).execute()
 
@@ -475,7 +475,7 @@ def main() -> None:
                 validate_database_schema()
             except Exception:
                 raise RuntimeError(
-                    "Configuration preflight failed: database migration 002 is unavailable."
+                    "Configuration preflight failed: required database migrations through 003 are unavailable."
                 ) from None
     except Exception as exc:
         LOG.error("RUN_FAILED category=%s", getattr(exc, "category", type(exc).__name__))

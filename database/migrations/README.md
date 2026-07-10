@@ -4,7 +4,7 @@
 subject-run lifecycle, chapter history, initial quiz submissions, and
 recovery/leaderboard indexes. `003_repeat_quiz_attempts.sql` preserves those
 rows while allowing unlimited intentional retakes with an idempotent client
-attempt ID and best-score leaderboard indexes. `database/schema.sql` always reflects the full
+attempt ID and latest-attempt leaderboard indexes. `database/schema.sql` always reflects the full
 **current** schema (apply that one for a brand-new Supabase project); this
 folder is the incremental history for projects that are already running.
 

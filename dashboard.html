@@ -192,7 +192,7 @@
   <section class="surface">
     <div class="summary">
       <div class="metric"><b>শিক্ষার্থী</b><span class="num" id="m-students">০</span></div>
-      <div class="metric"><b>মোট উত্তর</b><span class="num" id="m-attempts">০</span></div>
+      <div class="metric"><b>মোট চেষ্টা</b><span class="num" id="m-attempts">০</span></div>
       <div class="metric"><b>সেরা স্কোর</b><span class="num" id="m-best">০</span></div>
     </div>
 
@@ -264,7 +264,7 @@
   }
 
   function render(rows){
-    var totalAttempts = rows.reduce(function(sum,row){ return sum + (quizId ? (row.answered || 0) : (row.total_attempts || 0)); }, 0);
+    var totalAttempts = rows.reduce(function(sum,row){ return sum + (quizId ? (row.attempts_count || 0) : (row.total_attempts || 0)); }, 0);
     var best = rows.length ? (quizId ? rows[0].score : rows[0].correct_attempts) || 0 : 0;
     setMetrics(rows.length, totalAttempts, best);
 
@@ -293,7 +293,9 @@
       rankEl.textContent = bn(rank);
       item.querySelector(".avatar").textContent = initial(name);
       item.querySelector(".name").textContent = name;
-      item.querySelector(".meta").textContent = quizId ? bn(row.answered || 0) + "/১০টি উত্তর" : bn(row.total_attempts || 0) + "টি উত্তর জমা";
+      item.querySelector(".meta").textContent = quizId
+        ? bn(row.attempts_count || 1) + "টি চেষ্টা · সর্বশেষ ফলে " + bn(row.answered || 0) + "/১০টি উত্তর"
+        : bn(row.total_attempts || 0) + "টি উত্তর জমা";
       item.querySelector(".score strong").textContent = bn(score || 0);
       item.querySelector(".score span").textContent = bn(accuracy) + "% সঠিক";
       list.appendChild(item);

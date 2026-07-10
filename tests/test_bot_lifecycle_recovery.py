@@ -169,5 +169,5 @@ def test_database_preflight_checks_all_migration_tables(monkeypatch):
     assert checked == [
         ("quiz_runs", "quiz_id"),
         ("chapter_history", "id"),
-        ("quiz_submissions", "id"),
+        ("quiz_submissions", "id,client_attempt_id"),
     ]

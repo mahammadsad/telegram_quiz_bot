@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
+from collections import Counter, defaultdict
 
 from config.settings import SESSION_TYPE
 from database.client import get_client
@@ -80,16 +80,24 @@ def leaderboard(limit: int = 20, session_type: str = SESSION_TYPE) -> list[dict]
 
 
 def quiz_leaderboard(quiz_id: str, limit: int = 20) -> dict:
-    """Return a leaderboard isolated to one completed quiz."""
+    """Return each participant's latest score and intentional attempt count."""
     submissions = submissions_repo.list_for_quiz(quiz_id, limit=10000)
-    submissions.sort(key=lambda row: (-int(row.get("score") or 0), str(row.get("completed_at") or ""), str(row.get("user_id") or "")))
-    rows = []
-    seen: set[str] = set()
+    attempt_counts = Counter(str(row.get("user_id") or "") for row in submissions if row.get("user_id"))
+    latest_by_user: dict[str, dict] = {}
     for submission in submissions:
         user_id = str(submission.get("user_id") or "")
-        if not user_id or user_id in seen:
+        if not user_id:
             continue
-        seen.add(user_id)
+        current = latest_by_user.get(user_id)
+        if current is None or str(submission.get("completed_at") or "") > str(current.get("completed_at") or ""):
+            latest_by_user[user_id] = submission
+    latest = sorted(
+        latest_by_user.values(),
+        key=lambda row: (-int(row.get("score") or 0), str(row.get("completed_at") or ""), str(row.get("user_id") or "")),
+    )
+    rows = []
+    for submission in latest:
+        user_id = str(submission.get("user_id") or "")
         user = submission.get("users") or {}
         if isinstance(user, list):
             user = user[0] if user else {}
@@ -104,6 +112,7 @@ def quiz_leaderboard(quiz_id: str, limit: int = 20) -> dict:
             "score": int(submission.get("score") or 0),
             "total": int(submission.get("total") or 10),
             "answered": int(submission.get("answered") or 0),
+            "attempts_count": attempt_counts[user_id],
             "completed_at": submission.get("completed_at"),
         })
     return {"quiz_id": quiz_id, "participants": len(rows), "rows": rows[:limit]}
