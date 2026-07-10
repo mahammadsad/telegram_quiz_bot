@@ -53,7 +53,8 @@ mode=preflight
 ```
 
 Run `mode=preflight` first. It performs no Gemini request and posts no Telegram
-message; it exits nonzero when required runtime configuration is incomplete.
+message; it exits nonzero when required runtime configuration is incomplete or
+the migration `002` tables are unavailable through Supabase.
 
 ## 3. Render environment
 

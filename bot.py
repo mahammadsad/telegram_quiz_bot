@@ -14,6 +14,7 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+from database.client import get_client
 from config.settings import (
     APP_TIMEZONE,
     MINIAPP_SHORT_NAME,
@@ -399,6 +400,17 @@ def preflight() -> dict[str, bool]:
     return values
 
 
+def validate_database_schema() -> None:
+    """Read-only verification that migration 002 is available through PostgREST."""
+    client = get_client()
+    for table, identifier in (
+        ("quiz_runs", "quiz_id"),
+        ("chapter_history", "id"),
+        ("quiz_submissions", "id"),
+    ):
+        client.table(table).select(identifier).limit(1).execute()
+
+
 def build_miniapp_url(quiz_id: str) -> str:
     return f"https://t.me/{TELEGRAM_BOT_USERNAME}/{MINIAPP_SHORT_NAME}?startapp={quiz_id}"
 
@@ -459,6 +471,12 @@ def main() -> None:
                 or not telegram_runtime_configured
             ):
                 raise RuntimeError("Configuration preflight failed.")
+            try:
+                validate_database_schema()
+            except Exception:
+                raise RuntimeError(
+                    "Configuration preflight failed: database migration 002 is unavailable."
+                ) from None
     except Exception as exc:
         LOG.error("RUN_FAILED category=%s", getattr(exc, "category", type(exc).__name__))
         sys.exit(1)

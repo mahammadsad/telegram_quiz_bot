@@ -146,3 +146,28 @@ def test_recovery_only_processes_due_and_skips_posted(monkeypatch):
     assert summary["bengali"] == "already_posted"
     assert summary["english"] == "not_due"
     assert not unresolved
+
+
+def test_database_preflight_checks_all_migration_tables(monkeypatch):
+    checked = []
+
+    class Query:
+        def select(self, identifier):
+            checked.append((self.table, identifier))
+            return self
+        def limit(self, _value): return self
+        def execute(self): return object()
+
+    class Client:
+        def table(self, table):
+            query = Query()
+            query.table = table
+            return query
+
+    monkeypatch.setattr(bot, "get_client", lambda: Client())
+    bot.validate_database_schema()
+    assert checked == [
+        ("quiz_runs", "quiz_id"),
+        ("chapter_history", "id"),
+        ("quiz_submissions", "id"),
+    ]
