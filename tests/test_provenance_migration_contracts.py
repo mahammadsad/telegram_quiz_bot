@@ -43,3 +43,15 @@ def test_new_rpcs_are_server_only_and_security_invoker():
     assert "submit_question_report(uuid, text, uuid, text, text, text, integer)" in sql
     assert "from public, anon, authenticated" in sql
     assert "to service_role" in sql
+
+
+def test_every_new_foreign_key_has_a_covering_index():
+    sql = MIGRATION.read_text(encoding="utf-8").lower()
+    for index in (
+        "idx_question_verifications_source_document",
+        "idx_question_generation_audits_subject",
+        "idx_question_generation_audits_micro_topic",
+        "idx_question_reports_quiz",
+        "idx_question_reports_attempt",
+    ):
+        assert f"create index if not exists {index}" in sql

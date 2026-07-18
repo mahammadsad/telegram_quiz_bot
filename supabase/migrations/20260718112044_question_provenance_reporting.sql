@@ -267,6 +267,8 @@ create table if not exists public.question_verifications (
 
 create index if not exists idx_question_verifications_question
     on public.question_verifications (question_id, checked_at desc);
+create index if not exists idx_question_verifications_source_document
+    on public.question_verifications (source_document_id);
 
 create table if not exists public.question_generation_audits (
     id uuid primary key default extensions.gen_random_uuid(),
@@ -290,6 +292,10 @@ create index if not exists idx_question_generation_audits_quiz
 create index if not exists idx_question_generation_audits_rejected
     on public.question_generation_audits (created_at desc)
     where verdict = 'rejected';
+create index if not exists idx_question_generation_audits_subject
+    on public.question_generation_audits (subject_key);
+create index if not exists idx_question_generation_audits_micro_topic
+    on public.question_generation_audits (micro_topic_id);
 
 create table if not exists public.question_reports (
     id uuid primary key default extensions.gen_random_uuid(),
@@ -315,6 +321,10 @@ create index if not exists idx_question_reports_moderation
     on public.question_reports (question_id, status, created_at desc);
 create index if not exists idx_question_reports_user_rate
     on public.question_reports (user_id, created_at desc);
+create index if not exists idx_question_reports_quiz
+    on public.question_reports (quiz_id);
+create index if not exists idx_question_reports_attempt
+    on public.question_reports (attempt_id);
 
 create or replace function public.get_grounding_bundle(
     p_subject_key text,
