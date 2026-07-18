@@ -135,8 +135,8 @@ and requires no `YOUTUBE_API_KEY`.
 For a new project, apply `database/schema.sql`, then every file in
 `supabase/migrations/` in timestamp order. Existing projects apply only the
 newer unapplied files. The current stack ends with
-`20260718172756_learning_resources_fk_indexes.sql`. The application never
-applies DDL during startup.
+`20260718174844_learning_resources_legacy_pack_compatibility.sql`. The
+application never applies DDL during startup.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,
 and locks tables, legacy views, and private functions to the service role. Full

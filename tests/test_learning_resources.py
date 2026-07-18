@@ -7,6 +7,7 @@ from services import learning_resources_service as service
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase" / "migrations" / "20260718171256_learning_resources_foundation.sql"
 INDEX_MIGRATION = ROOT / "supabase" / "migrations" / "20260718172756_learning_resources_fk_indexes.sql"
+LEGACY_MIGRATION = ROOT / "supabase" / "migrations" / "20260718174844_learning_resources_legacy_pack_compatibility.sql"
 INDEX = ROOT / "index.html"
 
 
@@ -56,6 +57,18 @@ def test_source_mirror_uses_only_operator_approved_metadata():
     assert "not sd.review_required" in cache
     assert "sd.fact_summary" not in cache
     assert "operator-approved reference used to ground this quiz topic" in cache
+
+
+def test_legacy_pack_compatibility_is_exact_and_does_not_rewrite_questions():
+    sql = LEGACY_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "legacy_c.subject_key = q.subject" in sql
+    assert "legacy_c.name = q.topic" in sql
+    assert "right(legacy_mt.key, 5) = ':core'" in sql
+    assert "coalesce(q.micro_topic_id, keyed_mt.id, legacy_mt.id)" in sql
+    assert "update public.questions" not in sql
+    assert "insert into public.questions" not in sql
+    assert "from public, anon, authenticated" in sql
+    assert "to service_role" in sql
 
 
 def test_public_projection_groups_topics_and_hides_moderation_metadata(monkeypatch):
