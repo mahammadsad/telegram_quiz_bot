@@ -24,44 +24,63 @@ def test_chapter_selector_uses_due_spaced_review_after_coverage():
     assert select_chapter("history", today, history) == "আধুনিক ভারত"
 
 
+def test_chapter_selector_keeps_latest_date_for_duplicate_history_rows():
+    today = date(2026, 7, 10)
+    history = [
+        {"chapter": "প্রাচীন ভারত", "selected_for": (today - timedelta(days=1)).isoformat()},
+        {"chapter": "আধুনিক ভারত", "selected_for": (today - timedelta(days=2)).isoformat()},
+        {"chapter": "মধ্যযুগীয় ভারত", "selected_for": (today - timedelta(days=21)).isoformat()},
+        {"chapter": "বাংলার ইতিহাস", "selected_for": (today - timedelta(days=41)).isoformat()},
+        {"chapter": "ভারতের জাতীয় আন্দোলন", "selected_for": (today - timedelta(days=51)).isoformat()},
+        {"chapter": "গভর্নর জেনারেল ও ভাইসরয়", "selected_for": (today - timedelta(days=61)).isoformat()},
+        {"chapter": "সামাজিক-ধর্মীয় সংস্কার আন্দোলন", "selected_for": (today - timedelta(days=71)).isoformat()},
+        {"chapter": "আধুনিক ভারত", "selected_for": (today - timedelta(days=200)).isoformat()},
+    ]
+    assert select_chapter("history", today, history) == "সামাজিক-ধর্মীয় সংস্কার আন্দোলন"
+    assert select_chapter("history", today, history) != "আধুনিক ভারত"
+
+
 def test_chapter_selector_never_crosses_subject_catalogues():
     assert select_chapter("science", date(2026, 7, 10), []) == "পদার্থবিদ্যা"
     assert select_chapter("science", date(2026, 7, 10), []) != "প্রাচীন ভারত"
 
 
-def test_quiz_leaderboard_uses_latest_attempt_then_sorts_score(monkeypatch):
-    submissions = [
-        {"user_id": "u2", "score": 8, "total": 10, "answered": 10, "completed_at": "2026-07-10T10:02:00Z", "users": {"telegram_id": 2, "first_name": "দুই"}},
-        {"user_id": "u1", "score": 10, "total": 10, "answered": 10, "completed_at": "2026-07-10T10:03:00Z", "users": {"telegram_id": 1, "first_name": "এক"}},
-        {"user_id": "u3", "score": 8, "total": 10, "answered": 9, "completed_at": "2026-07-10T10:01:00Z", "users": {"telegram_id": 3, "username": "three"}},
-        {"user_id": "u3", "score": 7, "total": 10, "answered": 8, "completed_at": "2026-07-10T10:04:00Z", "users": {"telegram_id": 3}},
-    ]
-    monkeypatch.setattr(stats_repo.submissions_repo, "list_for_quiz", lambda quiz_id, limit: submissions)
-    board = stats_repo.quiz_leaderboard("20260710-history")
-    assert [row["telegram_user_id"] for row in board["rows"]] == [1, 2, 3]
-    assert [row["rank"] for row in board["rows"]] == [1, 2, 3]
-    assert [row["attempts_count"] for row in board["rows"]] == [1, 1, 2]
-    assert board["rows"][2]["score"] == 7
-    assert board["participants"] == 3
+def test_quiz_leaderboard_uses_paginated_database_rpc(monkeypatch):
+    calls = []
+
+    class Result:
+        data = {"quiz_id": "20260710-history", "participants": 25000, "rows": []}
+
+    class Client:
+        def rpc(self, name, params):
+            calls.append((name, params))
+            return self
+
+        def execute(self):
+            return Result()
+
+    monkeypatch.setattr(stats_repo, "get_client", Client)
+    board = stats_repo.quiz_leaderboard("20260710-history", limit=50, offset=10000)
+    assert board["participants"] == 25000
+    assert calls == [("get_quiz_leaderboard_page", {
+        "p_quiz_id": "20260710-history", "p_limit": 50, "p_offset": 10000,
+    })]
 
 
-def test_quiz_leaderboard_replaces_displayed_score_with_latest_even_when_lower(monkeypatch):
-    submissions = [
-        {"user_id": "u1", "score": 10, "total": 10, "answered": 10, "completed_at": "2026-07-10T10:00:00Z", "users": {"telegram_id": 1}},
-        {"user_id": "u2", "score": 8, "total": 10, "answered": 10, "completed_at": "2026-07-10T10:01:00Z", "users": {"telegram_id": 2}},
-        {"user_id": "u1", "score": 6, "total": 10, "answered": 10, "completed_at": "2026-07-10T10:02:00Z", "users": {"telegram_id": 1}},
-    ]
-    monkeypatch.setattr(stats_repo.submissions_repo, "list_for_quiz", lambda quiz_id, limit: submissions)
+def test_global_leaderboard_uses_database_rpc_without_row_cap(monkeypatch):
+    calls = []
 
-    board = stats_repo.quiz_leaderboard("20260710-history")
+    class Result:
+        data = {"participants": 15000, "rows": []}
 
-    assert [row["telegram_user_id"] for row in board["rows"]] == [2, 1]
-    assert board["rows"][1]["score"] == 6
-    assert board["rows"][1]["attempts_count"] == 2
+    class Client:
+        def rpc(self, name, params):
+            calls.append((name, params))
+            return self
 
+        def execute(self):
+            return Result()
 
-def test_quiz_leaderboard_limit_does_not_change_participant_count(monkeypatch):
-    submissions = [{"user_id": str(i), "score": i, "total": 10, "answered": 10, "completed_at": str(i), "users": {"telegram_id": i}} for i in range(5)]
-    monkeypatch.setattr(stats_repo.submissions_repo, "list_for_quiz", lambda quiz_id, limit: submissions)
-    board = stats_repo.quiz_leaderboard("20260710-history", limit=2)
-    assert len(board["rows"]) == 2 and board["participants"] == 5
+    monkeypatch.setattr(stats_repo, "get_client", Client)
+    assert stats_repo.leaderboard(limit=20, offset=12000)["participants"] == 15000
+    assert calls[0][0] == "get_global_leaderboard_page"

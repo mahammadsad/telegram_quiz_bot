@@ -14,7 +14,7 @@ def valid_questions():
             "detailed_explanation": "এটি সঠিক উত্তরের বিস্তারিত বাংলা ব্যাখ্যা। পরীক্ষার জন্য তথ্যটি গুরুত্বপূর্ণ।",
             "subject_key": "history",
             "chapter": "আধুনিক ভারত",
-            "difficulty": "medium",
+            "difficulty": "easy" if index < 3 else "medium" if index < 8 else "hard",
         }
         for index in range(10)
     ]

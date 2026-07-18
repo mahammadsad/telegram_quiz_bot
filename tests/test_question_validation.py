@@ -66,3 +66,19 @@ def test_content_checksum_is_stable_and_content_sensitive(valid_questions):
     changed[0]["correct_index"] = 3
     assert first == second
     assert first != content_checksum("20260710-history", "history", "আধুনিক ভারত", changed)
+
+
+def test_required_difficulty_distribution_is_enforced(valid_questions):
+    rows = deepcopy(valid_questions)
+    for row in rows:
+        row["difficulty"] = "medium"
+    with pytest.raises(QuizValidationError, match="difficulty distribution"):
+        validate_questions(rows, "history", "আধুনিক ভারত")
+
+
+def test_correct_answer_positions_must_be_balanced(valid_questions):
+    rows = deepcopy(valid_questions)
+    for row in rows:
+        row["correct_index"] = 0
+    with pytest.raises(QuizValidationError, match="balanced"):
+        validate_questions(rows, "history", "আধুনিক ভারত")

@@ -1,11 +1,8 @@
 from __future__ import annotations
 
-from copy import deepcopy
-
 import pytest
 
 from services import quiz_pack_service as service
-
 
 QUIZ_ID = "20260710-history"
 
@@ -14,7 +11,7 @@ def pack():
     items = []
     for index in range(10):
         items.append({
-            "poll": {"id": f"poll-{index}"},
+            "mapping": {"id": f"mapping-{index}", "question_order": index + 1},
             "question": {
                 "id": f"question-{index}",
                 "question_text": f"বাংলা প্রশ্ন {index}",
@@ -27,66 +24,47 @@ def pack():
     return {"quiz_id": QUIZ_ID, "items": items, "meta": {"quiz_id": QUIZ_ID}}
 
 
-def setup_common(monkeypatch, existing=None):
+def setup_common(monkeypatch):
     monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: pack())
     monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
+
+
+def test_submission_delegates_one_atomic_rpc(monkeypatch):
+    setup_common(monkeypatch)
+    calls = []
+    expected = {
+        "quiz_id": QUIZ_ID, "score": 3, "best_score": 3, "total": 10,
+        "answered": 10, "attempt_number": 1, "rank": 1, "participants": 1,
+        "review": [],
+    }
     monkeypatch.setattr(
-        service.submissions_repo,
-        "get_by_attempt_id",
-        lambda quiz_id, user_id, attempt_id: existing
-        if existing and existing.get("client_attempt_id") == attempt_id else None,
+        service.quiz_attempts_repo,
+        "submit_atomic",
+        lambda **kwargs: calls.append(kwargs) or expected,
     )
+    result = service.submit_quiz_attempts(
+        QUIZ_ID, {"id": 123}, [0] * 10, attempt_id="attempt-1"
+    )
+    assert result == expected
+    assert calls == [{
+        "quiz_id": QUIZ_ID,
+        "user_id": "user-1",
+        "client_attempt_id": "attempt-1",
+        "answers": [0] * 10,
+    }]
 
 
-def test_score_calculated_server_side_and_attempts_stored(monkeypatch):
+def test_http_retry_keeps_same_client_attempt_id(monkeypatch):
     setup_common(monkeypatch)
-    inserted_attempts = []
-    monkeypatch.setattr(service.attempts_repo, "insert_attempt", inserted_attempts.append)
-    submission = {"user_id": "user-1", "answers": [0] * 10, "score": 3, "total": 10, "answered": 10, "completed_at": "2026-07-10T00:00:00Z"}
-    monkeypatch.setattr(service.submissions_repo, "insert", lambda payload: {**payload, "user_id": "user-1", "completed_at": submission["completed_at"]})
-    monkeypatch.setattr(service.submissions_repo, "list_for_quiz", lambda *args, **kwargs: [submission])
-    result = service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [0] * 10)
-    assert result["score"] == 3
-    assert result["answered"] == 10
-    assert len(inserted_attempts) == 10
-
-
-def test_unanswered_are_preserved_and_not_inserted_as_attempts(monkeypatch):
-    setup_common(monkeypatch)
-    inserted_attempts = []
-    monkeypatch.setattr(service.attempts_repo, "insert_attempt", inserted_attempts.append)
-    answers = [None] * 10
-    monkeypatch.setattr(service.submissions_repo, "insert", lambda payload: {**payload, "user_id": "user-1", "completed_at": "now"})
-    monkeypatch.setattr(service.submissions_repo, "list_for_quiz", lambda *args, **kwargs: [{"user_id": "user-1", "score": 0, "completed_at": "now"}])
-    result = service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, answers)
-    assert result["answered"] == 0 and inserted_attempts == []
-
-
-def test_http_retry_is_idempotent_but_new_attempt_can_improve_score(monkeypatch):
-    existing = {"user_id": "user-1", "answers": [0] * 10, "score": 3, "total": 10, "answered": 10, "client_attempt_id": "attempt-1", "completed_at": "2026-07-10T10:00:00Z"}
-    setup_common(monkeypatch, existing=existing)
-    monkeypatch.setattr(service.submissions_repo, "list_for_quiz", lambda *args, **kwargs: [existing])
-    monkeypatch.setattr(service.attempts_repo, "insert_attempt", lambda _: pytest.fail("duplicate wrote an attempt"))
-    result = service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [0] * 10, attempt_id="attempt-1")
-    assert result["score"] == 3
-    assert result["attempt_number"] == 1
-
-    improved_answers = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1]
-    improved = {"user_id": "user-1", "answers": improved_answers, "score": 10, "total": 10, "answered": 10, "client_attempt_id": "attempt-2", "completed_at": "2026-07-10T10:05:00Z"}
-    monkeypatch.setattr(service.attempts_repo, "insert_attempt", lambda _: None)
-    monkeypatch.setattr(service.submissions_repo, "insert", lambda payload: improved)
-    monkeypatch.setattr(service.submissions_repo, "list_for_quiz", lambda *args, **kwargs: [existing, improved])
-    result = service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, improved_answers, attempt_id="attempt-2")
-    assert result["score"] == 10
-    assert result["best_score"] == 10
-    assert result["attempt_number"] == 2
-
-
-def test_same_attempt_id_rejects_changed_retry_payload(monkeypatch):
-    existing = {"user_id": "user-1", "answers": [0] * 10, "score": 3, "client_attempt_id": "attempt-1"}
-    setup_common(monkeypatch, existing=existing)
-    with pytest.raises(ValueError, match="identifier"):
-        service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [1] * 10, attempt_id="attempt-1")
+    ids = []
+    monkeypatch.setattr(
+        service.quiz_attempts_repo,
+        "submit_atomic",
+        lambda **kwargs: ids.append(kwargs["client_attempt_id"]) or {"score": 1},
+    )
+    service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [0] * 10, "retry-safe-id")
+    service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [0] * 10, "retry-safe-id")
+    assert ids == ["retry-safe-id", "retry-safe-id"]
 
 
 @pytest.mark.parametrize("answers", [[0] * 9, [0] * 11, [4] * 10, [True] * 10])
@@ -94,3 +72,40 @@ def test_service_defensively_validates_answers(monkeypatch, answers):
     setup_common(monkeypatch)
     with pytest.raises(ValueError):
         service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, answers)
+
+
+def test_public_quiz_payload_declares_submission_capability():
+    payload = service.public_quiz_payload(pack())
+    assert payload["capabilities"] == {"submission": True, "source": "api"}
+    assert "correct" not in str(payload).lower()
+
+
+def test_pack_save_uses_one_atomic_rpc_and_preserves_fuzzy_reuse(monkeypatch, valid_questions):
+    saved_pack = pack()
+    reads = iter([None, saved_pack])
+    monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: next(reads))
+    monkeypatch.setattr(
+        service.questions_repo,
+        "find_similar",
+        lambda *args, **kwargs: [{"id": "existing-question"}],
+    )
+    monkeypatch.setattr(
+        service.questions_repo,
+        "get_by_id",
+        lambda question_id: {
+            "id": question_id,
+            "subject": "history",
+            "topic": "আধুনিক ভারত",
+        },
+    )
+    calls = []
+    monkeypatch.setattr(service.quiz_packs_repo, "save_atomic", lambda **kwargs: calls.append(kwargs) or {})
+    result = service.record_quiz_pack(
+        QUIZ_ID,
+        valid_questions,
+        {"subject_key": "history", "chapter": "আধুনিক ভারত"},
+        worker_id="worker-1",
+    )
+    assert result is saved_pack
+    assert len(calls) == 1 and len(calls[0]["questions"]) == 10
+    assert all(row["reuse_question_id"] == "existing-question" for row in calls[0]["questions"])

@@ -4,13 +4,17 @@ from __future__ import annotations
 
 import json
 import sys
+import uuid
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from config.settings import require_env  # noqa: E402
+from config.subjects import get_subject  # noqa: E402
 from services import quiz_pack_service  # noqa: E402
+from storage import quiz_runs_repo  # noqa: E402
 from utils.quiz_ids import parse_quiz_id  # noqa: E402
 
 QUIZZES_DIR = ROOT / "quizzes"
@@ -41,6 +45,7 @@ def main() -> None:
         if not subject_key:
             print(f"Skipped {path.name}: add an explicit canonical meta.subject_key; display names are not used for routing/classification.")
             continue
+        subject = get_subject(subject_key, require_quiz_enabled=True)
         if any("a" not in item and "correct_index" not in item for item in questions):
             print(f"Skipped {path.name}: public fallback intentionally contains no server-side answer key.")
             continue
@@ -58,7 +63,32 @@ def main() -> None:
                 "subject_key": subject_key,
                 "chapter": chapter,
             })
-        quiz_pack_service.record_quiz_pack(quiz_id, normalized, {**meta, "subject_key": subject_key}, chat_id=0)
+        try:
+            quiz_date = parse_quiz_id(quiz_id)[0]
+        except ValueError:
+            quiz_date = date.fromisoformat(str(meta.get("date") or date.today().isoformat())[:10])
+        worker_id = f"legacy-import:{uuid.uuid4()}"
+        existing_run = quiz_runs_repo.get(quiz_id)
+        if not existing_run:
+            quiz_runs_repo.upsert({
+                "quiz_id": quiz_id,
+                "quiz_date": quiz_date.isoformat(),
+                "subject_key": subject_key,
+                "subject_display_name": subject.telegram_display_name,
+                "chapter": chapter,
+                "status": "generating",
+            })
+        claimed = quiz_runs_repo.claim(quiz_id, worker_id, "generating", allow_completed=True)
+        if not claimed:
+            print(f"Skipped {path.name}: quiz run is leased by another worker.")
+            continue
+        quiz_pack_service.record_quiz_pack(
+            quiz_id,
+            normalized,
+            {**meta, "subject_key": subject_key},
+            chat_id=0,
+            worker_id=worker_id,
+        )
         imported += 1
         print(f"Imported {path.name} as quiz pack {quiz_id}.")
 

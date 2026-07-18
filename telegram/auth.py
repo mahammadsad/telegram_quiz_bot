@@ -30,8 +30,14 @@ def verify_init_data(init_data: str, bot_token: str, max_age_seconds: int) -> di
     if not hmac.compare_digest(computed_hash, received_hash):
         raise TelegramAuthError("Telegram initData signature is invalid.")
 
-    auth_date = int(pairs.get("auth_date", "0") or "0")
-    if max_age_seconds > 0 and time.time() - auth_date > max_age_seconds:
+    try:
+        auth_date = int(pairs.get("auth_date", "0") or "0")
+    except ValueError as exc:
+        raise TelegramAuthError("Telegram initData auth_date is invalid.") from exc
+    now = time.time()
+    if auth_date <= 0 or auth_date > now + 30:
+        raise TelegramAuthError("Telegram initData auth_date is invalid.")
+    if max_age_seconds > 0 and now - auth_date > max_age_seconds:
         raise TelegramAuthError("Telegram initData is too old.")
 
     user_raw = pairs.get("user")
@@ -41,6 +47,9 @@ def verify_init_data(init_data: str, bot_token: str, max_age_seconds: int) -> di
         user = json.loads(user_raw)
     except json.JSONDecodeError as exc:
         raise TelegramAuthError("Telegram user payload is invalid JSON.") from exc
-    if "id" not in user:
+    if not isinstance(user, dict):
+        raise TelegramAuthError("Telegram user payload must be an object.")
+    user_id = user.get("id")
+    if isinstance(user_id, bool) or not isinstance(user_id, int) or user_id <= 0:
         raise TelegramAuthError("Telegram user payload has no id.")
     return user
