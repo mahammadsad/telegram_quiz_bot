@@ -80,20 +80,15 @@ def test_public_quiz_payload_declares_submission_capability():
     assert "correct" not in str(payload).lower()
 
 
-def test_pack_save_uses_one_atomic_rpc_and_preserves_fuzzy_reuse(monkeypatch, valid_questions):
+def test_pack_save_uses_one_atomic_rpc_and_preserves_exact_reuse(monkeypatch, valid_questions):
     saved_pack = pack()
     reads = iter([None, saved_pack])
     monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: next(reads))
     monkeypatch.setattr(
         service.questions_repo,
-        "find_similar",
-        lambda *args, **kwargs: [{"id": "existing-question"}],
-    )
-    monkeypatch.setattr(
-        service.questions_repo,
-        "get_by_id",
-        lambda question_id: {
-            "id": question_id,
+        "get_by_hash_any_bot",
+        lambda *args, **kwargs: {
+            "id": "existing-question",
             "subject": "history",
             "topic": "আধুনিক ভারত",
         },
@@ -109,3 +104,54 @@ def test_pack_save_uses_one_atomic_rpc_and_preserves_fuzzy_reuse(monkeypatch, va
     assert result is saved_pack
     assert len(calls) == 1 and len(calls[0]["questions"]) == 10
     assert all(row["reuse_question_id"] == "existing-question" for row in calls[0]["questions"])
+
+
+def test_near_duplicate_is_rejected_instead_of_substituted(monkeypatch, valid_questions):
+    monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: None)
+    monkeypatch.setattr(service.questions_repo, "get_by_hash_any_bot", lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        service.questions_repo,
+        "find_similar",
+        lambda *args, **kwargs: [{"id": "different-question"}],
+    )
+    with pytest.raises(Exception, match="Near-duplicate"):
+        service.record_quiz_pack(
+            QUIZ_ID,
+            valid_questions,
+            {"subject_key": "history", "chapter": "আধুনিক ভারত"},
+            worker_id="worker-1",
+        )
+
+
+def test_question_report_uses_authenticated_user_and_atomic_rpc(monkeypatch):
+    monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
+    calls = []
+    monkeypatch.setattr(
+        service.question_reports_repo,
+        "submit",
+        lambda **kwargs: calls.append(kwargs) or {"status": "accepted"},
+    )
+    result = service.submit_question_report(
+        question_id="22222222-2222-4222-8222-222222222222",
+        quiz_id=QUIZ_ID,
+        telegram_user={"id": 123},
+        client_attempt_id="attempt-1",
+        reason="wrong_answer",
+        details="Answer key conflicts with the source.",
+    )
+    assert result == {"status": "accepted"}
+    assert calls[0]["user_id"] == "user-1"
+    assert calls[0]["client_attempt_id"] == "attempt-1"
+
+
+def test_question_report_rejects_unknown_reason(monkeypatch):
+    monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: pytest.fail("user write"))
+    with pytest.raises(ValueError, match="Invalid report reason"):
+        service.submit_question_report(
+            question_id="22222222-2222-4222-8222-222222222222",
+            quiz_id=QUIZ_ID,
+            telegram_user={"id": 123},
+            client_attempt_id="attempt-1",
+            reason="invented",
+            details="",
+        )

@@ -25,7 +25,7 @@ alter table public.users add column if not exists public_display_name text;
 alter table public.users add column if not exists username_visible boolean not null default false;
 
 create table if not exists public.quiz_questions (
-    id uuid primary key default gen_random_uuid(),
+    id uuid primary key default extensions.gen_random_uuid(),
     quiz_id text not null references public.quiz_runs(quiz_id) on delete cascade,
     question_id uuid not null references public.questions(id) on delete restrict,
     question_order smallint not null check (question_order between 1 and 10),
@@ -59,7 +59,7 @@ where ranked.question_order between 1 and 10
 on conflict do nothing;
 
 create table if not exists public.quiz_attempts (
-    id uuid primary key default gen_random_uuid(),
+    id uuid primary key default extensions.gen_random_uuid(),
     quiz_id text not null,
     user_id uuid not null references public.users(id) on delete cascade,
     client_attempt_id text not null,
@@ -90,7 +90,7 @@ create index if not exists idx_personal_review_schedule_question_id
     on public.personal_review_schedule (question_id);
 
 create table if not exists public.quiz_attempt_answers (
-    id uuid primary key default gen_random_uuid(),
+    id uuid primary key default extensions.gen_random_uuid(),
     attempt_id uuid not null references public.quiz_attempts(id) on delete cascade,
     question_id uuid not null references public.questions(id) on delete restrict,
     question_order smallint not null check (question_order between 1 and 10),
@@ -122,7 +122,7 @@ select
     s.user_id,
     coalesce(nullif(s.client_attempt_id, ''), 'legacy:' || s.id::text),
     s.answers,
-    encode(digest(s.answers::text, 'sha256'), 'hex'),
+    encode(extensions.digest(s.answers::text, 'sha256'), 'hex'),
     s.score,
     s.total,
     s.answered,
@@ -451,7 +451,7 @@ begin
 
     v_client_attempt_id := coalesce(
         nullif(btrim(p_client_attempt_id), ''),
-        'server:' || gen_random_uuid()::text
+        'server:' || extensions.gen_random_uuid()::text
     );
 
     -- Serialize both the idempotency check and attempt-number allocation.
@@ -492,7 +492,7 @@ begin
         attempt_number, is_completed
     ) values (
         p_quiz_id, p_user_id, v_client_attempt_id, p_answers,
-        encode(digest(p_answers::text, 'sha256'), 'hex'),
+        encode(extensions.digest(p_answers::text, 'sha256'), 'hex'),
         v_score, 10, v_answered,
         case when p_duration_seconds is null then null
              else now() - make_interval(secs => p_duration_seconds) end,

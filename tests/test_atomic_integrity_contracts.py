@@ -27,6 +27,22 @@ def test_migration_contains_transactional_pack_and_attempt_functions():
     assert submission.index("pg_advisory_xact_lock") < submission.index("select id, answers into")
 
 
+def test_pgcrypto_calls_are_schema_qualified_for_empty_rpc_search_path():
+    foundation = MIGRATION.read_text(encoding="utf-8").lower()
+    provenance = (
+        ROOT / "supabase" / "migrations" / "20260718112044_question_provenance_reporting.sql"
+    ).read_text(encoding="utf-8").lower()
+    assert "extensions.digest(" in foundation
+    assert "extensions.digest(" in provenance
+    assert "extensions.gen_random_uuid()" in foundation
+    assert "extensions.gen_random_uuid()" in provenance
+    assert "encode(digest(" not in foundation
+    assert "encode(digest(" not in provenance
+    assert "default gen_random_uuid()" not in foundation
+    assert "default gen_random_uuid()" not in provenance
+    assert "'server:' || gen_random_uuid()" not in foundation
+
+
 def test_migration_locks_rpc_and_tables_to_server_role():
     sql = MIGRATION.read_text(encoding="utf-8").lower()
     assert "enable row level security" in sql

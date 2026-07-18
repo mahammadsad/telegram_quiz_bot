@@ -59,6 +59,27 @@ def test_cross_subject_and_chapter_rejected(valid_questions):
         validate_questions(rows, "history", "আধুনিক ভারত")
 
 
+def test_wrong_micro_topic_and_unapproved_source_are_rejected(valid_questions):
+    rows = deepcopy(valid_questions)
+    rows[0]["micro_topic_key"] = "history:another-topic"
+    with pytest.raises(QuizValidationError, match="another micro-topic"):
+        validate_questions(rows, "history", "আধুনিক ভারত")
+    with pytest.raises(QuizValidationError, match="outside the grounding bundle"):
+        validate_questions(
+            valid_questions,
+            "history",
+            "আধুনিক ভারত",
+            allowed_source_ids={"33333333-3333-4333-8333-333333333333"},
+        )
+
+
+def test_unverified_question_is_rejected(valid_questions):
+    rows = deepcopy(valid_questions)
+    rows[0]["verification_status"] = "generated"
+    with pytest.raises(QuizValidationError, match="not independently verified"):
+        validate_questions(rows, "history", "আধুনিক ভারত")
+
+
 def test_content_checksum_is_stable_and_content_sensitive(valid_questions):
     first = content_checksum("20260710-history", "history", "আধুনিক ভারত", valid_questions)
     second = content_checksum("20260710-history", "history", "আধুনিক ভারত", deepcopy(valid_questions))

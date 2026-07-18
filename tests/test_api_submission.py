@@ -97,3 +97,43 @@ def test_static_fallback_is_explicitly_read_only(monkeypatch):
     })
     body = client.get(f"/api/quiz/{QUIZ_ID}").json()
     assert body["capabilities"] == {"submission": False, "source": "static_fallback"}
+
+
+def test_authenticated_question_report_contract(monkeypatch):
+    question_id = "22222222-2222-4222-8222-222222222222"
+    monkeypatch.setattr(api_module, "verify_init_data", lambda *args: {"id": 123, "first_name": "Test"})
+    captured = {}
+    monkeypatch.setattr(
+        api_module.quiz_pack_service,
+        "submit_question_report",
+        lambda **kwargs: captured.update(kwargs) or {"status": "accepted"},
+    )
+    response = client.post(
+        f"/api/questions/{question_id}/report",
+        json={
+            "initData": "signed",
+            "quizId": QUIZ_ID,
+            "attemptId": "attempt-1",
+            "reason": "ambiguous",
+            "details": "দুটি বিকল্প একই অর্থ বহন করে।",
+        },
+    )
+    assert response.status_code == 200
+    assert captured["question_id"] == question_id
+    assert captured["telegram_user"]["id"] == 123
+    assert captured["reason"] == "ambiguous"
+
+
+def test_question_report_rejects_bad_reason_and_unverified_user(monkeypatch):
+    question_id = "22222222-2222-4222-8222-222222222222"
+    invalid = client.post(
+        f"/api/questions/{question_id}/report",
+        json={"quizId": QUIZ_ID, "attemptId": "a", "reason": "abuse"},
+    )
+    assert invalid.status_code == 422
+    monkeypatch.setattr(api_module, "DEV_ALLOW_UNVERIFIED_TELEGRAM", False)
+    unauthenticated = client.post(
+        f"/api/questions/{question_id}/report",
+        json={"quizId": QUIZ_ID, "attemptId": "a", "reason": "outdated"},
+    )
+    assert unauthenticated.status_code == 401

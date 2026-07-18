@@ -135,6 +135,9 @@ jobs:
           MINIAPP_SHORT_NAME: ${{ vars.MINIAPP_SHORT_NAME }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          QUESTION_VERIFICATION_MIN_CONFIDENCE: ${{ vars.QUESTION_VERIFICATION_MIN_CONFIDENCE || '0.85' }}
+          CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS: ${{ vars.CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS || '45' }}
+          QUESTION_REPORT_THRESHOLD: ${{ vars.QUESTION_REPORT_THRESHOLD || '3' }}
         run: python bot.py --mode preflight
 
       - name: Run exactly one mapped job

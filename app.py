@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import os
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -31,8 +32,8 @@ from telegram.routing import ForumRouter, ForumRoutingError
 from utils.quiz_ids import parse_quiz_id
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title="WB Exam Quiz Pack API", version="3.0.0")
-MIGRATION_VERSION = "20260718015054"
+app = FastAPI(title="WB Exam Quiz Pack API", version="3.1.0")
+MIGRATION_VERSION = "20260718112044"
 
 if CORS_ALLOWED_ORIGINS:
     app.add_middleware(
@@ -61,6 +62,25 @@ class SubmitQuizRequest(BaseModel):
             if answer is not None and (isinstance(answer, bool) or not isinstance(answer, int) or answer not in range(4)):
                 raise ValueError("answers may contain only 0, 1, 2, 3, or null")
         return value
+
+
+class ReportQuestionRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    quiz_id: str = Field(alias="quizId", min_length=1, max_length=80)
+    attempt_id: str = Field(alias="attemptId", min_length=1, max_length=80)
+    reason: str
+    details: str = Field(default="", max_length=1000)
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        clean = value.strip()
+        if clean not in quiz_pack_service.REPORT_REASONS:
+            raise ValueError("invalid report reason")
+        return clean
 
 
 @app.get("/")
@@ -149,6 +169,29 @@ def submit_quiz(quiz_id: str, payload: SubmitQuizRequest) -> dict:
         raise HTTPException(status_code=503, detail="স্কোর জমা করা যায়নি। একটু পরে আবার চেষ্টা করুন।") from exc
 
 
+@app.post("/api/questions/{question_id}/report")
+def report_question(question_id: uuid.UUID, payload: ReportQuestionRequest) -> dict:
+    try:
+        clean_quiz_id = _clean_quiz_id(payload.quiz_id)
+        telegram_user = _telegram_user_from_payload(payload)
+        return quiz_pack_service.submit_question_report(
+            question_id=str(question_id),
+            quiz_id=clean_quiz_id,
+            telegram_user=telegram_user,
+            client_attempt_id=payload.attempt_id,
+            reason=payload.reason,
+            details=payload.details,
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        message = str(exc)
+        status = 409 if "already reported" in message else 429 if "rate limit" in message else 400
+        raise HTTPException(status_code=status, detail=message) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="রিপোর্ট জমা করা যায়নি। একটু পরে আবার চেষ্টা করুন।") from exc
+
+
 @app.get("/api/quiz/{quiz_id}/leaderboard")
 def quiz_leaderboard(quiz_id: str, limit: int = 20, offset: int = 0) -> dict:
     clean_quiz_id = _clean_quiz_id(quiz_id)
@@ -176,7 +219,7 @@ def leaderboard(limit: int = 20, offset: int = 0) -> dict:
         return {"rows": [], "unavailable": True}
 
 
-def _telegram_user_from_payload(payload: SubmitQuizRequest) -> dict:
+def _telegram_user_from_payload(payload: SubmitQuizRequest | ReportQuestionRequest) -> dict:
     if payload.init_data:
         return verify_init_data(payload.init_data, TELEGRAM_BOT_TOKEN, TELEGRAM_INIT_DATA_MAX_AGE_SECONDS)
     if DEV_ALLOW_UNVERIFIED_TELEGRAM:

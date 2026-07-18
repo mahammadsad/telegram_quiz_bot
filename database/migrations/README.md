@@ -11,6 +11,7 @@ New migrations use the Supabase CLI timestamp convention and live in
 1. `database/schema.sql` for a brand-new project, or legacy migrations
    `001` through `003` for an existing project that has not run them.
 2. `supabase/migrations/20260718015054_atomic_quiz_integrity.sql`.
+3. `supabase/migrations/20260718112044_question_provenance_reporting.sql`.
 
 `database/schema.sql` is therefore the legacy bootstrap schema, not the final
 post-migration state. This avoids duplicating the transactional function bodies

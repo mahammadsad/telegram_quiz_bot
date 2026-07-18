@@ -5,10 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+import uuid
 from collections import Counter
 from typing import Any
 
-from config.settings import QUIZ_DIFFICULTY_DISTRIBUTION
+from config.settings import QUESTION_VERIFICATION_MIN_CONFIDENCE, QUIZ_DIFFICULTY_DISTRIBUTION
 from utils.hashing import normalize_text, question_hash
 
 QUESTION_COUNT = 10
@@ -26,6 +27,10 @@ def validate_questions(
     chapter: str,
     *,
     enforce_composition: bool = True,
+    micro_topic_id: str | None = None,
+    micro_topic_key: str | None = None,
+    allowed_source_ids: set[str] | None = None,
+    require_verification: bool = True,
 ) -> list[dict]:
     if not isinstance(raw_questions, list) or len(raw_questions) != QUESTION_COUNT:
         count = len(raw_questions) if isinstance(raw_questions, list) else 0
@@ -33,6 +38,8 @@ def validate_questions(
 
     clean: list[dict] = []
     seen_questions: set[str] = set()
+    expected_topic_id = _text(micro_topic_id)
+    expected_topic_key = _text(micro_topic_key)
     for number, raw in enumerate(raw_questions, start=1):
         if not isinstance(raw, dict):
             raise QuizValidationError(f"Question {number} must be an object.")
@@ -46,6 +53,9 @@ def validate_questions(
         difficulty = _text(raw.get("difficulty") or "medium").lower()
         raw_subject = _text(raw.get("subject_key") or raw.get("subject") or subject_key)
         raw_chapter = _text(raw.get("chapter") or chapter)
+        raw_micro_topic_id = _text(raw.get("micro_topic_id"))
+        raw_micro_topic_key = _text(raw.get("micro_topic_key"))
+        source_document_id = _text(raw.get("source_document_id"))
         correct = raw.get("correct_index", raw.get("a"))
 
         if not text or not _BENGALI_RE.search(text) and subject_key != "english":
@@ -68,8 +78,39 @@ def validate_questions(
             raise QuizValidationError(f"Question {number} belongs to another subject.")
         if raw_chapter != chapter:
             raise QuizValidationError(f"Question {number} belongs to another chapter.")
+        if not raw_micro_topic_id or not _is_uuid(raw_micro_topic_id):
+            raise QuizValidationError(f"Question {number} must contain a normalized micro-topic id.")
+        if not raw_micro_topic_key:
+            raise QuizValidationError(f"Question {number} must contain a reusable micro-topic key.")
+        if not expected_topic_id:
+            expected_topic_id = raw_micro_topic_id
+        if not expected_topic_key:
+            expected_topic_key = raw_micro_topic_key
+        if raw_micro_topic_id != expected_topic_id or raw_micro_topic_key != expected_topic_key:
+            raise QuizValidationError(f"Question {number} belongs to another micro-topic.")
+        if not source_document_id or not _is_uuid(source_document_id):
+            raise QuizValidationError(f"Question {number} must cite a verified source document.")
+        if allowed_source_ids is not None and source_document_id not in allowed_source_ids:
+            raise QuizValidationError(f"Question {number} cites a source outside the grounding bundle.")
         if difficulty not in _DIFFICULTIES:
             raise QuizValidationError(f"Question {number} has an invalid difficulty.")
+
+        verification_status = _text(raw.get("verification_status"))
+        verification_notes = _text(raw.get("verification_notes"))
+        verification_score = raw.get("verification_score")
+        verified_at = _text(raw.get("verified_at"))
+        if require_verification:
+            if verification_status != "verified":
+                raise QuizValidationError(f"Question {number} was not independently verified.")
+            if (
+                isinstance(verification_score, bool)
+                or not isinstance(verification_score, (int, float))
+                or not 0 <= float(verification_score) <= 1
+                or float(verification_score) < QUESTION_VERIFICATION_MIN_CONFIDENCE
+            ):
+                raise QuizValidationError(f"Question {number} has an invalid verification score.")
+            if not verification_notes or not verified_at:
+                raise QuizValidationError(f"Question {number} is missing verification evidence.")
 
         normalized_question = normalize_text(text)
         if not normalized_question or normalized_question in seen_questions:
@@ -84,8 +125,17 @@ def validate_questions(
             "detailed_explanation": detailed,
             "subject_key": subject_key,
             "chapter": chapter,
+            "micro_topic_id": raw_micro_topic_id,
+            "micro_topic_key": raw_micro_topic_key,
+            "source_document_id": source_document_id,
             "difficulty": difficulty,
             "question_id": _text(raw.get("question_id")) or question_hash(text),
+            "verification_status": verification_status or "generated",
+            "verification_score": float(verification_score) if isinstance(verification_score, (int, float)) and not isinstance(verification_score, bool) else None,
+            "verification_notes": verification_notes,
+            "verification_checks": raw.get("verification_checks") if isinstance(raw.get("verification_checks"), dict) else {},
+            "verified_at": verified_at or None,
+            "verification_model": _text(raw.get("verification_model")) or None,
         })
     if enforce_composition:
         _validate_quiz_composition(clean)
@@ -115,6 +165,8 @@ def content_checksum(quiz_id: str, subject_key: str, chapter: str, questions: li
                 "question": normalize_text(item.get("question", item.get("q", ""))),
                 "options": [normalize_text(value) for value in item.get("options", item.get("o", []))],
                 "correct_index": item.get("correct_index", item.get("a")),
+                "micro_topic_key": _text(item.get("micro_topic_key")),
+                "source_document_id": _text(item.get("source_document_id")),
             }
             for item in questions
         ],
@@ -132,9 +184,19 @@ def checksum_for_pack(pack: dict) -> str:
             "question": row.get("question_text"),
             "options": [row.get("option_a"), row.get("option_b"), row.get("option_c"), row.get("option_d")],
             "correct_index": "ABCD".find(str(row.get("correct_option") or "")),
+            "micro_topic_key": row.get("micro_topic_key"),
+            "source_document_id": row.get("source_document_id"),
         })
     return content_checksum(pack.get("quiz_id") or meta.get("quiz_id") or "", meta.get("subject_key") or meta.get("subject") or "", meta.get("chapter") or "", questions)
 
 
 def _text(value: Any) -> str:
     return "" if value is None else str(value).strip()
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+        return True
+    except (ValueError, AttributeError):
+        return False

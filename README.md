@@ -1,15 +1,17 @@
 # Telegram Subject Quiz Bot
 
-A Bengali Telegram Mini App for one daily 10-question quiz in each of 13
+A source-grounded Bengali Telegram Mini App for one daily 10-question quiz in each of 13
 competitive-exam subjects. FastAPI serves answer-free quiz payloads, validates
 Telegram Mini App authentication, submits attempts through transactional
 Supabase functions, and returns private review data and privacy-safe
-leaderboards.
+leaderboards. Every newly generated question cites an operator-verified fact
+bundle, belongs to a normalized micro-topic, and passes a separate source-only
+verification request before the atomic save can activate it.
 
-This branch is the integrity foundation for the larger learning-platform
-roadmap. Resource discovery, question reports, wrong-answer practice, mastery,
-personalized revision, bookmarks, and exam preferences are deliberately left
-for subsequent phases; the current quiz workflow remains deployable by itself.
+This stacked phase adds question provenance and authenticated report moderation
+to the integrity foundation. Resource discovery, wrong-answer practice,
+mastery, personalized revision, bookmarks, and exam preferences remain later
+phases.
 
 ## Architecture
 
@@ -17,7 +19,7 @@ for subsequent phases; the current quiz workflow remains deployable by itself.
 |---|---|
 | `bot.py` | Claims a date/subject run, selects a chapter, generates/validates a pack, posts once, and recovers missed work |
 | `app.py` | Public quiz reads and authenticated submission/leaderboard APIs |
-| `services/` | Chapter rotation, Gemini failover, validation, and quiz-pack rules |
+| `services/` | Chapter rotation, source grounding, independent verification, Gemini failover, validation, and quiz-pack rules |
 | `storage/` | Small Supabase repositories; atomic writes use RPCs |
 | `supabase/migrations/` | Current timestamped PostgreSQL migrations and security grants |
 | `index.html` | Telegram-theme-aware quiz UI with a clearly read-only static fallback |
@@ -37,20 +39,30 @@ use the service role against RLS-protected tables and explicitly granted RPCs.
    stale leases can be recovered.
 3. Chapter selection sorts history newest-first, avoids the immediately prior
    chapter, prefers unseen chapters, then uses the 3/7/14/30-day review windows.
-4. Gemini primary/fallback behavior is bounded and classified. Generated packs
+4. The bot loads approved facts for one normalized micro-topic. It fails closed
+   if the chapter has no current source bundle; current affairs additionally
+   require a recent, dated official/primary source.
+5. Gemini primary/fallback behavior is bounded and classified. Generated packs
    must contain exactly 3 easy, 5 medium, and 2 hard questions, with balanced
    correct-answer positions and strict subject/chapter ownership.
-5. One RPC saves all question rows and ten ordered mappings transactionally.
+6. A separate source-only verifier checks the answer, options, explanation,
+   ambiguity, currency, micro-topic, and difficulty. Any failed check or score
+   below the threshold rejects the whole pack.
+7. One RPC revalidates source/taxonomy ownership and saves all question rows,
+   verification evidence, and ten ordered mappings transactionally.
    The public fallback is exported without answers or explanations.
-6. Telegram is called only by the lease owner. Only a successful API response
+8. Telegram is called only by the lease owner. Only a successful API response
    marks the run posted. An ambiguous network outcome becomes
    `posting_unknown` and is never auto-reposted; an operator verifies Telegram
    before deciding whether to use the saved pack.
-7. A submission RPC validates ten mappings/answers, calculates the score on the
+9. A submission RPC validates ten mappings/answers, calculates the score on the
    server, writes the parent attempt and ten question-level rows atomically,
    and returns review, rank, personal best, and attempt number. Reusing a client
    `attemptId` is idempotent; a new ID is an intentional retake.
-8. Leaderboards aggregate and paginate in PostgreSQL. Public rows contain a
+10. Review cards show the verified source and accept signed, attempt-owned
+    question reports. Duplicate/rate-limited reports are rejected; credible
+    reports automatically quarantine a question for moderation.
+11. Leaderboards aggregate and paginate in PostgreSQL. Public rows contain a
    generated alias or opted-in display name, never a Telegram ID.
 
 Static JSON is an emergency read-only fallback. When the live API is
@@ -96,6 +108,9 @@ Optional server settings:
 - `GEMINI_MODEL_PRIMARY`, `GEMINI_MODEL_FALLBACK`, failover/backoff settings,
   and `GEMINI_FACTUAL_TEMPERATURE` (capped at `0.4`)
 - `QUIZ_CLAIM_TIMEOUT_MINUTES` (minimum 5; default 20)
+- `QUESTION_VERIFICATION_MIN_CONFIDENCE` (default `0.85`)
+- `CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS` (default/database maximum `45`)
+- `QUESTION_REPORT_THRESHOLD` (minimum `2`; default `3`)
 - `CORS_ALLOWED_ORIGINS`, `WRITE_STATIC_QUIZ_JSON`
 
 Development-only:
@@ -103,20 +118,31 @@ Development-only:
 - `DEV_ALLOW_UNVERIFIED_TELEGRAM=true` permits a local fake user. It must stay
   false in every public deployment.
 
-No new secret is introduced by the atomic migration. The planned learning
-resource phase may add a `YOUTUBE_API_KEY`; it is not used or required now.
+No new credential or paid search API is introduced by either migration. The
+planned learning-resource phase may add a `YOUTUBE_API_KEY`; it is not used or
+required now.
 
 ## Supabase setup
 
-For a new project, apply `database/schema.sql` and then
-`supabase/migrations/20260718015054_atomic_quiz_integrity.sql`. Existing
-projects that already have migrations 001–003 apply only the timestamped
-migration. The application never applies DDL during startup.
+For a new project, apply `database/schema.sql`, then
+`20260718015054_atomic_quiz_integrity.sql`, then
+`20260718112044_question_provenance_reporting.sql`. Existing projects apply
+the two timestamped migrations in that order. The application never applies
+DDL during startup.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,
 and locks tables, legacy views, and private functions to the service role. Full
 preflight, verification, security, backfill, and rollback notes are in
-`docs/MIGRATION_20260718.md`.
+`docs/MIGRATION_20260718.md` and
+`docs/MIGRATION_20260718_PROVENANCE.md`.
+
+Before enabling scheduled generation, import approved source facts for every
+due chapter:
+
+```bash
+python scripts/import_source_documents.py sources.json --dry-run
+python scripts/import_source_documents.py sources.json --approve
+```
 
 After applying, run Supabase security and performance advisors, then:
 
@@ -164,6 +190,7 @@ Useful endpoints:
 - `GET /api/health`
 - `GET /api/quiz/{quiz_id}`
 - `POST /api/quiz/{quiz_id}/submit`
+- `POST /api/questions/{question_id}/report`
 - `GET /api/quiz/{quiz_id}/leaderboard?limit=20&offset=0`
 - `GET /api/leaderboard?limit=20&offset=0`
 
@@ -226,8 +253,7 @@ Deployment and production drills are in `DEPLOYMENT_GUIDE.md`.
 
 ## Next platform phases
 
-The next PR should add question provenance/micro-topics and current-affairs
-source grounding plus question-report moderation. Later phases can build the
-resource library/YouTube discovery, approval and link checks, wrong-question
-practice, spaced review, preferences, mastery analytics, and personalized
-revision on top of the question-level attempt model introduced here.
+The next phase can build the resource library/YouTube discovery, approval and
+link checks, deterministic math/reasoning answer solvers, and moderation admin
+UI. Wrong-question practice, spaced review, preferences, mastery analytics,
+and personalized revision can follow on the question-level attempt model.

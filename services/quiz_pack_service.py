@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Any
 
 from config.settings import (
     BOT_TYPE,
     GEMINI_MODEL,
+    QUESTION_REPORT_THRESHOLD,
     QUIZ_PACK_SOURCE_PREFIX,
     SCHEDULER_MAX_REUSE_GAP_DAYS,
     SCHEDULER_MIN_REUSE_GAP_DAYS,
@@ -20,13 +21,32 @@ from errors import DatabaseIntegrityError
 from models.question import Question
 from models.user import User
 from services.question_validation import QUESTION_COUNT, content_checksum, validate_questions
-from storage import polls_repo, questions_repo, quiz_attempts_repo, quiz_packs_repo, users_repo
+from storage import (
+    polls_repo,
+    question_reports_repo,
+    questions_repo,
+    quiz_attempts_repo,
+    quiz_packs_repo,
+    source_documents_repo,
+    users_repo,
+)
 from utils.hashing import normalize_text, question_hash
 from utils.iso_week import iso_week_number
 from utils.quiz_ids import parse_quiz_id
 
 LOG = logging.getLogger("services.quiz_pack")
 OPTION_LETTERS = "ABCD"
+REPORT_REASONS = {
+    "wrong_answer",
+    "multiple_correct",
+    "ambiguous",
+    "incorrect_explanation",
+    "language_spelling",
+    "outdated",
+    "outside_syllabus",
+    "broken_source",
+    "other",
+}
 
 
 def quiz_source(quiz_id: str) -> str:
@@ -88,6 +108,7 @@ def _pack_from_items(quiz_id: str, items: list[dict], session_id: str | None = N
             "subject_key": subject_key,
             "subject": configured.telegram_display_name if configured else first_question.get("subject") or "",
             "chapter": first_question.get("topic") or "",
+            "micro_topic": first_question.get("micro_topic_key") or "",
             "date": quiz_date.isoformat() if quiz_date else _date_from_quiz_id(quiz_id),
         },
         "items": items,
@@ -128,6 +149,8 @@ def record_quiz_pack(
 
 
 def mark_pack_posted(pack: dict) -> None:
+    used_at = datetime.now(timezone.utc).isoformat()
+    micro_topic_ids: set[str] = set()
     for item in pack.get("items", []):
         question = item["question"]
         questions_repo.mark_used(
@@ -136,6 +159,10 @@ def mark_pack_posted(pack: dict) -> None:
             min_gap_days=SCHEDULER_MIN_REUSE_GAP_DAYS,
             max_gap_days=SCHEDULER_MAX_REUSE_GAP_DAYS,
         )
+        if question.get("micro_topic_id"):
+            micro_topic_ids.add(str(question["micro_topic_id"]))
+    for micro_topic_id in micro_topic_ids:
+        source_documents_repo.mark_micro_topic_used(micro_topic_id, used_at)
 
 
 def public_quiz_payload(pack: dict) -> dict:
@@ -178,6 +205,37 @@ def submit_quiz_attempts(
         user_id=user_row["id"],
         client_attempt_id=clean_attempt_id,
         answers=answers,
+    )
+
+
+def submit_question_report(
+    *,
+    question_id: str,
+    quiz_id: str,
+    telegram_user: dict,
+    client_attempt_id: str,
+    reason: str,
+    details: str,
+) -> dict:
+    if reason not in REPORT_REASONS:
+        raise ValueError("Invalid report reason.")
+    clean_attempt_id = client_attempt_id.strip()
+    clean_details = details.strip()
+    if not clean_attempt_id:
+        raise ValueError("A completed attempt identifier is required.")
+    if len(clean_details) > 1000:
+        raise ValueError("Report details must be 1000 characters or fewer.")
+    if reason == "other" and not clean_details:
+        raise ValueError("Other reports require details.")
+    user_row = users_repo.upsert_user(User.from_telegram(telegram_user))
+    return question_reports_repo.submit(
+        question_id=question_id,
+        quiz_id=quiz_id,
+        user_id=user_row["id"],
+        client_attempt_id=clean_attempt_id,
+        reason=reason,
+        details=clean_details,
+        threshold=QUESTION_REPORT_THRESHOLD,
     )
 
 
@@ -226,13 +284,29 @@ def _build_question(quiz_id: str, item: dict, meta: dict) -> Question:
         bot_type=BOT_TYPE,
         question_hash=question_hash(question_text),
         normalized_text=normalized,
+        status="active",
+        micro_topic_id=_str(item.get("micro_topic_id")),
+        micro_topic_key=_str(item.get("micro_topic_key")),
+        source_document_id=_str(item.get("source_document_id")),
+        verification_status=_str(item.get("verification_status")),
+        verification_score=item.get("verification_score"),
+        verification_notes=_str(item.get("verification_notes")),
+        verification_checks=item.get("verification_checks") if isinstance(item.get("verification_checks"), dict) else {},
+        verified_at=_str(item.get("verified_at")) or None,
+        verification_model=_str(item.get("verification_model")) or None,
     )
 
 
 def _question_row_for_atomic_save(quiz_id: str, item: dict, meta: dict) -> dict:
-    """Preserve fuzzy duplicate reuse while leaving every write transactional."""
+    """Reuse only byte-equivalent content; never substitute an unverified near-duplicate."""
     question = _build_question(quiz_id, item, meta)
     row = question.to_insert_dict()
+    exact = questions_repo.get_by_hash_any_bot(question.question_hash)
+    if exact:
+        if exact.get("subject") != question.subject or exact.get("topic") != question.topic:
+            raise DatabaseIntegrityError(f"Exact question classification mismatch in {quiz_id}.")
+        row["reuse_question_id"] = exact["id"]
+        return row
     similar = questions_repo.find_similar(
         question.normalized_text,
         bot_type=BOT_TYPE,
@@ -241,13 +315,9 @@ def _question_row_for_atomic_save(quiz_id: str, item: dict, meta: dict) -> dict:
     )
     if not similar:
         return row
-    existing = questions_repo.get_by_id(similar[0]["id"])
-    if not existing:
-        return row
-    if existing.get("subject") != question.subject or existing.get("topic") != question.topic:
-        raise DatabaseIntegrityError(f"Similar question classification mismatch in {quiz_id}.")
-    row["reuse_question_id"] = existing["id"]
-    return row
+    raise DatabaseIntegrityError(
+        f"Near-duplicate question detected in {quiz_id}; regenerate instead of substituting content."
+    )
 
 
 def _date_from_quiz_id(quiz_id: str) -> str:

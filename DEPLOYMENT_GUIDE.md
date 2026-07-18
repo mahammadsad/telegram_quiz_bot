@@ -1,6 +1,6 @@
 # Deployment guide
 
-Deploy in this order: database migration, server environment, FastAPI, bot
+Deploy in this order: database migrations, approved source import, server environment, FastAPI, bot
 preflight, BotFather named-app URL, then one controlled subject run. Do not
 deploy the new application before the atomic RPCs exist.
 
@@ -11,14 +11,16 @@ For an existing production database that already contains `quiz_runs` and
 
 ```text
 supabase/migrations/20260718015054_atomic_quiz_integrity.sql
+supabase/migrations/20260718112044_question_provenance_reporting.sql
 ```
 
-For a new empty project, first apply `database/schema.sql`, then the timestamped
-migration. The SQL is additive and rerunnable. It backfills historical
+For a new empty project, first apply `database/schema.sql`, then both timestamped
+migrations in order. The SQL is additive and rerunnable. The foundation backfills historical
 question mappings and valid ten-position submissions while preserving every
 legacy table/row.
 
-Read `docs/MIGRATION_20260718.md` before applying. Take a database backup or
+Read `docs/MIGRATION_20260718.md` and
+`docs/MIGRATION_20260718_PROVENANCE.md` before applying. Take a database backup or
 project-branch checkpoint, run its preflight SQL, apply the canonical file with
 the Supabase migration workflow or SQL Editor, and run its verification SQL.
 Then rerun both Supabase advisors. Do not paste a database password or service
@@ -28,6 +30,18 @@ Expected intentional security posture: public tables have RLS and no browser
 policies because only FastAPI/service-role access is supported. The migration
 revokes `anon` and `authenticated`, makes legacy public views security-invoker,
 and revokes direct browser execution of private functions.
+
+The provenance migration seeds taxonomy but deliberately seeds no facts. Build
+and manually review source bundles, then run:
+
+```bash
+python scripts/import_source_documents.py sources.json --dry-run
+python scripts/import_source_documents.py sources.json --approve
+```
+
+Keep scheduled generation paused until every enabled chapter has at least one
+approved, unexpired fact bundle. Missing sources fail closed; current affairs
+require recent official/primary dated sources.
 
 ## 2. Configure GitHub Actions
 
@@ -61,9 +75,12 @@ Repository Variables:
 ```text
 TELEGRAM_BOT_USERNAME
 MINIAPP_SHORT_NAME
+QUESTION_VERIFICATION_MIN_CONFIDENCE=0.85
+CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS=45
+QUESTION_REPORT_THRESHOLD=3
 ```
 
-No new credential is required for this migration. `QUIZ_CLAIM_TIMEOUT_MINUTES`
+No new credential or paid search API is required. `QUIZ_CLAIM_TIMEOUT_MINUTES`
 and `GEMINI_FACTUAL_TEMPERATURE` are optional runtime variables; their defaults
 are 20 and 0.3 respectively.
 
@@ -112,6 +129,9 @@ GEMINI_MODEL_PRIMARY=gemini-2.5-flash-lite
 GEMINI_MODEL_FALLBACK=gemini-2.5-flash
 GEMINI_FAILOVER_ENABLED=true
 GEMINI_FACTUAL_TEMPERATURE=0.3
+QUESTION_VERIFICATION_MIN_CONFIDENCE=0.85
+CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS=45
+QUESTION_REPORT_THRESHOLD=3
 QUIZ_CLAIM_TIMEOUT_MINUTES=20
 APP_TIMEZONE=Asia/Kolkata
 DEV_ALLOW_UNVERIFIED_TELEGRAM=false
@@ -122,8 +142,8 @@ Keep `DEV_ALLOW_UNVERIFIED_TELEGRAM=false` in every public environment. Set
 different trusted origin; same-origin deployment needs no CORS list.
 
 Check `GET /api/health`. It should show safe configured booleans,
-`application_version=3.0.0`, and
-`migration_version=20260718015054`; it never proves the database migration was
+`application_version=3.1.0`, and
+`migration_version=20260718112044`; it never proves the database migration was
 applied, so preflight remains mandatory.
 
 ## 4. Configure forum topics and BotFather
@@ -150,22 +170,27 @@ different named-app deployment.
 2. Run the CI commands locally or wait for the PR check: Ruff, mypy, pytest,
    migration contract, and public-data scan.
 3. Run one due/manual subject: `python bot.py --mode subject-quiz --subject history`.
-4. Verify one `quiz_runs` row owns a non-expired lease while processing and
+4. Verify the generated questions cite approved source rows, share the selected
+   normalized micro-topic, and each have a passing `question_verifications` row.
+5. Verify one `quiz_runs` row owns a non-expired lease while processing and
    ends `posted` with ten mappings in `quiz_questions`.
-5. Confirm the Telegram post appears only once in the correct thread and opens
+6. Confirm the Telegram post appears only once in the correct thread and opens
    the subject-scoped quiz ID.
-6. Confirm live mode renders ten questions; submit with a new `attemptId`.
-7. Verify one `quiz_attempts` row and exactly ten
+7. Confirm live mode renders ten questions; submit with a new `attemptId`.
+8. Verify one `quiz_attempts` row and exactly ten
    `quiz_attempt_answers` rows. Retry the identical request and confirm no new
    row; retake with a new ID and confirm a second parent attempt.
-8. Check quiz/global leaderboard pages and confirm response rows contain no
+9. Submit one question report from the authenticated review card. Confirm it is
+   bound to that attempt, a duplicate returns conflict, and unrelated users or
+   attempts cannot report it. Test the quarantine threshold with test users.
+10. Check quiz/global leaderboard pages and confirm response rows contain no
    Telegram IDs, first/last names, or non-opted-in usernames.
-9. Stop the API temporarily and open an existing static pack. Confirm the UI
+11. Stop the API temporarily and open an existing static pack. Confirm the UI
    labels read-only fallback and cannot submit or claim a score.
-10. Run `python scripts/check_public_data.py`; it must pass.
-11. Trigger two manual runs for the same date/subject close together. One may
+12. Run `python scripts/check_public_data.py`; it must pass.
+13. Trigger two manual runs for the same date/subject close together. One may
     proceed; the other must report that another worker owns the active lease.
-12. Run Supabase advisors again and investigate every error/warning. Expected
+14. Run Supabase advisors again and investigate every error/warning. Expected
     RLS-without-policy information is documented in the migration guide.
 
 For provider failover, use a disposable test environment rather than changing
@@ -199,7 +224,7 @@ backup timestamp; see `docs/MIGRATION_20260718.md`.
 - Static quiz files are still committed by each scheduled subject job, so the
   repository may receive up to 13 small fallback commits per day. Consolidated
   storage/commit batching belongs in a later operations phase.
-- This phase has no learning-resource/YouTube integration and therefore needs
-  no YouTube key.
+- Source collection is an operator import in this phase; automated official
+  feed collection and learning-resource/YouTube integration are not included.
 - Post-migration advisor results cannot be known until an operator applies the
   migration; rerunning both advisors is a required deployment gate.

@@ -253,6 +253,18 @@
   .review h3{margin:0 0 8px; font-size:15px; line-height:1.5}
   .review p{margin:5px 0; color:var(--muted); line-height:1.55; font-size:14px}
   .review .answer{font-weight:800; color:var(--ink)}
+  .review .source a{color:var(--primary); font-weight:700}
+  .report-box{margin-top:10px; border-top:1px solid var(--line); padding-top:9px}
+  .report-box summary{cursor:pointer; color:var(--danger); font-weight:800; font-size:13px}
+  .report-fields{display:grid; gap:8px; margin-top:10px}
+  .report-fields select,.report-fields textarea{
+    width:100%; border:1px solid var(--line); border-radius:10px; padding:9px;
+    color:var(--ink); background:var(--card); font:inherit;
+  }
+  .report-fields textarea{min-height:70px; resize:vertical}
+  .report-submit{justify-self:start; border:0; border-radius:999px; padding:9px 13px; background:var(--danger); color:#fff; font-weight:800}
+  .report-submit:disabled{opacity:.55}
+  .report-message{min-height:20px; font-size:13px; font-weight:700}
   .score-band{
     display:grid;
     grid-template-columns:130px 1fr;
@@ -724,16 +736,84 @@
         '<h3></h3>' +
         '<p class="answer selected"></p>' +
         '<p class="answer correct"></p>' +
-        '<p class="explanation"></p>';
+        '<p class="explanation"></p>' +
+        '<p class="source" hidden></p>' +
+        '<details class="report-box"><summary>প্রশ্নটি রিপোর্ট করুন</summary>' +
+          '<div class="report-fields">' +
+            '<select aria-label="রিপোর্টের কারণ">' +
+              '<option value="wrong_answer">সঠিক উত্তর ভুল</option>' +
+              '<option value="multiple_correct">একাধিক সঠিক উত্তর</option>' +
+              '<option value="ambiguous">প্রশ্ন অস্পষ্ট</option>' +
+              '<option value="incorrect_explanation">ব্যাখ্যা ভুল</option>' +
+              '<option value="language_spelling">ভাষা বা বানান</option>' +
+              '<option value="outdated">তথ্য পুরোনো</option>' +
+              '<option value="outside_syllabus">সিলেবাসের বাইরে</option>' +
+              '<option value="broken_source">সোর্স লিংক কাজ করছে না</option>' +
+              '<option value="other">অন্যান্য</option>' +
+            '</select>' +
+            '<textarea maxlength="1000" placeholder="সংক্ষিপ্ত বিস্তারিত (ঐচ্ছিক)"></textarea>' +
+            '<button type="button" class="report-submit">রিপোর্ট পাঠান</button>' +
+            '<p class="report-message" aria-live="polite"></p>' +
+          '</div></details>';
       row.querySelector("h3").textContent = bn(index + 1) + ". " + item.q;
       row.querySelector(".selected").textContent =
         "তোমার উত্তর: " + (selected === null || selected === undefined ? "উত্তর দেওয়া হয়নি" : item.o[selected]);
       row.querySelector(".correct").textContent = "সঠিক উত্তর: " + item.o[correct];
       row.querySelector(".explanation").textContent = item.explanation || "";
+      var source = row.querySelector(".source");
+      if (item.sourceUrl && /^https:\/\//i.test(item.sourceUrl)) {
+        var sourceLink = document.createElement("a");
+        sourceLink.href = item.sourceUrl;
+        sourceLink.target = "_blank";
+        sourceLink.rel = "noopener noreferrer";
+        sourceLink.textContent = "সোর্স: " + (item.sourceTitle || item.sourceUrl);
+        source.appendChild(sourceLink);
+        source.hidden = false;
+      }
+      row.querySelector(".report-submit").addEventListener("click", function(){
+        submitQuestionReport(row, item);
+      });
       list.appendChild(row);
     });
     haptic(pct >= 50 ? "success" : "warning");
     show("result");
+  }
+
+  function submitQuestionReport(row, item){
+    var button = row.querySelector(".report-submit");
+    var message = row.querySelector(".report-message");
+    if (!item.questionId || !attemptId || button.disabled) return;
+    var reason = row.querySelector(".report-fields select").value;
+    var details = row.querySelector(".report-fields textarea").value;
+    if (reason === "other" && !details.trim()) {
+      message.textContent = "অন্যান্য কারণের জন্য সংক্ষিপ্ত বিস্তারিত লিখুন।";
+      return;
+    }
+    button.disabled = true;
+    message.textContent = "রিপোর্ট পাঠানো হচ্ছে...";
+    fetch(api("/api/questions/" + encodeURIComponent(item.questionId) + "/report"), {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({
+        initData: isTelegram ? tg.initData : "",
+        quizId: quizId,
+        attemptId: attemptId,
+        reason: reason,
+        details: details
+      })
+    })
+      .then(function(resp){ return resp.ok ? resp.json() : jsonOrThrow(resp, "Report API"); })
+      .then(function(){
+        message.textContent = "রিপোর্ট গ্রহণ করা হয়েছে। ধন্যবাদ।";
+        haptic("success");
+      })
+      .catch(function(err){
+        button.disabled = false;
+        if (err.status === 409) message.textContent = "এই চেষ্টায় প্রশ্নটি আগে রিপোর্ট করা হয়েছে।";
+        else if (err.status === 401) message.textContent = "রিপোর্ট করতে Telegram থেকে কুইজটি খুলুন।";
+        else if (err.status === 429) message.textContent = "অনেক রিপোর্ট হয়েছে; কিছুক্ষণ পরে চেষ্টা করুন।";
+        else message.textContent = "রিপোর্ট পাঠানো যায়নি। পরে আবার চেষ্টা করুন।";
+      });
   }
 
   function resultTitle(pct){
