@@ -4,6 +4,7 @@ Apply these files after the learning-resource migrations:
 
 1. `20260718181849_personalized_learning_foundation.sql`
 2. `20260718183203_personalized_learning_fk_compatibility.sql`
+3. `20260718184505_remove_redundant_personal_review_unique.sql`
 
 The change is additive and preserves quiz generation, Telegram posting,
 historical attempts, public leaderboards, and emergency static packs. It

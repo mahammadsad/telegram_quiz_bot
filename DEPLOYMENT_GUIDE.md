@@ -17,6 +17,7 @@ supabase/migrations/20260718172756_learning_resources_fk_indexes.sql
 supabase/migrations/20260718174844_learning_resources_legacy_pack_compatibility.sql
 supabase/migrations/20260718181849_personalized_learning_foundation.sql
 supabase/migrations/20260718183203_personalized_learning_fk_compatibility.sql
+supabase/migrations/20260718184505_remove_redundant_personal_review_unique.sql
 ```
 
 For a new empty project, first apply `database/schema.sql`, then the timestamped
@@ -154,7 +155,7 @@ different trusted origin; same-origin deployment needs no CORS list.
 
 Check `GET /api/health`. It should show safe configured booleans,
 `application_version=4.0.0`, and
-`migration_version=20260718183203`; it never proves the database migration was
+`migration_version=20260718184505`; it never proves the database migration was
 applied, so preflight remains mandatory.
 
 ## 4. Configure forum topics and BotFather

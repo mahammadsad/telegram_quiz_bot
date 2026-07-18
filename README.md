@@ -140,7 +140,7 @@ and requires no `YOUTUBE_API_KEY`.
 For a new project, apply `database/schema.sql`, then every file in
 `supabase/migrations/` in timestamp order. Existing projects apply only the
 newer unapplied files. The current stack ends with
-`20260718183203_personalized_learning_fk_compatibility.sql`. The application
+`20260718184505_remove_redundant_personal_review_unique.sql`. The application
 never applies DDL during startup.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,

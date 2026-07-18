@@ -11,6 +11,7 @@ from services import personal_learning_service as service
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase" / "migrations" / "20260718181849_personalized_learning_foundation.sql"
 FK_MIGRATION = ROOT / "supabase" / "migrations" / "20260718183203_personalized_learning_fk_compatibility.sql"
+UNIQUE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718184505_remove_redundant_personal_review_unique.sql"
 client = TestClient(api_module.app)
 
 
@@ -59,6 +60,15 @@ def test_legacy_review_foreign_keys_are_forward_fixed_to_cascade():
     assert "personal_review_schedule_user_id_fkey" in sql
     assert "personal_review_schedule_question_id_fkey" in sql
     assert sql.count("on delete cascade") == 2
+
+
+def test_legacy_review_unique_constraint_is_not_duplicated():
+    foundation = MIGRATION.read_text(encoding="utf-8").lower()
+    cleanup = UNIQUE_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "candidate.contype = 'u'" in cleanup
+    assert "drop constraint if exists personal_review_schedule_user_question_key" in cleanup
+    assert "from pg_constraint c" in foundation
+    assert "array['user_id', 'question_id']::name[]" in foundation
 
 
 def test_dashboard_endpoint_requires_telegram_header(monkeypatch):

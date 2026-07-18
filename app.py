@@ -33,7 +33,7 @@ from utils.quiz_ids import parse_quiz_id
 
 ROOT = Path(__file__).resolve().parent
 app = FastAPI(title="WB Exam Quiz Pack API", version="4.0.0")
-MIGRATION_VERSION = "20260718183203"
+MIGRATION_VERSION = "20260718184505"
 
 if CORS_ALLOWED_ORIGINS:
     app.add_middleware(
