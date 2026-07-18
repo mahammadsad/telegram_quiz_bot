@@ -72,6 +72,34 @@ Importing the bundle does not enable the chapters. Rotation remains off until
 the staging generation, independent verification, delivery, and answer-review
 gate has passed and a later idempotent activation migration is applied.
 
+## Indian Polity expansion bundle
+
+`sources/polity_expansion_v2.json` contains 30 reviewed official-source
+records covering all 24 micro-topics in the six inactive Indian Polity
+chapters: constitution-making and citizenship, Prime Minister and Council of
+Ministers, State government, Union-State relations and emergencies, local
+government, and amendments, Schedules, and elections.
+
+The bundle grounds constitutional propositions in the Legislative
+Department's Constitution current to 1 May 2026 and supplements composite
+topics with Parliament, Ministry of Home Affairs, Cabinet Secretariat,
+Ministry of Panchayati Raj, Ministry of Housing and Urban Affairs, Ministry of
+Jal Shakti, Election Commission of India, and West Bengal government sources.
+Citizenship amendments and OCI, Cabinet committees and the Attorney-General,
+inter-State disputes, West Bengal local administration, and election statutes
+therefore retain independent source records.
+
+Validate it without credentials before importing it into an environment:
+
+```bash
+python scripts/import_source_documents.py \
+  sources/polity_expansion_v2.json --validate-only
+```
+
+As with the Computer Education bundle, import and cache readiness do not
+activate the chapters. All six Polity chapters remain fail-closed until the
+separate staging quiz and answer-review gate succeeds.
+
 ## Data model
 
 `quiz_chapters` gains stable keys, exam relevance, priority, rotation state,
