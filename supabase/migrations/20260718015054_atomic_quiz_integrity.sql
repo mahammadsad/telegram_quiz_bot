@@ -138,6 +138,20 @@ select
 from public.quiz_submissions s
 where jsonb_typeof(s.answers) = 'array'
   and jsonb_array_length(s.answers) = 10
+  and s.score between 0 and 10
+  and (
+      select count(*) from public.quiz_questions qq
+      where qq.quiz_id = s.quiz_id
+  ) = 10
+  and not exists (
+      select 1
+      from jsonb_array_elements(s.answers) answer(value)
+      where jsonb_typeof(answer.value) <> 'null'
+        and not (
+            jsonb_typeof(answer.value) = 'number'
+            and (answer.value #>> '{}') ~ '^[0-3]$'
+        )
+  )
 on conflict do nothing;
 
 insert into public.quiz_attempt_answers (

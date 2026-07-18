@@ -43,6 +43,16 @@ def test_pgcrypto_calls_are_schema_qualified_for_empty_rpc_search_path():
     assert "'server:' || gen_random_uuid()" not in foundation
 
 
+def test_legacy_attempt_backfill_requires_a_complete_valid_pack():
+    sql = MIGRATION.read_text(encoding="utf-8").lower()
+    backfill = sql.split("insert into public.quiz_attempts", 1)[1].split("on conflict do nothing", 1)[0]
+    assert "select count(*) from public.quiz_questions" in backfill
+    assert "where qq.quiz_id = s.quiz_id" in backfill
+    assert ") = 10" in backfill
+    assert "jsonb_array_elements(s.answers)" in backfill
+    assert "s.score between 0 and 10" in backfill
+
+
 def test_migration_locks_rpc_and_tables_to_server_role():
     sql = MIGRATION.read_text(encoding="utf-8").lower()
     assert "enable row level security" in sql
