@@ -24,10 +24,12 @@ restored while no new-format-only writes have occurred.
 ## Backfill
 
 The migration copies at most ten ordered question mappings for each existing
-quiz run from historical `polls` rows. It then copies valid ten-position
-`quiz_submissions` into `quiz_attempts` and expands them into question-level
-answers. Invalid or incomplete legacy payloads are left untouched for manual
-inspection; they are never silently invented or deleted.
+quiz run from historical `polls` rows. It then copies only valid ten-position
+`quiz_submissions` whose quiz has ten unique ordered mappings into
+`quiz_attempts` and expands them into question-level answers. Invalid answers,
+out-of-range scores, duplicate-question packs, and incomplete legacy payloads
+are left untouched for manual inspection; they are never silently invented or
+deleted.
 
 Before applying, take a Supabase database backup or create a project branch if
 your plan supports it. Check that the expected legacy objects exist:
