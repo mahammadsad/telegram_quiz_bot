@@ -14,12 +14,13 @@
 
 <style>
   :root{
-    --bg:#f5f7fb;
-    --surface:#ffffff;
-    --ink:#17202a;
-    --muted:#627084;
+    color-scheme:light dark;
+    --bg:var(--tg-theme-bg-color,#f5f7fb);
+    --surface:var(--tg-theme-secondary-bg-color,#ffffff);
+    --ink:var(--tg-theme-text-color,#17202a);
+    --muted:var(--tg-theme-hint-color,#627084);
     --line:#d9e0ea;
-    --primary:#0f766e;
+    --primary:var(--tg-theme-button-color,#0f766e);
     --accent:#2563eb;
     --success:#16834a;
     --gold:#c99722;
@@ -254,7 +255,7 @@
           setState("error");
           return;
         }
-        render(data.rows || []);
+        render(data);
       })
       .catch(function(err){
         console.error(err);
@@ -263,10 +264,11 @@
       });
   }
 
-  function render(rows){
+  function render(data){
+    var rows = data.rows || [];
     var totalAttempts = rows.reduce(function(sum,row){ return sum + (quizId ? (row.attempts_count || 0) : (row.total_attempts || 0)); }, 0);
     var best = rows.length ? (quizId ? rows[0].score : rows[0].correct_attempts) || 0 : 0;
-    setMetrics(rows.length, totalAttempts, best);
+    setMetrics(data.participants === undefined ? rows.length : data.participants, totalAttempts, best);
 
     if (!rows.length) {
       setState("empty");
@@ -314,7 +316,6 @@
     var full = [row.first_name, row.last_name].filter(Boolean).join(" ").trim();
     if (full) return full;
     if (row.username) return "@" + row.username;
-    if (row.telegram_id) return "শিক্ষার্থী " + row.telegram_id;
     return "শিক্ষার্থী";
   }
 

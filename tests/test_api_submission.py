@@ -4,7 +4,6 @@ from fastapi.testclient import TestClient
 
 import app as api_module
 
-
 client = TestClient(api_module.app)
 QUIZ_ID = "20260710-history"
 
@@ -64,7 +63,7 @@ def test_missing_get_returns_404_without_generation(monkeypatch):
 
 def test_quiz_specific_leaderboard_endpoint(monkeypatch):
     expected = {"quiz_id": QUIZ_ID, "participants": 1, "rows": [{"rank": 1, "score": 10}]}
-    monkeypatch.setattr(api_module.stats_repo, "quiz_leaderboard", lambda quiz_id, limit: expected)
+    monkeypatch.setattr(api_module.stats_repo, "quiz_leaderboard", lambda quiz_id, limit, offset: expected)
     response = client.get(f"/api/quiz/{QUIZ_ID}/leaderboard")
     assert response.status_code == 200 and response.json() == expected
 
@@ -88,3 +87,13 @@ def test_health_reports_safe_forum_configuration_error(monkeypatch):
 
 def test_obsolete_submit_payload_class_does_not_exist():
     assert not hasattr(api_module, "SubmitQuizPayload")
+
+
+def test_static_fallback_is_explicitly_read_only(monkeypatch):
+    monkeypatch.setattr(api_module.quiz_pack_service, "get_quiz_pack", lambda quiz_id: None)
+    payload = {"meta": {"quiz_id": QUIZ_ID}, "qs": [{"q": str(i), "o": ["a", "b", "c", "d"]} for i in range(10)]}
+    monkeypatch.setattr(api_module, "_load_public_fallback", lambda quiz_id: {
+        **payload, "capabilities": {"submission": False, "source": "static_fallback"}
+    })
+    body = client.get(f"/api/quiz/{QUIZ_ID}").json()
+    assert body["capabilities"] == {"submission": False, "source": "static_fallback"}

@@ -11,20 +11,18 @@ from __future__ import annotations
 
 import logging
 import os
-import sys
+
+from errors import ConfigurationError
 
 LOG = logging.getLogger("config")
 
 
 def require_env(name: str) -> str:
-    """Fetch a required env var or exit(1) with a clear error.
-
-    Used for secrets that truly cannot have a default (API keys, tokens).
-    """
+    """Fetch a required environment value without terminating the process."""
     value = os.environ.get(name)
     if not value:
         LOG.error("Missing required environment variable: %s", name)
-        sys.exit(1)
+        raise ConfigurationError(f"Missing required environment variable: {name}")
     return value
 
 
@@ -75,6 +73,10 @@ GEMINI_BACKOFF_BASE_SECONDS = max(
 GEMINI_MAX_BACKOFF_SECONDS = max(
     GEMINI_BACKOFF_BASE_SECONDS,
     float(os.environ.get("GEMINI_MAX_BACKOFF_SECONDS", "60")),
+)
+GEMINI_FACTUAL_TEMPERATURE = min(
+    0.4,
+    max(0.0, float(os.environ.get("GEMINI_FACTUAL_TEMPERATURE", "0.3"))),
 )
 
 # --------------------------------------------------------------------------
@@ -127,6 +129,10 @@ SESSION_TYPE = "mock_test"
 # Quiz-pack generation behavior
 # --------------------------------------------------------------------------
 QUESTIONS_PER_RUN = 10
+QUIZ_DIFFICULTY_DISTRIBUTION = {"easy": 3, "medium": 5, "hard": 2}
+QUIZ_CLAIM_TIMEOUT_MINUTES = max(
+    5, int(os.environ.get("QUIZ_CLAIM_TIMEOUT_MINUTES", "20"))
+)
 CURRENT_AFFAIRS_MIN = 2
 CURRENT_AFFAIRS_MAX = 3
 GEOGRAPHY_MIN = 1

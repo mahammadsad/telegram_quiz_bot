@@ -1,134 +1,233 @@
 # Telegram Subject Quiz Bot
 
-Production-oriented Bengali Telegram Mini App quiz system. Every day it schedules exactly one 10-question quiz for each of 13 canonical subjects. A scheduled process handles one subject, saves validated content before delivery, and posts through a numeric Telegram `message_thread_id`.
+A Bengali Telegram Mini App for one daily 10-question quiz in each of 13
+competitive-exam subjects. FastAPI serves answer-free quiz payloads, validates
+Telegram Mini App authentication, submits attempts through transactional
+Supabase functions, and returns private review data and privacy-safe
+leaderboards.
 
-## Daily schedule
+This branch is the integrity foundation for the larger learning-platform
+roadmap. Resource discovery, question reports, wrong-answer practice, mastery,
+personalized revision, bookmarks, and exam preferences are deliberately left
+for subsequent phases; the current quiz workflow remains deployable by itself.
 
-| Canonical key | Telegram forum name | IST | UTC | GitHub cron |
-|---|---|---:|---:|---|
-| `computer` | কম্পিউটার শিক্ষা | 07:00 | 01:30 | `30 1 * * *` |
-| `bengali` | বাংলা | 08:00 | 02:30 | `30 2 * * *` |
-| `reasoning` | রিজনিং | 09:00 | 03:30 | `30 3 * * *` |
-| `mathematics` | গণিত | 10:00 | 04:30 | `30 4 * * *` |
-| `english` | ইংরেজি | 11:00 | 05:30 | `30 5 * * *` |
-| `miscellaneous` | বিবিধ | 12:00 | 06:30 | `30 6 * * *` |
-| `polity` | সংবিধান ও প্রশাসন | 13:00 | 07:30 | `30 7 * * *` |
-| `geography` | ভূগোল | 14:00 | 08:30 | `30 8 * * *` |
-| `science` | বিজ্ঞান | 15:00 | 09:30 | `30 9 * * *` |
-| `economics` | অর্থনীতি | 16:00 | 10:30 | `30 10 * * *` |
-| `history` | ইতিহাস | 17:00 | 11:30 | `30 11 * * *` |
-| `environment` | পরিবেশ | 18:00 | 12:30 | `30 12 * * *` |
-| `current-affairs` | কারেন্ট অ্যাফেয়ার্স | 19:00 | 13:30 | `30 13 * * *` |
-| recovery only | জেনারেল তথ্য/administrator | 20:30 | 15:00 | `0 15 * * *` |
+## Architecture
 
-`general` (`জেনারেল তথ্য`) is announcement-only and is never scheduled as a quiz. The mapping lives only in `config/subjects.py`; workflow cron expressions map directly to canonical keys, so a late GitHub runner cannot select the wrong subject from its wall clock.
-
-## Data flow
-
-1. The job validates the canonical subject and complete numeric forum routing.
-2. It builds `YYYYMMDD-<subject-key>`, checks `quiz_runs`, and reuses a saved pack only after verifying exactly 10 questions and its checksum.
-3. `chapter_selector` chooses from that subject's curated catalogue, preferring unseen chapters and then 3/7/14/30-day review windows.
-4. The Gemini provider pool makes one normal generation request, strictly validates all 10 questions, and permits one structured repair request only for malformed JSON.
-5. Questions and `polls` delivery rows are stored, a public answer-free fallback is exported, and the run becomes `generated`.
-6. Telegram receives `sendMessage` with the subject's numeric `message_thread_id`. Only a successful response can mark the run `posted` and store message metadata.
-7. The Mini App loads a read-only public payload. FastAPI verifies Telegram `initData`, writes/upserts the user, stores every intentional attempt in `quiz_submissions`, and calculates the current score, personal best, and latest-attempt rank from server-side answers. A client-generated `attemptId` makes HTTP retries idempotent without blocking intentional retakes.
-
-The public GET endpoint never invokes Gemini. New quiz IDs are always subject-scoped; historical `YYYYMMDD` IDs remain readable when a DB record or public static file exists.
-
-## Forum thread IDs
-
-Configure a complete server-side JSON object (the numbers below are placeholders):
-
-```text
-TELEGRAM_FORUM_TOPICS_JSON={"computer":101,"bengali":102,"reasoning":103,"mathematics":104,"english":105,"miscellaneous":106,"polity":107,"geography":108,"science":109,"economics":110,"history":111,"environment":112,"current-affairs":113}
-```
-
-IDs must be unique positive JSON integers. Missing keys, extra keys, booleans, strings, zero, negatives, and duplicates fail before Gemini is called. Runtime routing never matches Bengali display names.
-The exact `101` through `113` documentation example is also rejected; replace
-it with IDs discovered from the real forum threads.
-
-To discover IDs, set `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and optionally comma-separated `TELEGRAM_ADMIN_USER_IDS`, then run:
-
-```bash
-python scripts/discover_topic_ids.py
-```
-
-An administrator sends `/topicid history`, `/topicid geography`, etc. inside the matching forum thread. The utility checks the configured chat and either the configured allow-list or Telegram chat-administrator status, advances the long-poll offset, and replies with the canonical key, Bengali name, chat ID, thread ID, and a copyable JSON snippet. It never prints the bot token. `TELEGRAM_GENERAL_THREAD_ID` is optional; when absent, announcements omit the thread parameter.
-
-## Gemini failover
-
-Resolution is primary, then secondary; legacy `GEMINI_API_KEY` is used only if neither new key exists. A successful primary call never alternates to secondary and the second key is not quota expansion.
-
-| Category | Behaviour |
+| Component | Responsibility |
 |---|---|
-| 408/429/5xx, timeout, unavailable, transient network | Retry current provider with bounded exponential backoff/jitter; after attempts, cool it down and fail over |
-| 401 or key/project-specific 403 | Mark current provider invalid for the process and fail over immediately |
-| 400/invalid schema or argument | Stop; do not spend the secondary provider |
-| confirmed missing/unavailable model | Try fallback model on the same provider, then next provider |
-| safety block | Stop; never change keys to bypass safety |
+| `bot.py` | Claims a date/subject run, selects a chapter, generates/validates a pack, posts once, and recovers missed work |
+| `app.py` | Public quiz reads and authenticated submission/leaderboard APIs |
+| `services/` | Chapter rotation, Gemini failover, validation, and quiz-pack rules |
+| `storage/` | Small Supabase repositories; atomic writes use RPCs |
+| `supabase/migrations/` | Current timestamped PostgreSQL migrations and security grants |
+| `index.html` | Telegram-theme-aware quiz UI with a clearly read-only static fallback |
+| `dashboard.html` | Privacy-safe global leaderboard UI |
+| `.github/workflows/` | Exact schedule mapping, per-target concurrency, CI, preflight, and recovery |
 
-Provider health is process-local (`healthy`, `cooling_down`, `invalid`); only safe provider labels, model names, categories, and status codes are logged. Keys and raw responses are never logged.
+The browser never receives a Supabase service-role key. It talks only to
+FastAPI. FastAPI verifies signed Telegram `initData`; the trusted server and bot
+use the service role against RLS-protected tables and explicitly granted RPCs.
 
-## Commands
+## Reliable data flow
+
+1. A GitHub schedule is mapped to one canonical subject from
+   `config/schedule.py`; server wall-clock guessing is not used.
+2. The worker claims `YYYYMMDD-subject-key` with an expiring database lease.
+   Another worker cannot generate or post the same logical run concurrently;
+   stale leases can be recovered.
+3. Chapter selection sorts history newest-first, avoids the immediately prior
+   chapter, prefers unseen chapters, then uses the 3/7/14/30-day review windows.
+4. Gemini primary/fallback behavior is bounded and classified. Generated packs
+   must contain exactly 3 easy, 5 medium, and 2 hard questions, with balanced
+   correct-answer positions and strict subject/chapter ownership.
+5. One RPC saves all question rows and ten ordered mappings transactionally.
+   The public fallback is exported without answers or explanations.
+6. Telegram is called only by the lease owner. Only a successful API response
+   marks the run posted. An ambiguous network outcome becomes
+   `posting_unknown` and is never auto-reposted; an operator verifies Telegram
+   before deciding whether to use the saved pack.
+7. A submission RPC validates ten mappings/answers, calculates the score on the
+   server, writes the parent attempt and ten question-level rows atomically,
+   and returns review, rank, personal best, and attempt number. Reusing a client
+   `attemptId` is idempotent; a new ID is an intentional retake.
+8. Leaderboards aggregate and paginate in PostgreSQL. Public rows contain a
+   generated alias or opted-in display name, never a Telegram ID.
+
+Static JSON is an emergency read-only fallback. When the live API is
+unavailable, the Mini App disables submission and scoring, labels the state,
+and offers retry/preview controls. Correct answers are never bundled into a
+public fallback.
+
+## Schedule
+
+The canonical subjects run hourly from 07:00 through 19:00 IST in this order:
+`computer`, `bengali`, `reasoning`, `mathematics`, `english`, `miscellaneous`,
+`polity`, `geography`, `science`, `economics`, `history`, `environment`, and
+`current-affairs`. Recovery runs at 20:30 IST. `general` is announcement-only.
+
+The mapping and subject catalogue live in `config/schedule.py` and
+`config/subjects.py`. Workflow concurrency uses the logical date and subject,
+waits instead of cancelling an active run, and has no run-ID component.
+
+## Configuration
+
+Copy `.env.example`; do not commit the populated file.
+
+Required server/GitHub secrets:
+
+- `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`
+- `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`,
+  `TELEGRAM_FORUM_TOPICS_JSON`
+- `GEMINI_API_KEY_PRIMARY`
+
+Recommended second-provider secret:
+
+- `GEMINI_API_KEY_SECONDARY`
+
+Repository variables (public identifiers, not secrets):
+
+- `TELEGRAM_BOT_USERNAME`
+- `MINIAPP_SHORT_NAME`
+
+Optional server settings:
+
+- `TELEGRAM_GENERAL_THREAD_ID`, `TELEGRAM_ADMIN_CHAT_ID`,
+  `TELEGRAM_ADMIN_USER_IDS`
+- `GEMINI_MODEL_PRIMARY`, `GEMINI_MODEL_FALLBACK`, failover/backoff settings,
+  and `GEMINI_FACTUAL_TEMPERATURE` (capped at `0.4`)
+- `QUIZ_CLAIM_TIMEOUT_MINUTES` (minimum 5; default 20)
+- `CORS_ALLOWED_ORIGINS`, `WRITE_STATIC_QUIZ_JSON`
+
+Development-only:
+
+- `DEV_ALLOW_UNVERIFIED_TELEGRAM=true` permits a local fake user. It must stay
+  false in every public deployment.
+
+No new secret is introduced by the atomic migration. The planned learning
+resource phase may add a `YOUTUBE_API_KEY`; it is not used or required now.
+
+## Supabase setup
+
+For a new project, apply `database/schema.sql` and then
+`supabase/migrations/20260718015054_atomic_quiz_integrity.sql`. Existing
+projects that already have migrations 001–003 apply only the timestamped
+migration. The application never applies DDL during startup.
+
+The migration is additive, rerunnable, backfills historical pack/attempt data,
+and locks tables, legacy views, and private functions to the service role. Full
+preflight, verification, security, backfill, and rollback notes are in
+`docs/MIGRATION_20260718.md`.
+
+After applying, run Supabase security and performance advisors, then:
 
 ```bash
+python bot.py --mode preflight
+```
+
+## Telegram and BotFather setup
+
+1. Add the bot to the forum-enabled Telegram group with permission to post.
+2. Run `python scripts/discover_topic_ids.py`. In each subject thread, an
+   allowed administrator sends `/topicid <canonical-key>`.
+3. Combine the 13 numeric results into `TELEGRAM_FORUM_TOPICS_JSON`. Never put
+   the private mapping in frontend code or documentation.
+4. In BotFather, open `/myapps`, choose the app whose short name matches
+   `MINIAPP_SHORT_NAME`, and set its Web App URL to the deployed FastAPI root.
+   Changing only the bot's Main Mini App URL does not update named-app links.
+
+Posted links use
+`https://t.me/<TELEGRAM_BOT_USERNAME>/<MINIAPP_SHORT_NAME>?startapp=<quiz-id>`.
+
+## Local development and tests
+
+Python 3.12 is the supported runtime. Runtime and development dependency locks
+are committed separately.
+
+```bash
+python -m venv .venv
+. .venv/bin/activate
+pip install -r requirements-dev.lock
+ruff check .
+mypy
+pytest -q
+python scripts/check_public_data.py
+```
+
+Start the local API:
+
+```bash
+DEV_ALLOW_UNVERIFIED_TELEGRAM=true uvicorn app:app --reload
+```
+
+Useful endpoints:
+
+- `GET /api/health`
+- `GET /api/quiz/{quiz_id}`
+- `POST /api/quiz/{quiz_id}/submit`
+- `GET /api/quiz/{quiz_id}/leaderboard?limit=20&offset=0`
+- `GET /api/leaderboard?limit=20&offset=0`
+
+Example submission shape:
+
+```json
+{"initData":"<signed Telegram data>","attemptId":"<new UUID>","answers":[0,2,1,null,3,0,1,2,3,0]}
+```
+
+Do not paste real signed data, keys, tokens, or thread IDs into issues, tests,
+logs, or chat.
+
+## Operations and recovery
+
+```bash
+python bot.py --mode preflight
 python bot.py --mode subject-quiz --subject history
 python bot.py --mode subject-quiz --subject history --force-post
 python bot.py --mode subject-quiz --subject history --force-regenerate
 python bot.py --mode recover-missed-quizzes
 python bot.py --mode announce
-python bot.py --mode preflight
 ```
 
-In GitHub Actions, choose `Run workflow` and `mode=preflight` to validate
-required secret presence, forum-routing structure, Supabase connectivity, and
-migration `003` columns without generating or posting anything.
+`--force-post` reuses a checksum-valid saved pack. For `posting_unknown`, first
+verify that Telegram did not accept the original message. `--force-regenerate`
+explicitly replaces the pack; the flags are mutually exclusive. Recovery skips
+posted/future runs, takes over only expired leases, and reuses valid saved
+content before generating.
 
-Because quiz buttons use the named path
-`https://t.me/<TELEGRAM_BOT_USERNAME>/<MINIAPP_SHORT_NAME>?startapp=...`, update
-that named app through BotFather `/myapps` and **Edit Web App URL**. Updating
-only BotFather's Main Mini App/Open App URL does not change named-app links.
-Point the named app at the deployed FastAPI root and confirm Render receives
-both the quiz `GET` and submission `POST` requests.
+The health endpoint returns safe booleans plus application/migration versions.
+It never returns secret values. Structured logs contain provider labels,
+categories, quiz IDs, and safe status codes, not credentials or raw Gemini
+responses.
 
-`--force-post` requires and reposts a checksum-valid saved quiz without Gemini. `--force-regenerate` explicitly replaces the delivery content; the two flags are mutually exclusive. Recovery considers today's IST schedule, skips future and posted subjects, posts valid generated content first, and generates only genuinely missing/corrupt content.
+Deployment and production drills are in `DEPLOYMENT_GUIDE.md`.
 
-## Database and local API
+## Privacy and accessibility
 
-For a new database run `database/schema.sql`. For an existing installation run
-`database/migrations/002_subject_quiz_runs.sql` and then
-`database/migrations/003_repeat_quiz_attempts.sql` in the Supabase SQL Editor.
-The migrations preserve existing submissions and are safe to rerun.
+- Production submissions require server-verified Telegram Mini App auth.
+- Direct browser access to attempts/users is denied; service credentials stay
+  server-side.
+- SQL leaderboards honor `leaderboard_visible` and `username_visible`; default
+  output is a stable generated alias.
+- The UI follows Telegram light/dark variables, has keyboard navigation,
+  reduced-motion behavior, and mobile-sized controls.
+- Static mode never pretends to score or save an attempt.
 
-```bash
-python -m venv .venv
-. .venv/bin/activate
-pip install -r requirements.txt
-DEV_ALLOW_UNVERIFIED_TELEGRAM=true uvicorn app:app --reload
-pytest -q
-```
+## Troubleshooting
 
-Submission JSON:
+- `preflight` fails before generation: apply the current migration and verify
+  required secret presence and all 13 numeric forum routes.
+- A run remains generating/posting: wait for the configured lease expiry, then
+  use recovery; do not manually create a second logical quiz ID.
+- Telegram opens an old page: edit the named Mini App in BotFather and fully
+  close/reopen Telegram's cached Mini App.
+- Static fallback appears: check FastAPI/Render logs and retry the live API;
+  static mode is intentionally non-submitting.
+- Submission returns 401: open through Telegram and check bot token/init-data
+  age; never enable the development bypass in production.
 
-```json
-{"initData":"<Telegram WebApp initData>","attemptId":"<new UUID for each intentional retake>","answers":[0,2,1,null,3,0,1,2,3,0]}
-```
+## Next platform phases
 
-Endpoints:
-
-- `GET /api/quiz/{quiz_id}` — questions/options only; read-only.
-- `POST /api/quiz/{quiz_id}/submit` — authenticated repeatable submission, current result, personal best, and answer review.
-- `GET /api/quiz/{quiz_id}/leaderboard?limit=20` — one row per user using their latest completed attempt, ordered by latest score descending and completion time ascending.
-- `GET /api/leaderboard` — backward-compatible global dashboard.
-- `GET /api/health` — safe configuration booleans; it consumes no Gemini quota.
-
-When forum routing is invalid, health also returns a safe
-`forum_topics_error` code without exposing thread IDs.
-
-To confirm public fallbacks contain no answers:
-
-```bash
-rg 'correct_index|correct_option|detailed_explanation|"a"\s*:|"e"\s*:' quizzes/
-```
-
-The command should produce no output. Never put a Supabase service key, Gemini key, bot token, signed init data, answer key, or private thread mapping in frontend code or committed quiz JSON.
+The next PR should add question provenance/micro-topics and current-affairs
+source grounding plus question-report moderation. Later phases can build the
+resource library/YouTube discovery, approval and link checks, wrong-question
+practice, spaced review, preferences, mastery analytics, and personalized
+revision on top of the question-level attempt model introduced here.

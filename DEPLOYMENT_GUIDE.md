@@ -1,31 +1,40 @@
-# Deployment Guide
+# Deployment guide
 
-## 1. Apply the Supabase migration
+Deploy in this order: database migration, server environment, FastAPI, bot
+preflight, BotFather named-app URL, then one controlled subject run. Do not
+deploy the new application before the atomic RPCs exist.
 
-Existing projects: open Supabase SQL Editor and run
-`database/migrations/002_subject_quiz_runs.sql`, followed by
-`database/migrations/003_repeat_quiz_attempts.sql`. New projects can run
-`database/schema.sql`. They are safe to rerun and preserve existing questions,
-polls, users, attempts, and scores.
+## 1. Apply the database migration
 
-The migration adds:
+For an existing production database that already contains `quiz_runs` and
+`quiz_submissions`, apply only:
 
-- `quiz_runs`: date-subject lifecycle, checksum, provider/model, safe error, and Telegram response metadata; unique `(quiz_date, subject_key)`.
-- `chapter_history`: deterministic chapter history; unique `(subject_key, selected_for)`.
-- `quiz_submissions`: complete history of intentional retakes, including every 10-position answer array; `client_attempt_id` prevents a network retry from creating another attempt.
-- recovery, chapter, leaderboard, and `polls(run_slot)` indexes.
+```text
+supabase/migrations/20260718015054_atomic_quiz_integrity.sql
+```
 
-`user_attempts` retains its canonical one-answer-per-Telegram-poll constraint.
-Complete Mini App retake history lives in `quiz_submissions`; `null` positions
-remain `null` and do not invent choices.
+For a new empty project, first apply `database/schema.sql`, then the timestamped
+migration. The SQL is additive and rerunnable. It backfills historical
+question mappings and valid ten-position submissions while preserving every
+legacy table/row.
 
-## 2. GitHub secrets and variables
+Read `docs/MIGRATION_20260718.md` before applying. Take a database backup or
+project-branch checkpoint, run its preflight SQL, apply the canonical file with
+the Supabase migration workflow or SQL Editor, and run its verification SQL.
+Then rerun both Supabase advisors. Do not paste a database password or service
+key into a migration file, issue, command transcript, or chat.
 
-Required GitHub Secrets:
+Expected intentional security posture: public tables have RLS and no browser
+policies because only FastAPI/service-role access is supported. The migration
+revokes `anon` and `authenticated`, makes legacy public views security-invoker,
+and revokes direct browser execution of private functions.
+
+## 2. Configure GitHub Actions
+
+Required Secrets:
 
 ```text
 GEMINI_API_KEY_PRIMARY
-GEMINI_API_KEY_SECONDARY
 TELEGRAM_BOT_TOKEN
 TELEGRAM_CHAT_ID
 TELEGRAM_FORUM_TOPICS_JSON
@@ -33,7 +42,13 @@ SUPABASE_URL
 SUPABASE_SERVICE_KEY
 ```
 
-Optional GitHub Secrets:
+Recommended Secret:
+
+```text
+GEMINI_API_KEY_SECONDARY
+```
+
+Optional Secrets:
 
 ```text
 TELEGRAM_GENERAL_THREAD_ID
@@ -41,31 +56,41 @@ TELEGRAM_ADMIN_CHAT_ID
 TELEGRAM_ADMIN_USER_IDS
 ```
 
-GitHub Variables:
+Repository Variables:
 
 ```text
 TELEGRAM_BOT_USERNAME
 MINIAPP_SHORT_NAME
 ```
 
-The workflow has 13 exact UTC subject crons plus `0 15 * * *` for recovery. It maps `github.event.schedule` directly, runs a sanitized preflight, and stages only `quizzes/????????-*.json`. Manual examples:
+No new credential is required for this migration. `QUIZ_CLAIM_TIMEOUT_MINUTES`
+and `GEMINI_FACTUAL_TEMPERATURE` are optional runtime variables; their defaults
+are 20 and 0.3 respectively.
+
+The scheduled workflow resolves its exact canonical subject from one Python
+mapping and uses `date-subject` concurrency with cancellation disabled. Manual
+examples:
 
 ```text
-mode=subject-quiz, subject=history, force_post=false, force_regenerate=false
-mode=subject-quiz, subject=history, force_post=true, force_regenerate=false
-mode=subject-quiz, subject=history, force_post=false, force_regenerate=true
-mode=recover-missed-quizzes
 mode=preflight
+mode=subject-quiz, subject=history
+mode=subject-quiz, subject=history, force_post=true
+mode=subject-quiz, subject=history, force_regenerate=true
+mode=recover-missed-quizzes
 ```
 
-Run `mode=preflight` first. It performs no Gemini request and posts no Telegram
-message; it exits nonzero when required runtime configuration is incomplete or
-the required migration tables/columns (through migration `003`) are unavailable
-through Supabase.
+Run `preflight` first. It uses no Gemini quota and posts no Telegram message.
 
-## 3. Render environment
+## 3. Configure the FastAPI host
 
-Required:
+Use Python 3.12 and install the deterministic runtime lock:
+
+```bash
+pip install -r requirements.lock
+uvicorn app:app --host 0.0.0.0 --port "$PORT"
+```
+
+Required server values:
 
 ```text
 SUPABASE_URL
@@ -75,78 +100,106 @@ TELEGRAM_CHAT_ID
 TELEGRAM_BOT_USERNAME
 MINIAPP_SHORT_NAME
 TELEGRAM_FORUM_TOPICS_JSON
+```
+
+The API itself does not call Gemini for public GETs or submissions, but using
+the same environment as the scheduled bot also includes:
+
+```text
 GEMINI_API_KEY_PRIMARY
 GEMINI_API_KEY_SECONDARY
 GEMINI_MODEL_PRIMARY=gemini-2.5-flash-lite
 GEMINI_MODEL_FALLBACK=gemini-2.5-flash
 GEMINI_FAILOVER_ENABLED=true
-GEMINI_MAX_ATTEMPTS_PER_KEY=2
-GEMINI_REQUEST_TIMEOUT_SECONDS=120
-GEMINI_KEY_COOLDOWN_SECONDS=900
-GEMINI_BACKOFF_BASE_SECONDS=2
-GEMINI_MAX_BACKOFF_SECONDS=60
-```
-
-Optional:
-
-```text
-TELEGRAM_GENERAL_THREAD_ID
-TELEGRAM_ADMIN_CHAT_ID
-TELEGRAM_ADMIN_USER_IDS
+GEMINI_FACTUAL_TEMPERATURE=0.3
+QUIZ_CLAIM_TIMEOUT_MINUTES=20
+APP_TIMEZONE=Asia/Kolkata
 DEV_ALLOW_UNVERIFIED_TELEGRAM=false
-CORS_ALLOWED_ORIGINS
 ```
 
-Keep `DEV_ALLOW_UNVERIFIED_TELEGRAM=false` in production. Start the web service with:
+Keep `DEV_ALLOW_UNVERIFIED_TELEGRAM=false` in every public environment. Set
+`CORS_ALLOWED_ORIGINS` only when the frontend is intentionally hosted on a
+different trusted origin; same-origin deployment needs no CORS list.
+
+Check `GET /api/health`. It should show safe configured booleans,
+`application_version=3.0.0`, and
+`migration_version=20260718015054`; it never proves the database migration was
+applied, so preflight remains mandatory.
+
+## 4. Configure forum topics and BotFather
+
+1. Give the bot permission to post in the forum group.
+2. With `TELEGRAM_ADMIN_USER_IDS` configured, run
+   `python scripts/discover_topic_ids.py`.
+3. In each real forum topic, send `/topicid <canonical-key>`. Build the private
+   13-key JSON mapping from the replies.
+4. In BotFather send `/myapps`, select the app belonging to
+   `TELEGRAM_BOT_USERNAME`, and select the exact short name in
+   `MINIAPP_SHORT_NAME`.
+5. Choose **Edit Web App URL** and enter the HTTPS FastAPI root. Updating only
+   Main Mini App/Open App does not change named-app deep links.
+6. Fully close Telegram's Mini App cache and reopen a quiz.
+
+Server logs should show `GET /api/quiz/<quiz-id>` and, after submission,
+`POST /api/quiz/<quiz-id>/submit`. If they are absent, Telegram is opening a
+different named-app deployment.
+
+## 5. Controlled production verification
+
+1. Run `python bot.py --mode preflight`.
+2. Run the CI commands locally or wait for the PR check: Ruff, mypy, pytest,
+   migration contract, and public-data scan.
+3. Run one due/manual subject: `python bot.py --mode subject-quiz --subject history`.
+4. Verify one `quiz_runs` row owns a non-expired lease while processing and
+   ends `posted` with ten mappings in `quiz_questions`.
+5. Confirm the Telegram post appears only once in the correct thread and opens
+   the subject-scoped quiz ID.
+6. Confirm live mode renders ten questions; submit with a new `attemptId`.
+7. Verify one `quiz_attempts` row and exactly ten
+   `quiz_attempt_answers` rows. Retry the identical request and confirm no new
+   row; retake with a new ID and confirm a second parent attempt.
+8. Check quiz/global leaderboard pages and confirm response rows contain no
+   Telegram IDs, first/last names, or non-opted-in usernames.
+9. Stop the API temporarily and open an existing static pack. Confirm the UI
+   labels read-only fallback and cannot submit or claim a score.
+10. Run `python scripts/check_public_data.py`; it must pass.
+11. Trigger two manual runs for the same date/subject close together. One may
+    proceed; the other must report that another worker owns the active lease.
+12. Run Supabase advisors again and investigate every error/warning. Expected
+    RLS-without-policy information is documented in the migration guide.
+
+For provider failover, use a disposable test environment rather than changing
+production credentials. Confirm a key-specific failure switches providers and
+a successful primary call does not call the secondary. Never log or search by
+printing a real key.
+
+## 6. Recovery and rollback
+
+If Telegram posting fails after generation:
 
 ```bash
-uvicorn app:app --host 0.0.0.0 --port $PORT
+python bot.py --mode subject-quiz --subject history --force-post
 ```
 
-`MINIAPP_SHORT_NAME` makes posted buttons use a named Mini App URL such as
-`https://t.me/<bot>/<short-name>?startapp=<quiz-id>`. Configure that exact named
-app in BotFather; changing only the bot's Main Mini App does not update it:
+This reuses the stored checksum-valid pack. If status is `posting_unknown`,
+first inspect the target forum thread: the request may have reached Telegram
+even though the worker lost the response. Automatic recovery deliberately will
+not repost an ambiguous outcome. Use `--force-regenerate` only when content
+itself is invalid and explicit replacement is intended. At 20:30 IST, recovery
+skips future/posted subjects and takes over only an expired unambiguous lease.
 
-1. Send `/myapps` to BotFather.
-2. Select the app belonging to `TELEGRAM_BOT_USERNAME`.
-3. Select the app whose short name equals `MINIAPP_SHORT_NAME`.
-4. Choose **Edit Web App URL** and enter the Render FastAPI root, including
-   `https://` (for example, `https://your-service.onrender.com/`).
-5. Save, close the open Telegram Mini App completely, and reopen the quiz.
+For an application rollback, deploy the previous commit but retain the
+additive database objects. Do not drop new attempt tables after they contain
+data. A forward corrective migration is safer than destructive DDL. A full
+database restore is the only complete rollback and loses every write after the
+backup timestamp; see `docs/MIGRATION_20260718.md`.
 
-After reopening, Render application logs must show `GET /api/quiz/<quiz-id>`;
-after submission they must show `POST /api/quiz/<quiz-id>/submit` with `200`.
-If those requests are absent, Telegram is still opening a different Mini App
-deployment. Secrets must remain server-side environment values.
+## 7. Known deployment limits
 
-## 4. Production verification
-
-1. Run `python scripts/discover_topic_ids.py`. In every Telegram forum thread send `/topicid <canonical-key>`, then combine the 13 snippets into `TELEGRAM_FORUM_TOPICS_JSON`.
-2. Run `python bot.py --mode preflight`; it prints only configured true/false flags.
-3. Run `python bot.py --mode subject-quiz --subject history`.
-4. In `quiz_runs`, confirm `20260710-history`-style ID, `question_count=10`, checksum, `status=posted`, and the returned numeric chat/thread/message IDs.
-5. Confirm the Telegram message is inside the ইতিহাস thread and opens `startapp=<date>-history`.
-6. In the Mini App, confirm exactly 10 questions render and the loading/retry states work.
-7. Submit `{initData, attemptId, answers}`. Confirm the authenticated Telegram user in `users` and a new `quiz_submissions` row.
-8. Retake with a new `attemptId`; confirm a second row is stored and the result reports `attempt_number` and `best_score`.
-9. Retry the same request with the same `attemptId`; confirm it returns the same result without adding a row.
-10. Open `/api/quiz/<quiz-id>/leaderboard`; verify each user appears once with their latest score and `attempts_count`.
-11. Fetch `/api/quiz/<quiz-id>` and the matching `quizzes/*.json`; verify there are no correct indexes or explanations.
-12. Temporarily replace only `GEMINI_API_KEY_PRIMARY` with an invalid value and run a new due test subject. Confirm safe logs show primary key failure followed by `provider=secondary` success. Never paste either key into logs or commands captured by history.
-13. Restore the real primary key, run another new subject/date, and confirm primary succeeds without calling secondary.
-14. Search logs for the exact known secret values using the hosting provider's private log search. There must be no matches; rotate a credential immediately if one is found.
-
-## 5. Provider-project checks
-
-In Google AI Studio/Cloud Console, verify each environment value belongs to its intended separate project, both APIs are enabled, and both projects can access the configured primary/fallback models. The bot does not rotate successful calls and makes no claim that two keys multiply quota.
-
-## 6. Submission and recovery checks
-
-Every new intentional retake uses a new `attemptId` and creates a submission.
-An identical HTTP retry reuses its `attemptId`, returns the stored result, and
-does not create a duplicate. The dashboard displays the user's latest score and
-attempt count; a new completion replaces the displayed score without deleting
-history. Production browser-supplied user IDs are ignored; only verified
-Telegram `initData` is trusted.
-
-For a posting-failure drill, block Telegram temporarily, run a subject, restore Telegram, and use `--force-post`. Confirm no new Gemini generation log appears. At 20:30 IST, recovery skips `posted` and future subjects, reuses `generated`/`posting_failed` packs, and returns nonzero only if retryable failures remain unresolved.
+- Static quiz files are still committed by each scheduled subject job, so the
+  repository may receive up to 13 small fallback commits per day. Consolidated
+  storage/commit batching belongs in a later operations phase.
+- This phase has no learning-resource/YouTube integration and therefore needs
+  no YouTube key.
+- Post-migration advisor results cannot be known until an operator applies the
+  migration; rerunning both advisors is a required deployment gate.

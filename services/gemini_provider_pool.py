@@ -8,12 +8,13 @@ import random
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Callable
+from typing import Any, Callable, Protocol, cast
 
 from google import genai
 from google.genai import types
 
 from config import settings
+from errors import QuizGenerationError
 
 LOG = logging.getLogger("services.gemini_pool")
 
@@ -24,6 +25,14 @@ MODEL_UNAVAILABLE = "model_unavailable"
 SAFETY_BLOCK = "safety_block"
 
 
+class _ModelsClient(Protocol):
+    def generate_content(self, **kwargs: Any) -> Any: ...
+
+
+class _GeminiClient(Protocol):
+    models: _ModelsClient
+
+
 @dataclass(slots=True)
 class Provider:
     label: str
@@ -32,7 +41,7 @@ class Provider:
     cooldown_until: datetime | None = None
 
 
-class GeminiGenerationError(RuntimeError):
+class GeminiGenerationError(QuizGenerationError):
     def __init__(self, category: str, attempts: list[dict], *, retryable: bool):
         super().__init__(f"Gemini generation failed safely: {category}")
         self.category = category
@@ -45,7 +54,7 @@ class GeminiProviderPool:
         self,
         *,
         environ: dict[str, str] | None = None,
-        client_factory: Callable[[str], object] | None = None,
+        client_factory: Callable[[str], _GeminiClient] | None = None,
         sleep: Callable[[float], None] = time.sleep,
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
         jitter: Callable[[], float] = random.random,
@@ -189,14 +198,14 @@ class GeminiProviderPool:
             return None
 
     def _call(self, provider: Provider, model: str, prompt: str, response_schema: dict) -> str:
-        client = self._client_factory(provider.api_key)
+        client = cast(_GeminiClient, self._client_factory(provider.api_key))
         response = client.models.generate_content(
             model=model,
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
                 response_schema=response_schema,
-                temperature=0.8,
+                temperature=settings.GEMINI_FACTUAL_TEMPERATURE,
             ),
         )
         return response.text
@@ -217,12 +226,14 @@ def _safe_status(exc: Exception) -> int | None:
             except Exception:
                 value = None
         try:
-            return int(value)
+            if value is not None:
+                return int(value)
         except (TypeError, ValueError):
             pass
     response = getattr(exc, "response", None)
     try:
-        return int(getattr(response, "status_code", None))
+        value = getattr(response, "status_code", None)
+        return int(value) if value is not None else None
     except (TypeError, ValueError):
         return None
 
@@ -231,7 +242,10 @@ def _retry_after(exc: Exception | None) -> float | None:
     response = getattr(exc, "response", None) if exc else None
     headers = getattr(response, "headers", {}) or {}
     try:
-        value = float(headers.get("Retry-After"))
+        raw_value = headers.get("Retry-After")
+        if raw_value is None:
+            return None
+        value = float(raw_value)
         return max(0.0, value)
     except (TypeError, ValueError):
         return None

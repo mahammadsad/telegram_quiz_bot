@@ -5,8 +5,10 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections import Counter
 from typing import Any
 
+from config.settings import QUIZ_DIFFICULTY_DISTRIBUTION
 from utils.hashing import normalize_text, question_hash
 
 QUESTION_COUNT = 10
@@ -18,7 +20,13 @@ class QuizValidationError(ValueError):
     pass
 
 
-def validate_questions(raw_questions: list[dict], subject_key: str, chapter: str) -> list[dict]:
+def validate_questions(
+    raw_questions: list[dict],
+    subject_key: str,
+    chapter: str,
+    *,
+    enforce_composition: bool = True,
+) -> list[dict]:
     if not isinstance(raw_questions, list) or len(raw_questions) != QUESTION_COUNT:
         count = len(raw_questions) if isinstance(raw_questions, list) else 0
         raise QuizValidationError(f"A quiz must contain exactly 10 questions; received {count}.")
@@ -79,7 +87,22 @@ def validate_questions(raw_questions: list[dict], subject_key: str, chapter: str
             "difficulty": difficulty,
             "question_id": _text(raw.get("question_id")) or question_hash(text),
         })
+    if enforce_composition:
+        _validate_quiz_composition(clean)
     return clean
+
+
+def _validate_quiz_composition(questions: list[dict]) -> None:
+    difficulty_counts = Counter(item["difficulty"] for item in questions)
+    if difficulty_counts != Counter(QUIZ_DIFFICULTY_DISTRIBUTION):
+        expected = ", ".join(
+            f"{count} {difficulty}" for difficulty, count in QUIZ_DIFFICULTY_DISTRIBUTION.items()
+        )
+        raise QuizValidationError(f"Quiz difficulty distribution must be {expected}.")
+
+    position_counts = Counter(item["correct_index"] for item in questions)
+    if sorted(position_counts.values()) != [2, 2, 3, 3] or set(position_counts) != set(range(4)):
+        raise QuizValidationError("Correct answers must be balanced across all four option positions.")
 
 
 def content_checksum(quiz_id: str, subject_key: str, chapter: str, questions: list[dict]) -> str:

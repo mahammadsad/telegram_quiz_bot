@@ -32,6 +32,7 @@ from utils.quiz_ids import parse_quiz_id
 
 ROOT = Path(__file__).resolve().parent
 app = FastAPI(title="WB Exam Quiz Pack API", version="3.0.0")
+MIGRATION_VERSION = "20260718015054"
 
 if CORS_ALLOWED_ORIGINS:
     app.add_middleware(
@@ -95,6 +96,8 @@ def health() -> dict:
         topics_error = _forum_topics_error_code(exc)
     return {
         "ok": True,
+        "application_version": app.version,
+        "migration_version": MIGRATION_VERSION,
         "timezone": APP_TIMEZONE,
         "supabase_configured": bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY")),
         "gemini_primary_configured": bool(os.environ.get("GEMINI_API_KEY_PRIMARY") or os.environ.get("GEMINI_API_KEY")),
@@ -112,7 +115,7 @@ def get_quiz(quiz_id: str) -> dict:
     clean_quiz_id = _clean_quiz_id(quiz_id)
     try:
         pack = quiz_pack_service.get_quiz_pack(clean_quiz_id)
-    except (Exception, SystemExit) as exc:
+    except Exception as exc:
         legacy = _load_public_fallback(clean_quiz_id)
         if legacy:
             return legacy
@@ -142,24 +145,34 @@ def submit_quiz(quiz_id: str, payload: SubmitQuizRequest) -> dict:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except (Exception, SystemExit) as exc:
+    except Exception as exc:
         raise HTTPException(status_code=503, detail="স্কোর জমা করা যায়নি। একটু পরে আবার চেষ্টা করুন।") from exc
 
 
 @app.get("/api/quiz/{quiz_id}/leaderboard")
-def quiz_leaderboard(quiz_id: str, limit: int = 20) -> dict:
+def quiz_leaderboard(quiz_id: str, limit: int = 20, offset: int = 0) -> dict:
     clean_quiz_id = _clean_quiz_id(quiz_id)
     try:
-        return stats_repo.quiz_leaderboard(clean_quiz_id, limit=max(1, min(limit, 100)))
-    except (Exception, SystemExit) as exc:
+        return stats_repo.quiz_leaderboard(
+            clean_quiz_id,
+            limit=max(1, min(limit, 100)),
+            offset=max(0, offset),
+        )
+    except Exception as exc:
         raise HTTPException(status_code=503, detail="Leaderboard সাময়িকভাবে পাওয়া যাচ্ছে না।") from exc
 
 
 @app.get("/api/leaderboard")
-def leaderboard(limit: int = 20) -> dict:
+def leaderboard(limit: int = 20, offset: int = 0) -> dict:
     try:
-        return {"rows": stats_repo.leaderboard(limit=max(1, min(limit, 100))), "unavailable": False}
-    except (Exception, SystemExit):
+        return {
+            **stats_repo.leaderboard(
+                limit=max(1, min(limit, 100)),
+                offset=max(0, offset),
+            ),
+            "unavailable": False,
+        }
+    except Exception:
         return {"rows": [], "unavailable": True}
 
 
@@ -195,6 +208,7 @@ def _load_public_fallback(quiz_id: str) -> dict | None:
     # defense while historical deployments are being migrated.
     return {
         "meta": payload.get("meta") or {"quiz_id": quiz_id},
+        "capabilities": {"submission": False, "source": "static_fallback"},
         "legacy": len(quiz_id) == 8,
         "qs": [{"q": item.get("q") or item.get("question"), "o": item.get("o") or item.get("options")} for item in questions],
     }

@@ -5,13 +5,13 @@ from types import SimpleNamespace
 import pytest
 
 from services.gemini_provider_pool import (
-    GeminiGenerationError,
-    GeminiProviderPool,
     KEY_FAILURE,
     MODEL_UNAVAILABLE,
     NON_RETRYABLE,
     SAFETY_BLOCK,
     TRANSIENT,
+    GeminiGenerationError,
+    GeminiProviderPool,
 )
 
 
@@ -62,6 +62,7 @@ def test_primary_success_never_calls_secondary():
     text, metadata = generate(pool)
     assert text == "[]" and metadata["provider"] == "primary"
     assert len(clients["secondary-secret"].models.calls) == 0
+    assert clients["primary-secret"].models.calls[0]["config"].temperature == 0.3
 
 
 @pytest.mark.parametrize("error", [ApiError(429, "RESOURCE_EXHAUSTED"), ApiError(503), TimeoutError("socket timeout")])

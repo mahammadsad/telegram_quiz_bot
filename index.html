@@ -14,13 +14,14 @@
 
 <style>
   :root{
-    --bg:#f5f7fb;
-    --surface:#ffffff;
+    color-scheme:light dark;
+    --bg:var(--tg-theme-bg-color,#f5f7fb);
+    --surface:var(--tg-theme-secondary-bg-color,#ffffff);
     --surface-2:#eef6f4;
-    --ink:#17202a;
-    --muted:#627084;
+    --ink:var(--tg-theme-text-color,#17202a);
+    --muted:var(--tg-theme-hint-color,#627084);
     --line:#d9e0ea;
-    --primary:#0f766e;
+    --primary:var(--tg-theme-button-color,#0f766e);
     --primary-strong:#0b5f59;
     --accent:#2563eb;
     --danger:#d14343;
@@ -43,6 +44,7 @@
     -webkit-font-smoothing:antialiased;
   }
   button{font:inherit}
+  button,.btn,.option{min-height:44px}
   .app{
     width:min(100%,760px);
     margin:0 auto;
@@ -277,6 +279,15 @@
     border-radius:var(--radius);
     line-height:1.6;
   }
+  .fallback-box{
+    margin-top:16px;
+    border:1px solid #e6b85c;
+    background:#fff9e9;
+    color:#6f4b08;
+    padding:14px;
+    border-radius:var(--radius);
+    line-height:1.6;
+  }
   @media (max-width:560px){
     .app{padding:12px 10px 86px}
     .brand h1{font-size:20px}
@@ -301,12 +312,12 @@
     <div class="pill num" id="quiz-id-pill">লোড হচ্ছে</div>
   </header>
 
-  <section id="screen-loading" class="surface section center">
+  <section id="screen-loading" class="surface section center" aria-live="polite">
     <div class="loader"></div>
     <p class="muted" id="loading-message">কুইজ তৈরি/লোড হচ্ছে...</p>
   </section>
 
-  <section id="screen-error" class="surface section hidden">
+  <section id="screen-error" class="surface section hidden" aria-live="assertive">
     <div class="error-box" id="error-message">কুইজ পাওয়া যায়নি।</div>
     <button class="btn btn-primary" id="btn-retry" style="margin-top:14px;">আবার চেষ্টা করুন</button>
   </section>
@@ -319,6 +330,14 @@
       <div class="meta"><b>সময়</b><span id="intro-time" class="num">-</span></div>
     </div>
     <button class="btn btn-primary browser-only" id="btn-start" style="margin-top:18px;">কুইজ শুরু করুন</button>
+    <div class="fallback-box hidden" id="fallback-box" role="status">
+      <strong>এটি শুধু জরুরি read-only কপি।</strong><br />
+      এখন উত্তর যাচাই বা স্কোর সংরক্ষণ করা যাবে না। লাইভ API ফিরে এলে কুইজ শুরু করুন।
+      <div class="actions">
+        <button class="btn btn-primary" id="btn-fallback-retry">লাইভ কুইজ আবার চেষ্টা করুন</button>
+        <button class="btn btn-secondary" id="btn-preview">শুধু প্রশ্ন দেখুন</button>
+      </div>
+    </div>
   </section>
 
   <section id="screen-quiz" class="surface hidden">
@@ -389,6 +408,7 @@
   var quizId = getQuizId();
   var quiz = null;
   var legacyLocal = false;
+  var readOnlyMode = false;
   var answers = [];
   var current = 0;
   var totalSeconds = 0;
@@ -409,6 +429,8 @@
   };
 
   byId("btn-start").addEventListener("click", startQuiz);
+  byId("btn-fallback-retry").addEventListener("click", loadQuiz);
+  byId("btn-preview").addEventListener("click", function(){ startQuiz(true); });
   byId("btn-prev").addEventListener("click", goPrev);
   byId("btn-next").addEventListener("click", nextOrFinish);
   byId("btn-retake").addEventListener("click", startQuiz);
@@ -417,7 +439,7 @@
 
   if (isTelegram) {
     tg.MainButton.onClick(function(){
-      if (screen === "intro") startQuiz();
+      if (screen === "intro") legacyLocal ? loadQuiz() : startQuiz();
       else if (screen === "quiz") nextOrFinish();
       else if (screen === "result") openDashboard();
     });
@@ -426,6 +448,15 @@
       else if (screen === "result") show("intro");
     });
   }
+
+  document.addEventListener("keydown", function(event){
+    if (screen !== "quiz") return;
+    if (["1","2","3","4"].indexOf(event.key) >= 0) {
+      answers[current] = Number(event.key) - 1;
+      renderQuestion();
+    } else if (event.key === "ArrowLeft") goPrev();
+    else if (event.key === "ArrowRight") nextOrFinish();
+  });
 
   if (!quizId) {
     showError("কুইজ আইডি পাওয়া যায়নি। Telegram পোস্টের কুইজ বাটন থেকে খুলুন।");
@@ -463,11 +494,11 @@
     if (!isTelegram) return;
     if (screen === "intro") {
       tg.BackButton.hide();
-      tg.MainButton.setParams({text:"কুইজ শুরু করুন", is_visible:true, color:"#0f766e", text_color:"#ffffff"});
+      tg.MainButton.setParams({text:legacyLocal ? "লাইভ কুইজ আবার চেষ্টা করুন" : "কুইজ শুরু করুন", is_visible:true, color:"#0f766e", text_color:"#ffffff"});
     } else if (screen === "quiz") {
       if (current > 0) tg.BackButton.show(); else tg.BackButton.hide();
       var last = quiz && current === quiz.qs.length - 1;
-      tg.MainButton.setParams({text:last ? "সাবমিট করুন" : "পরবর্তী", is_visible:true, color:"#0f766e", text_color:"#ffffff"});
+      tg.MainButton.setParams({text:last ? (readOnlyMode ? "শেষ করুন" : "সাবমিট করুন") : "পরবর্তী", is_visible:true, color:"#0f766e", text_color:"#ffffff"});
     } else if (screen === "result") {
       tg.BackButton.show();
       tg.MainButton.setParams({text:"ড্যাশবোর্ড দেখুন", is_visible:true, color:"#2563eb", text_color:"#ffffff"});
@@ -488,7 +519,7 @@
       .then(function(data){
         if (!data.qs || data.qs.length !== 10) throw new Error("Quiz must contain exactly 10 questions");
         quiz = data;
-        legacyLocal = false;
+        legacyLocal = !(data.capabilities && data.capabilities.submission === true);
         answers = quiz.qs.map(function(){ return null; });
         renderIntro();
       })
@@ -535,10 +566,17 @@
     byId("intro-subject").textContent = meta.subject || "মক টেস্ট";
     byId("intro-count").textContent = bn(quiz.qs.length) + "টি";
     byId("intro-time").textContent = bn(Math.max(5, quiz.qs.length)) + " মিনিট";
+    byId("fallback-box").classList.toggle("hidden", !legacyLocal);
+    byId("btn-start").classList.toggle("hidden", legacyLocal);
     show("intro");
   }
 
-  function startQuiz(){
+  function startQuiz(previewOnly){
+    if (legacyLocal && previewOnly !== true) {
+      loadQuiz();
+      return;
+    }
+    readOnlyMode = legacyLocal;
     attemptId = newAttemptId();
     answers = quiz.qs.map(function(){ return null; });
     current = 0;
@@ -574,7 +612,7 @@
       wrap.appendChild(button);
     });
     byId("btn-prev").disabled = current === 0;
-    byId("btn-next").textContent = current === quiz.qs.length - 1 ? "সাবমিট করুন" : "পরবর্তী";
+    byId("btn-next").textContent = current === quiz.qs.length - 1 ? (readOnlyMode ? "শেষ করুন" : "সাবমিট করুন") : "পরবর্তী";
     syncTelegramButtons();
   }
 
@@ -615,6 +653,12 @@
 
   function finishQuiz(){
     if (submitting) return;
+    if (readOnlyMode) {
+      retryAction = loadQuiz;
+      byId("btn-retry").textContent = "লাইভ কুইজ আবার চেষ্টা করুন";
+      showError("Read-only কপি শেষ হয়েছে। এখানে উত্তর যাচাই বা স্কোর সংরক্ষণ করা হয়নি।");
+      return;
+    }
     submitting = true;
     retryAction = finishQuiz;
     clearInterval(timerHandle);

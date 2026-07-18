@@ -8,13 +8,13 @@ import json
 import logging
 import os
 import sys
+import uuid
 from datetime import date, datetime, timezone
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import requests
 
-from database.client import get_client
 from config.settings import (
     APP_TIMEZONE,
     MINIAPP_SHORT_NAME,
@@ -29,10 +29,17 @@ from config.settings import (
     require_env,
 )
 from config.subjects import QUIZ_SUBJECTS, get_subject
+from database.client import get_client
+from errors import TelegramPostingError
 from services import chapter_selector, quiz_pack_service
-from services.gemini_provider_pool import GeminiGenerationError, GeminiProviderPool
-from services.question_validation import QUESTION_COUNT, QuizValidationError, checksum_for_pack, content_checksum, validate_questions
-from storage import chapter_history_repo, polls_repo, quiz_runs_repo
+from services.gemini_provider_pool import GeminiProviderPool
+from services.question_validation import (
+    QUESTION_COUNT,
+    QuizValidationError,
+    checksum_for_pack,
+    validate_questions,
+)
+from storage import chapter_history_repo, quiz_runs_repo
 from telegram.routing import ForumRouter
 from utils.local_time import local_today
 from utils.quiz_ids import build_quiz_id
@@ -75,8 +82,10 @@ Rules:
 4. English tests may contain English tested text; Bengali instructions and explanations remain mandatory.
 5. Supply exactly four unique non-empty options and correct_index 0..3.
 6. Every object must repeat subject_key exactly as {subject.key} and chapter exactly as {chapter}.
-7. Use difficulty easy, medium, or hard. Avoid duplicates, truncation, answer-revealing wording, and ambiguity.
-8. Questions must suit WBCS, WBPSC, WBP, SSC, Railway, Banking, or TET preparation.
+7. Use exactly 3 easy, 5 medium, and 2 hard questions.
+8. Balance correct_index across all four positions: two positions appear twice and two positions appear three times. Avoid predictable sequences.
+9. Avoid duplicates, truncation, answer-revealing wording, and ambiguity.
+10. Questions must suit WBCS, WBPSC, WBP, SSC, Railway, Banking, or TET preparation.
 """
 
 
@@ -118,7 +127,7 @@ def valid_saved_pack(quiz_id: str, run: dict | None = None) -> dict | None:
     if not pack or len(pack.get("items") or []) != QUESTION_COUNT:
         return None
     meta = pack.get("meta") or {}
-    subject_key = meta.get("subject_key") or meta.get("subject")
+    subject_key = str(meta.get("subject_key") or meta.get("subject") or "")
     chapter = meta.get("chapter") or ""
     raw = []
     for item in pack["items"]:
@@ -134,7 +143,7 @@ def valid_saved_pack(quiz_id: str, run: dict | None = None) -> dict | None:
             "difficulty": question.get("difficulty"),
         })
     try:
-        validate_questions(raw, subject_key, chapter)
+        validate_questions(raw, subject_key, chapter, enforce_composition=False)
     except (QuizValidationError, ValueError):
         return None
     checksum = checksum_for_pack(pack)
@@ -194,10 +203,14 @@ def run_subject_quiz(
     thread_id = router.for_subject(subject_key)  # validated before spending Gemini quota
     target_date = target_date or local_today()
     quiz_id = build_quiz_id(target_date, subject_key)
+    worker_id = _worker_id()
     run = quiz_runs_repo.get(quiz_id)
     if run and run.get("status") == "posted" and not force_post and not force_regenerate:
         LOG.info("QUIZ_ALREADY_POSTED subject=%s quiz_id=%s", subject_key, quiz_id)
         return "already_posted"
+    if run and run.get("status") in {"posting", "posting_unknown"} and not force_post and not force_regenerate:
+        LOG.warning("QUIZ_POST_OUTCOME_REQUIRES_REVIEW subject=%s quiz_id=%s", subject_key, quiz_id)
+        return "posting_outcome_unknown"
 
     pack = None if force_regenerate else valid_saved_pack(quiz_id, run)
     used_saved_pack = pack is not None
@@ -206,23 +219,47 @@ def run_subject_quiz(
 
     if pack is None:
         _require_gemini_provider()
-        chapter = chapter_selector.select_chapter(subject_key, target_date)
-        quiz_runs_repo.upsert({
-            "quiz_id": quiz_id,
-            "quiz_date": target_date.isoformat(),
-            "subject_key": subject_key,
-            "subject_display_name": subject.telegram_display_name,
-            "internal_subject": subject.internal_subject,
-            "chapter": chapter,
-            "status": "generating",
-            "question_count": 0,
-        })
+        chapter = (
+            chapter_selector.select_chapter(subject_key, target_date)
+            if not run or force_regenerate
+            else str(run.get("chapter") or chapter_selector.select_chapter(subject_key, target_date))
+        )
+        if not run:
+            quiz_runs_repo.upsert({
+                "quiz_id": quiz_id,
+                "quiz_date": target_date.isoformat(),
+                "subject_key": subject_key,
+                "subject_display_name": subject.telegram_display_name,
+                "internal_subject": subject.internal_subject,
+                "chapter": chapter,
+                "status": "generating",
+                "question_count": 0,
+            })
+        if not quiz_runs_repo.claim(
+            quiz_id,
+            worker_id,
+            "generating",
+            allow_completed=force_regenerate,
+        ):
+            LOG.info("QUIZ_RUN_ALREADY_CLAIMED subject=%s quiz_id=%s", subject_key, quiz_id)
+            return "already_claimed"
+        if force_regenerate and run:
+            quiz_runs_repo.update_status(
+                quiz_id,
+                "generating",
+                claimed_by=worker_id,
+                chapter=chapter,
+                question_count=0,
+            )
         try:
             questions, generation = generate_mcqs(subject_key, chapter, pool=pool)
-            # A prior interrupted save may have left partial delivery rows.
-            # Remove only this quiz's delivery set after replacement content
-            # has validated, then write all ten rows afresh.
-            polls_repo.delete_by_run_slot(quiz_id, "mock_test")
+            if not quiz_runs_repo.claim(
+                quiz_id,
+                worker_id,
+                "generating",
+                allow_completed=force_regenerate,
+            ):
+                raise RuntimeError("Quiz generation lease expired and was claimed by another worker.")
             pack = quiz_pack_service.record_quiz_pack(
                 quiz_id,
                 questions,
@@ -235,11 +272,13 @@ def run_subject_quiz(
                     "generation_model": generation["model"],
                 },
                 chat_id=_chat_id_as_int(TELEGRAM_CHAT_ID),
+                worker_id=worker_id,
+                replace=force_regenerate,
             )
-            checksum = checksum_for_pack(pack)
             quiz_runs_repo.update_status(
                 quiz_id,
-                "generating",
+                "generated",
+                claimed_by=worker_id,
                 question_count=QUESTION_COUNT,
                 generation_provider=generation["provider"],
                 generation_model=generation["model"],
@@ -251,7 +290,6 @@ def run_subject_quiz(
             )
             chapter_history_repo.record(subject_key, chapter, target_date.isoformat(), quiz_id)
             export_static_quiz_json(pack)
-            quiz_runs_repo.update_status(quiz_id, "generated", content_checksum=checksum)
             LOG.info(
                 "GEMINI_GENERATION_SUCCESS subject=%s quiz_id=%s provider=%s model=%s attempts=%s question_count=10",
                 subject_key, quiz_id, generation["provider"], generation["model"], generation["attempts"],
@@ -259,20 +297,33 @@ def run_subject_quiz(
         except Exception as exc:
             category = getattr(exc, "category", "validation_failed" if isinstance(exc, QuizValidationError) else "generation_error")
             safe_attempts = getattr(exc, "attempts", [])
-            quiz_runs_repo.update_status(
-                quiz_id,
-                "generation_failed",
-                last_error_category=category,
-                last_error_at=datetime.now(timezone.utc).isoformat(),
-                providers_attempted=list(dict.fromkeys(row.get("provider") for row in safe_attempts if row.get("provider"))),
-                generation_attempt_count=len(safe_attempts),
-                retryable=bool(getattr(exc, "retryable", False)),
-            )
+            try:
+                quiz_runs_repo.update_status(
+                    quiz_id,
+                    "generation_failed",
+                    claimed_by=worker_id,
+                    release_claim=True,
+                    last_error_category=category,
+                    last_error_at=datetime.now(timezone.utc).isoformat(),
+                    providers_attempted=list(dict.fromkeys(row.get("provider") for row in safe_attempts if row.get("provider"))),
+                    generation_attempt_count=len(safe_attempts),
+                    retryable=bool(getattr(exc, "retryable", False)),
+                )
+            except Exception:
+                LOG.warning("QUIZ_FAILURE_STATUS_UPDATE_SKIPPED subject=%s quiz_id=%s", subject_key, quiz_id)
             send_failure_alert(subject_key, quiz_id, router)
             raise
 
     chapter = (pack.get("meta") or {}).get("chapter") or (run or {}).get("chapter") or ""
-    quiz_runs_repo.update_status(quiz_id, "posting")
+    if not quiz_runs_repo.claim(
+        quiz_id,
+        worker_id,
+        "posting",
+        allow_completed=force_post or force_regenerate,
+    ):
+        LOG.info("QUIZ_POST_ALREADY_CLAIMED subject=%s quiz_id=%s", subject_key, quiz_id)
+        return "already_claimed"
+    telegram_acknowledged = False
     try:
         response = telegram_api("sendMessage", {
             "chat_id": TELEGRAM_CHAT_ID,
@@ -283,9 +334,12 @@ def run_subject_quiz(
             "reply_markup": {"inline_keyboard": [[{"text": "কুইজ শুরু করুন", "url": build_miniapp_url(quiz_id)}]]},
         })
         message = response.get("result") or {}
+        telegram_acknowledged = True
         quiz_runs_repo.update_status(
             quiz_id,
             "posted",
+            claimed_by=worker_id,
+            release_claim=True,
             posted_at=datetime.now(timezone.utc).isoformat(),
             telegram_chat_id=(message.get("chat") or {}).get("id", _chat_id_as_int(TELEGRAM_CHAT_ID)),
             telegram_thread_id=message.get("message_thread_id", thread_id),
@@ -300,13 +354,19 @@ def run_subject_quiz(
             LOG.warning("QUESTION_USAGE_UPDATE_FAILED subject=%s quiz_id=%s", subject_key, quiz_id)
         LOG.info("TELEGRAM_QUIZ_POSTED subject=%s quiz_id=%s thread_id_configured=true message_id=%s", subject_key, quiz_id, message.get("message_id"))
         return "posted_from_saved_quiz" if used_saved_pack else "generated_and_posted"
-    except Exception:
-        quiz_runs_repo.update_status(
-            quiz_id,
-            "posting_failed",
-            last_error_category="telegram_posting_failed",
-            last_error_at=datetime.now(timezone.utc).isoformat(),
-        )
+    except Exception as exc:
+        delivery_uncertain = telegram_acknowledged or bool(getattr(exc, "delivery_uncertain", False))
+        try:
+            quiz_runs_repo.update_status(
+                quiz_id,
+                "posting_unknown" if delivery_uncertain else "posting_failed",
+                claimed_by=worker_id,
+                release_claim=True,
+                last_error_category="telegram_delivery_unknown" if delivery_uncertain else "telegram_posting_failed",
+                last_error_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except Exception:
+            LOG.warning("TELEGRAM_FAILURE_STATUS_UPDATE_SKIPPED subject=%s quiz_id=%s", subject_key, quiz_id)
         raise
 
 
@@ -319,7 +379,7 @@ def recover_missed_quizzes(*, now: datetime | None = None, pool: GeminiProviderP
     summary: dict[str, str] = {}
     unresolved = False
     for subject in QUIZ_SUBJECTS:
-        if subject.scheduled_time_ist > current_hhmm:
+        if not subject.scheduled_time_ist or subject.scheduled_time_ist > current_hhmm:
             summary[subject.key] = "not_due"
             continue
         quiz_id = build_quiz_id(today, subject.key)
@@ -330,7 +390,11 @@ def recover_missed_quizzes(*, now: datetime | None = None, pool: GeminiProviderP
         had_saved = bool(valid_saved_pack(quiz_id, run))
         try:
             result = run_subject_quiz(subject.key, target_date=today, pool=pool)
-            summary[subject.key] = "posted_from_saved_quiz" if had_saved else "recovered_and_posted"
+            if result in {"already_claimed", "posting_outcome_unknown"}:
+                summary[subject.key] = result
+                unresolved = True
+            else:
+                summary[subject.key] = "posted_from_saved_quiz" if had_saved else result
         except Exception as exc:
             summary[subject.key] = "generation_failed_retryable" if getattr(exc, "retryable", True) else "failed_non_retryable"
             unresolved = unresolved or getattr(exc, "retryable", True)
@@ -343,13 +407,19 @@ def telegram_api(method: str, payload: dict) -> dict:
     try:
         response = requests.post(TELEGRAM_API_BASE.format(token=token, method=method), json=payload, timeout=30)
     except requests.RequestException:
-        raise RuntimeError(f"Telegram {method} network request failed.") from None
+        raise TelegramPostingError(
+            f"Telegram {method} network request failed.",
+            delivery_uncertain=True,
+        ) from None
     try:
         result = response.json()
     except ValueError as exc:
-        raise RuntimeError(f"Telegram {method} failed with status {response.status_code}.") from exc
+        raise TelegramPostingError(
+            f"Telegram {method} returned an unreadable response with status {response.status_code}.",
+            delivery_uncertain=response.ok,
+        ) from exc
     if not response.ok or not result.get("ok"):
-        raise RuntimeError(f"Telegram {method} failed with status {response.status_code}.")
+        raise TelegramPostingError(f"Telegram {method} failed with status {response.status_code}.")
     return result
 
 
@@ -407,6 +477,9 @@ def validate_database_schema() -> None:
         ("quiz_runs", "quiz_id"),
         ("chapter_history", "id"),
         ("quiz_submissions", "id,client_attempt_id"),
+        ("quiz_questions", "id,quiz_id,question_order"),
+        ("quiz_attempts", "id,client_attempt_id,attempt_number"),
+        ("quiz_attempt_answers", "id,attempt_id,question_order"),
     ):
         client.table(table).select(identifier).limit(1).execute()
 
@@ -429,6 +502,12 @@ def _chat_id_as_int(chat_id: str) -> int:
         return int(chat_id)
     except (TypeError, ValueError):
         return 0
+
+
+def _worker_id() -> str:
+    run_id = os.environ.get("GITHUB_RUN_ID", "local")
+    run_attempt = os.environ.get("GITHUB_RUN_ATTEMPT", "1")
+    return f"{run_id}:{run_attempt}:{uuid.uuid4().hex[:12]}"
 
 
 def main() -> None:
@@ -475,7 +554,7 @@ def main() -> None:
                 validate_database_schema()
             except Exception:
                 raise RuntimeError(
-                    "Configuration preflight failed: required database migrations through 003 are unavailable."
+                    "Configuration preflight failed: atomic integrity migration 20260718015054 is unavailable."
                 ) from None
     except Exception as exc:
         LOG.error("RUN_FAILED category=%s", getattr(exc, "category", type(exc).__name__))

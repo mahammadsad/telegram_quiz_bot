@@ -43,8 +43,69 @@ on:
         type: boolean
 
 jobs:
-  run-bot:
+  resolve_job:
     runs-on: ubuntu-latest
+    outputs:
+      mode: ${{ steps.job.outputs.mode }}
+      subject: ${{ steps.job.outputs.subject }}
+      force_post: ${{ steps.job.outputs.force_post }}
+      force_regenerate: ${{ steps.job.outputs.force_regenerate }}
+      concurrency_key: ${{ steps.job.outputs.concurrency_key }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Resolve canonical schedule mapping
+        id: job
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_SCHEDULE: ${{ github.event.schedule }}
+          INPUT_MODE: ${{ inputs.mode }}
+          INPUT_SUBJECT: ${{ inputs.subject }}
+          FORCE_POST: ${{ inputs.force_post }}
+          FORCE_REGENERATE: ${{ inputs.force_regenerate }}
+        run: |
+          python - <<'PY'
+          import os
+          from datetime import datetime
+          from zoneinfo import ZoneInfo
+
+          from config.schedule import scheduled_action
+          from config.subjects import get_subject
+
+          if os.environ["EVENT_NAME"] == "workflow_dispatch":
+              mode = os.environ.get("INPUT_MODE") or "subject-quiz"
+              subject = (os.environ.get("INPUT_SUBJECT") or "").strip()
+          else:
+              mode, subject = scheduled_action(os.environ["EVENT_SCHEDULE"])
+              subject = subject or ""
+
+          force_post = os.environ.get("FORCE_POST", "false").lower() == "true"
+          force_regenerate = os.environ.get("FORCE_REGENERATE", "false").lower() == "true"
+          if mode == "subject-quiz":
+              if not subject:
+                  raise SystemExit("subject is required")
+              get_subject(subject, require_quiz_enabled=True)
+          elif force_post or force_regenerate:
+              raise SystemExit("force flags apply only to subject-quiz")
+          if force_post and force_regenerate:
+              raise SystemExit("force flags are mutually exclusive")
+
+          target_date = datetime.now(ZoneInfo("Asia/Kolkata")).strftime("%Y%m%d")
+          logical_target = subject or mode
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as handle:
+              handle.write(f"mode={mode}\n")
+              handle.write(f"subject={subject}\n")
+              handle.write(f"force_post={str(force_post).lower()}\n")
+              handle.write(f"force_regenerate={str(force_regenerate).lower()}\n")
+              handle.write(f"concurrency_key={target_date}-{logical_target}\n")
+          PY
+
+  run-bot:
+    needs: resolve_job
+    runs-on: ubuntu-latest
+    concurrency:
+      group: subject-quiz-${{ needs.resolve_job.outputs.concurrency_key }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,60 +116,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install -r requirements.txt
-
-      - name: Resolve immutable schedule mapping
-        id: job
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          EVENT_SCHEDULE: ${{ github.event.schedule }}
-          INPUT_MODE: ${{ inputs.mode }}
-          INPUT_SUBJECT: ${{ inputs.subject }}
-          FORCE_POST: ${{ inputs.force_post }}
-          FORCE_REGENERATE: ${{ inputs.force_regenerate }}
-        run: |
-          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
-            mode="$INPUT_MODE"
-            subject="$INPUT_SUBJECT"
-          else
-            mode="subject-quiz"
-            case "$EVENT_SCHEDULE" in
-              "30 1 * * *") subject="computer" ;;
-              "30 2 * * *") subject="bengali" ;;
-              "30 3 * * *") subject="reasoning" ;;
-              "30 4 * * *") subject="mathematics" ;;
-              "30 5 * * *") subject="english" ;;
-              "30 6 * * *") subject="miscellaneous" ;;
-              "30 7 * * *") subject="polity" ;;
-              "30 8 * * *") subject="geography" ;;
-              "30 9 * * *") subject="science" ;;
-              "30 10 * * *") subject="economics" ;;
-              "30 11 * * *") subject="history" ;;
-              "30 12 * * *") subject="environment" ;;
-              "30 13 * * *") subject="current-affairs" ;;
-              "0 15 * * *") mode="recover-missed-quizzes"; subject="" ;;
-              *) echo "Unknown schedule" >&2; exit 2 ;;
-            esac
-          fi
-          if [ "$mode" = "subject-quiz" ] && [ -z "$subject" ]; then
-            echo "subject is required" >&2; exit 2
-          fi
-          if [ "$mode" = "subject-quiz" ]; then
-            case "$subject" in
-              computer|bengali|reasoning|mathematics|english|miscellaneous|polity|geography|science|economics|history|environment|current-affairs) ;;
-              *) echo "invalid canonical subject" >&2; exit 2 ;;
-            esac
-          fi
-          if [ "$FORCE_POST" = "true" ] && [ "$FORCE_REGENERATE" = "true" ]; then
-            echo "force flags are mutually exclusive" >&2; exit 2
-          fi
-          if [ "$mode" != "subject-quiz" ] && { [ "$FORCE_POST" = "true" ] || [ "$FORCE_REGENERATE" = "true" ]; }; then
-            echo "force flags apply only to subject-quiz" >&2; exit 2
-          fi
-          echo "mode=$mode" >> "$GITHUB_OUTPUT"
-          echo "subject=$subject" >> "$GITHUB_OUTPUT"
-          echo "force_post=$FORCE_POST" >> "$GITHUB_OUTPUT"
-          echo "force_regenerate=$FORCE_REGENERATE" >> "$GITHUB_OUTPUT"
+        run: pip install -r requirements.lock
 
       - name: Sanitized configuration preflight
         env: &bot-env
@@ -132,14 +140,14 @@ jobs:
       - name: Run exactly one mapped job
         env: *bot-env
         run: |
-          args=(--mode "${{ steps.job.outputs.mode }}")
-          if [ -n "${{ steps.job.outputs.subject }}" ]; then args+=(--subject "${{ steps.job.outputs.subject }}"); fi
-          if [ "${{ steps.job.outputs.force_post }}" = "true" ]; then args+=(--force-post); fi
-          if [ "${{ steps.job.outputs.force_regenerate }}" = "true" ]; then args+=(--force-regenerate); fi
+          args=(--mode "${{ needs.resolve_job.outputs.mode }}")
+          if [ -n "${{ needs.resolve_job.outputs.subject }}" ]; then args+=(--subject "${{ needs.resolve_job.outputs.subject }}"); fi
+          if [ "${{ needs.resolve_job.outputs.force_post }}" = "true" ]; then args+=(--force-post); fi
+          if [ "${{ needs.resolve_job.outputs.force_regenerate }}" = "true" ]; then args+=(--force-regenerate); fi
           python bot.py "${args[@]}"
 
       - name: Commit only new public fallback files
-        if: steps.job.outputs.mode == 'subject-quiz' || steps.job.outputs.mode == 'recover-missed-quizzes'
+        if: needs.resolve_job.outputs.mode == 'subject-quiz' || needs.resolve_job.outputs.mode == 'recover-missed-quizzes'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
