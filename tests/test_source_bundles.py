@@ -13,6 +13,7 @@ COMPUTER_EXPANSION = ROOT / "sources" / "computer_education_expansion_v2.json"
 POLITY_EXPANSION = ROOT / "sources" / "polity_expansion_v2.json"
 ENGLISH_EXPANSION = ROOT / "sources" / "english_expansion_v2.json"
 MATHEMATICS_EXPANSION = ROOT / "sources" / "mathematics_expansion_v2.json"
+SCIENCE_EXPANSION = ROOT / "sources" / "science_expansion_v2.json"
 EXPANSION_CHAPTER_KEYS = {
     "computer:number-systems",
     "computer:architecture-memory",
@@ -45,6 +46,14 @@ MATHEMATICS_EXPANSION_CHAPTER_KEYS = {
     "mathematics:mensuration",
     "mathematics:trigonometry",
     "mathematics:data-statistics",
+}
+SCIENCE_EXPANSION_CHAPTER_KEYS = {
+    "science:measurement-motion",
+    "science:heat-optics-sound",
+    "science:electricity-magnetism",
+    "science:matter-reactions",
+    "science:metals-carbon",
+    "science:cell-genetics-ecology",
 }
 TRUSTED_DOMAINS = {
     "nios.ac.in",
@@ -79,6 +88,10 @@ MATHEMATICS_TRUSTED_DOMAINS = {
     "nios.ac.in",
     "openstax.org",
 }
+SCIENCE_TRUSTED_DOMAINS = {
+    "nios.ac.in",
+    "digital.nios.ac.in",
+}
 
 
 def _bundle_rows() -> list[dict]:
@@ -101,6 +114,12 @@ def _english_bundle_rows() -> list[dict]:
 
 def _mathematics_bundle_rows() -> list[dict]:
     rows = json.loads(MATHEMATICS_EXPANSION.read_text(encoding="utf-8"))
+    assert isinstance(rows, list)
+    return rows
+
+
+def _science_bundle_rows() -> list[dict]:
+    rows = json.loads(SCIENCE_EXPANSION.read_text(encoding="utf-8"))
     assert isinstance(rows, list)
     return rows
 
@@ -292,6 +311,51 @@ def test_mathematics_composite_topics_keep_independent_sources():
     assert source_counts["mathematics:geometry:t03"] == 2
     assert source_counts["mathematics:geometry:t04"] == 2
     assert source_counts["mathematics:trigonometry:t02"] == 2
+
+
+def test_science_expansion_covers_every_gated_micro_topic_exactly():
+    chapters = [
+        chapter for chapter in SYLLABUS["science"]
+        if chapter.key in SCIENCE_EXPANSION_CHAPTER_KEYS
+    ]
+    assert {chapter.key for chapter in chapters} == SCIENCE_EXPANSION_CHAPTER_KEYS
+    assert all(not chapter.rotation_enabled for chapter in chapters)
+    assert {chapter.priority for chapter in chapters} == {2, 3}
+
+    expected = {
+        topic.key: (chapter.name, topic.name)
+        for chapter in chapters
+        for topic in chapter.micro_topics
+    }
+    rows = _science_bundle_rows()
+    assert len(expected) == 24
+    assert {row["micro_topic_key"] for row in rows} == set(expected)
+    for row in rows:
+        assert (row["chapter"], row["micro_topic_name"]) == expected[row["micro_topic_key"]]
+
+
+def test_science_expansion_uses_reviewed_official_sources():
+    rows = validate_source_bundle(_science_bundle_rows())
+    assert len(rows) == 30
+    assert all(row["source_kind"] == "official" for row in rows)
+    assert {row["source_domain"] for row in rows} <= SCIENCE_TRUSTED_DOMAINS
+    assert all(row["source_accessed_at"].startswith("2026-07-19T") for row in rows)
+    assert all(row["expires_at"] is None for row in rows)
+    assert all(len(row["fact_summary"]) >= 200 for row in rows)
+
+
+def test_science_composite_topics_keep_independent_sources():
+    rows = _science_bundle_rows()
+    source_counts: dict[str, int] = {}
+    for row in rows:
+        key = row["micro_topic_key"]
+        source_counts[key] = source_counts.get(key, 0) + 1
+    assert source_counts["science:measurement-motion:t03"] == 2
+    assert source_counts["science:measurement-motion:t04"] == 2
+    assert source_counts["science:electricity-magnetism:t04"] == 2
+    assert source_counts["science:matter-reactions:t02"] == 2
+    assert source_counts["science:metals-carbon:t04"] == 2
+    assert source_counts["science:cell-genetics-ecology:t01"] == 2
 
 
 def test_bundle_validator_rejects_duplicate_source_versions():

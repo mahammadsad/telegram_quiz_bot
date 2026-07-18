@@ -152,6 +152,33 @@ Importing and caching these records does not enable any of the nine chapters.
 Mathematics rotation remains fail-closed until a separate staging quiz passes
 generation, independent verification, Telegram delivery, and answer review.
 
+## Science expansion bundle
+
+`sources/science_expansion_v2.json` contains 30 reviewed official records
+covering all 24 micro-topics in the six inactive Science chapters. It expands
+competitive-exam coverage across measurement, motion and mechanics; heat,
+optics and sound; electricity and magnetism; matter, atomic structure and
+chemical reactions; metals and carbon compounds; and cells, heredity and
+ecology.
+
+The bundle uses the official NIOS Secondary Science and Technology course for
+the complete school-level foundation, with official NIOS Senior Secondary
+Physics material independently grounding simple machines and generator
+operation. Composite topics retain separate records for friction and
+gravitation, simple machines and collisions, atomic structure and periodic
+classification, fuels and carbon compounds, and cells, tissues and division.
+
+Validate it without credentials before importing it into an environment:
+
+```bash
+python scripts/import_source_documents.py \
+  sources/science_expansion_v2.json --validate-only
+```
+
+Importing and caching these records does not enable any of the six chapters.
+Science rotation remains fail-closed until a separate staging quiz passes
+generation, independent verification, Telegram delivery, and answer review.
+
 ## Data model
 
 `quiz_chapters` gains stable keys, exam relevance, priority, rotation state,
