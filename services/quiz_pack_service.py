@@ -192,6 +192,9 @@ def submit_quiz_attempts(
     telegram_user: dict,
     answers: list[int | None],
     attempt_id: str = "",
+    duration_seconds: int | None = None,
+    response_times: list[float | None] | None = None,
+    marked_for_review: list[bool] | None = None,
 ) -> dict:
     pack = get_quiz_pack(quiz_id)
     if not pack:
@@ -208,6 +211,9 @@ def submit_quiz_attempts(
         user_id=user_row["id"],
         client_attempt_id=clean_attempt_id,
         answers=answers,
+        duration_seconds=duration_seconds,
+        response_times=response_times,
+        marked_for_review=marked_for_review,
     )
 
 
