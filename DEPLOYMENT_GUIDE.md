@@ -18,6 +18,10 @@ supabase/migrations/20260718174844_learning_resources_legacy_pack_compatibility.
 supabase/migrations/20260718181849_personalized_learning_foundation.sql
 supabase/migrations/20260718183203_personalized_learning_fk_compatibility.sql
 supabase/migrations/20260718184505_remove_redundant_personal_review_unique.sql
+supabase/migrations/20260718185905_learning_analytics_leaderboards.sql
+supabase/migrations/20260718190639_personal_practice_answers.sql
+supabase/migrations/20260718192154_canonical_subject_learning_projections.sql
+supabase/migrations/20260718192558_canonical_subject_storage_compatibility.sql
 ```
 
 For a new empty project, first apply `database/schema.sql`, then the timestamped
@@ -28,7 +32,8 @@ preserving every legacy table/row.
 
 Read `docs/MIGRATION_20260718.md` and
 `docs/MIGRATION_20260718_PROVENANCE.md` before applying. Also read
-`docs/MIGRATION_20260718_PERSONALIZED_LEARNING.md`. Take a database backup or
+`docs/MIGRATION_20260718_PERSONALIZED_LEARNING.md` and
+`docs/MIGRATION_20260719_LEARNER_ANALYTICS.md`. Take a database backup or
 project-branch checkpoint, run its preflight SQL, apply the canonical file with
 the Supabase migration workflow or SQL Editor, and run its verification SQL.
 Then rerun both Supabase advisors. Do not paste a database password or service
@@ -154,8 +159,8 @@ Keep `DEV_ALLOW_UNVERIFIED_TELEGRAM=false` in every public environment. Set
 different trusted origin; same-origin deployment needs no CORS list.
 
 Check `GET /api/health`. It should show safe configured booleans,
-`application_version=4.0.0`, and
-`migration_version=20260718184505`; it never proves the database migration was
+`application_version=5.0.0`, and
+`migration_version=20260718192558`; it never proves the database migration was
 applied, so preflight remains mandatory.
 
 ## 4. Configure forum topics and BotFather
@@ -205,13 +210,20 @@ different named-app deployment.
    bound to that attempt, a duplicate returns conflict, and unrelated users or
    attempts cannot report it. Test the quarantine threshold with test users.
 13. Check quiz/global leaderboard pages and confirm response rows contain no
-   Telegram IDs, first/last names, or non-opted-in usernames.
-14. Stop the API temporarily and open an existing static pack. Confirm the UI
-   labels read-only fallback and cannot submit or claim a score.
-15. Run `python scripts/check_public_data.py`; it must pass.
-16. Trigger two manual runs for the same date/subject close together. One may
-   proceed; the other must report that another worker owns the active lease.
-17. Run Supabase advisors again and investigate every error/warning. Expected
+    Telegram IDs, first/last names, or non-opted-in usernames.
+14. Submit a wrong answer in authenticated practice. Confirm no answer key was
+    present before POST; after POST, confirm the review/source and next-review
+    date appear. Confirm the same question disappears from wrong practice after
+    a later correct answer.
+15. Check every typed leaderboard family and a canonical subject filter such as
+    `computer`; confirm bounded SQL pages, opt-out behavior, and documented
+    tie-break metadata.
+16. Stop the API temporarily and open an existing static pack. Confirm the UI
+    labels read-only fallback and cannot submit or claim a score.
+17. Run `python scripts/check_public_data.py`; it must pass.
+18. Trigger two manual runs for the same date/subject close together. One may
+    proceed; the other must report that another worker owns the active lease.
+19. Run Supabase advisors again and investigate every error/warning. Expected
     RLS-without-policy information is documented in the migration guide.
 
 For provider failover, use a disposable test environment rather than changing

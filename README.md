@@ -15,8 +15,9 @@ passes staging. See [`docs/SYLLABUS_V2.md`](docs/SYLLABUS_V2.md) for catalogue,
 activation, compatibility, and rollout details. The preparation screen reads
 only cached, operator-approved learning-resource metadata for the exact quiz
 micro-topics. Completed attempts now update a private spaced-review schedule;
-authenticated learners can retrieve due reviews, current wrong questions,
-bookmarks, exam/subject preferences, and compact progress analytics.
+authenticated learners can answer wrong/due/bookmarked questions in a private
+practice flow, retrieve bookmarks and exam/subject preferences, and view
+SQL-aggregated progress, mastery, streak, and improvement analytics.
 
 ## Architecture
 
@@ -28,7 +29,8 @@ bookmarks, exam/subject preferences, and compact progress analytics.
 | `storage/` | Small Supabase repositories; atomic writes use RPCs |
 | `supabase/migrations/` | Current timestamped PostgreSQL migrations and security grants |
 | `index.html` | Telegram-theme-aware quiz UI with a clearly read-only static fallback |
-| `dashboard.html` | Privacy-safe global leaderboard UI |
+| `dashboard.html` | Private learner analytics, preferences, and privacy-safe leaderboard families |
+| `practice.html` | Authenticated wrong/due/bookmark/weak-topic practice with post-answer review |
 | `.github/workflows/` | Exact schedule mapping, per-target concurrency, CI, preflight, and recovery |
 
 The browser never receives a Supabase service-role key. It talks only to
@@ -76,6 +78,10 @@ use the service role against RLS-protected tables and explicitly granted RPCs.
     day review schedule. FastAPI-authenticated private endpoints return due and
     current wrong questions without answer keys, plus preferences/bookmarks and
     SQL-aggregated progress.
+14. Practice answers are scored only by an authenticated server RPC. The
+    browser receives the correct answer, explanation, source, and next review
+    only after submission. Daily/monthly/subject, improvement, consistency,
+    and revision-completion leaderboards stay paginated in PostgreSQL.
 
 Static JSON is an emergency read-only fallback. When the live API is
 unavailable, the Mini App disables submission and scoring, labels the state,
@@ -140,7 +146,7 @@ and requires no `YOUTUBE_API_KEY`.
 For a new project, apply `database/schema.sql`, then every file in
 `supabase/migrations/` in timestamp order. Existing projects apply only the
 newer unapplied files. The current stack ends with
-`20260718184505_remove_redundant_personal_review_unique.sql`. The application
+`20260718192558_canonical_subject_storage_compatibility.sql`. The application
 never applies DDL during startup.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,
@@ -149,7 +155,9 @@ preflight, verification, security, backfill, and rollback notes are in
 `docs/MIGRATION_20260718.md` and
 `docs/MIGRATION_20260718_PROVENANCE.md`. Personalized-learning verification and
 rollback notes are in
-`docs/MIGRATION_20260718_PERSONALIZED_LEARNING.md`.
+`docs/MIGRATION_20260718_PERSONALIZED_LEARNING.md`. Learner analytics, practice
+submission, and canonical subject compatibility are covered by
+`docs/MIGRATION_20260719_LEARNER_ANALYTICS.md`.
 
 Before enabling scheduled generation, import approved source facts for every
 due chapter:
@@ -213,10 +221,12 @@ Useful endpoints:
 - `GET /api/me/dashboard`
 - `GET /api/me/reviews/due?limit=20&offset=0`
 - `GET /api/me/wrong-questions?subject=mathematics&limit=20&offset=0`
+- `POST /api/me/practice/{question_id}`
 - `GET|POST /api/me/bookmarks`
 - `GET|PUT /api/me/preferences`
 - `GET /api/quiz/{quiz_id}/leaderboard?limit=20&offset=0`
 - `GET /api/leaderboard?limit=20&offset=0`
+- `GET /api/leaderboards/{type}?subject=computer&limit=20&offset=0`
 
 Private GET requests send signed Telegram data only in the
 `X-Telegram-Init-Data` header, never in a URL. Example submission shape:
@@ -278,7 +288,8 @@ Deployment and production drills are in `DEPLOYMENT_GUIDE.md`.
 
 ## Next platform phases
 
-The next phase completes the learner-facing revision/practice interface and
-adds deeper SQL analytics, then operator-reviewed resource monitoring and
-source coverage can expand one subject at a time. Deterministic
-math/reasoning solvers and a moderation admin UI remain separate bounded work.
+The learner-facing revision, practice, accessibility, and SQL analytics phase
+is complete. The next bounded phase adds operator-reviewed resource feedback,
+scheduled link monitoring, and operations health, followed by verified source
+coverage expansion one subject at a time. Deterministic math/reasoning solvers
+and a moderation admin UI remain separate work.
