@@ -301,6 +301,12 @@
     font-weight:800;
   }
   .resource-empty{margin:10px 0 0; color:var(--muted); line-height:1.6}
+  .resource-feedback{border-top:1px solid var(--line); padding-top:8px}
+  .resource-feedback summary{cursor:pointer; color:var(--danger); font-size:13px; font-weight:800}
+  .resource-feedback-fields{display:grid; grid-template-columns:1fr auto; gap:8px; margin-top:8px}
+  .resource-feedback select{min-width:0; border:1px solid var(--line); border-radius:10px; padding:8px; color:var(--ink); background:var(--card); font:inherit}
+  .resource-feedback button{border:0; border-radius:10px; padding:8px 11px; background:var(--danger); color:#fff; font-weight:800}
+  .resource-feedback-message{grid-column:1/-1; min-height:18px; color:var(--muted); font-size:12px}
   .score-band{
     display:grid;
     grid-template-columns:130px 1fr;
@@ -810,12 +816,58 @@
             bookmark.textContent = "☆ রিসোর্স বুকমার্ক";
             bookmark.addEventListener("click", function(){ setBookmark(bookmark, "resource", resource.id); });
             links.appendChild(bookmark);
+            links.appendChild(resourceFeedbackControl(resource));
           }
         });
         card.appendChild(links);
       }
       list.appendChild(card);
     });
+  }
+
+  function resourceFeedbackControl(resource){
+    var details = document.createElement("details");
+    details.className = "resource-feedback";
+    var summary = document.createElement("summary");
+    summary.textContent = "রিসোর্সে সমস্যা জানান";
+    details.appendChild(summary);
+    var fields = document.createElement("div");
+    fields.className = "resource-feedback-fields";
+    var select = document.createElement("select");
+    [
+      ["video_unavailable","ভিডিও চলছে না"],
+      ["article_unavailable","লিংক খুলছে না"],
+      ["not_useful","সহায়ক নয়"],
+      ["wrong_language","ভুল ভাষা"],
+      ["topic_mismatch","টপিক মিলছে না"],
+      ["low_quality","মান কম"]
+    ].forEach(function(option){
+      var row = document.createElement("option");
+      row.value = option[0];
+      row.textContent = option[1];
+      select.appendChild(row);
+    });
+    var button = document.createElement("button");
+    button.type = "button";
+    button.textContent = "পাঠান";
+    var message = document.createElement("div");
+    message.className = "resource-feedback-message";
+    message.setAttribute("aria-live", "polite");
+    button.addEventListener("click", function(){
+      button.disabled = true;
+      message.textContent = "পাঠানো হচ্ছে...";
+      fetch(api("/api/resources/" + encodeURIComponent(resource.id) + "/feedback"), {
+        method:"POST",
+        headers:{"Content-Type":"application/json"},
+        body:JSON.stringify({initData:tg.initData, feedbackType:select.value})
+      }).then(function(resp){ return jsonOrThrow(resp, "Resource feedback API"); })
+        .then(function(){ message.textContent = "ধন্যবাদ—মতামতটি যাচাইয়ের জন্য রাখা হয়েছে।"; })
+        .catch(function(){ message.textContent = "মতামত পাঠানো যায়নি। পরে আবার চেষ্টা করুন।"; })
+        .then(function(){ button.disabled = false; });
+    });
+    fields.append(select, button, message);
+    details.appendChild(fields);
+    return details;
   }
 
   function fallbackResourceTopics(){

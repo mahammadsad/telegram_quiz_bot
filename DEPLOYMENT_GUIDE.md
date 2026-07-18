@@ -22,6 +22,7 @@ supabase/migrations/20260718185905_learning_analytics_leaderboards.sql
 supabase/migrations/20260718190639_personal_practice_answers.sql
 supabase/migrations/20260718192154_canonical_subject_learning_projections.sql
 supabase/migrations/20260718192558_canonical_subject_storage_compatibility.sql
+supabase/migrations/20260718194113_resource_quality_operations.sql
 ```
 
 For a new empty project, first apply `database/schema.sql`, then the timestamped
@@ -33,7 +34,8 @@ preserving every legacy table/row.
 Read `docs/MIGRATION_20260718.md` and
 `docs/MIGRATION_20260718_PROVENANCE.md` before applying. Also read
 `docs/MIGRATION_20260718_PERSONALIZED_LEARNING.md` and
-`docs/MIGRATION_20260719_LEARNER_ANALYTICS.md`. Take a database backup or
+`docs/MIGRATION_20260719_LEARNER_ANALYTICS.md`. Resource operations verification
+and rollback are in `docs/MIGRATION_20260719_RESOURCE_OPERATIONS.md`. Take a database backup or
 project-branch checkpoint, run its preflight SQL, apply the canonical file with
 the Supabase migration workflow or SQL Editor, and run its verification SQL.
 Then rerun both Supabase advisors. Do not paste a database password or service
@@ -85,6 +87,7 @@ Optional Secrets:
 TELEGRAM_GENERAL_THREAD_ID
 TELEGRAM_ADMIN_CHAT_ID
 TELEGRAM_ADMIN_USER_IDS
+YOUTUBE_API_KEY
 ```
 
 Repository Variables:
@@ -97,7 +100,10 @@ CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS=45
 QUESTION_REPORT_THRESHOLD=3
 ```
 
-No new credential or paid search API is required. `QUIZ_CLAIM_TIMEOUT_MINUTES`
+No paid search API is required. `YOUTUBE_API_KEY` only enables bounded YouTube
+candidate discovery; without it, link checks and the missing-resource queue
+continue to run. Every discovered candidate requires administrator approval.
+`QUIZ_CLAIM_TIMEOUT_MINUTES`
 and `GEMINI_FACTUAL_TEMPERATURE` are optional runtime variables; their defaults
 are 20 and 0.3 respectively.
 
@@ -111,6 +117,7 @@ mode=subject-quiz, subject=history
 mode=subject-quiz, subject=history, force_post=true
 mode=subject-quiz, subject=history, force_regenerate=true
 mode=recover-missed-quizzes
+mode=export-static-fallbacks
 ```
 
 Run `preflight` first. It uses no Gemini quota and posts no Telegram message.
@@ -159,9 +166,9 @@ Keep `DEV_ALLOW_UNVERIFIED_TELEGRAM=false` in every public environment. Set
 different trusted origin; same-origin deployment needs no CORS list.
 
 Check `GET /api/health`. It should show safe configured booleans,
-`application_version=5.0.0`, and
-`migration_version=20260718192558`; it never proves the database migration was
-applied, so preflight remains mandatory.
+`application_version=6.0.0`, `migration_version=20260718194113`,
+`database_connectivity=true`, and `required_schema_ready=true`. Preflight
+remains mandatory because the public health view is deliberately bounded.
 
 ## 4. Configure forum topics and BotFather
 
@@ -225,6 +232,15 @@ different named-app deployment.
     proceed; the other must report that another worker owns the active lease.
 19. Run Supabase advisors again and investigate every error/warning. Expected
     RLS-without-policy information is documented in the migration guide.
+20. Trigger the resource workflow in `link-check` mode. Confirm the link-check
+    rows contain safe categories and that a transient failure does not increment
+    `failure_count`. Use disposable data to verify the third hard failure marks
+    a resource stale and queues a Bengali/Hindi replacement.
+21. If `YOUTUBE_API_KEY` is configured, trigger discovery with a small limit.
+    Confirm new videos are inactive `pending_review` rows, then test approve and
+    reject through the authenticated administrator API.
+22. Trigger the final recovery or `export-static-fallbacks`; confirm all valid
+    subject files are staged into one repository commit and contain no answers.
 
 For provider failover, use a disposable test environment rather than changing
 production credentials. Confirm a key-specific failure switches providers and
@@ -254,10 +270,10 @@ backup timestamp; see `docs/MIGRATION_20260718.md`.
 
 ## 7. Known deployment limits
 
-- Static quiz files are still committed by each scheduled subject job, so the
-  repository may receive up to 13 small fallback commits per day. Consolidated
-  storage/commit batching belongs in a later operations phase.
-- Source collection and learning-resource approval are operator imports in this
-  phase; automated official-feed and YouTube discovery are not included.
-- Post-migration advisor results cannot be known until an operator applies the
-  migration; rerunning both advisors is a required deployment gate.
+- Static fallback export is batched after final recovery; a failure before that
+  checkpoint can leave the latest pack available only through the live API
+  until the export mode is rerun.
+- YouTube discovery is quota-bounded and optional. It never auto-approves a
+  result, and official/article source collection remains an operator import.
+- Post-migration advisor results cannot be known until the migration is
+  applied; rerunning security and performance advisors is a deployment gate.

@@ -233,6 +233,26 @@ def export_static_quiz_json(pack: dict) -> Path | None:
     return path
 
 
+def export_daily_static_fallbacks(target_date: date | None = None) -> dict[str, str]:
+    """Export all valid saved packs in one workflow commit at the end of day."""
+    require_env("SUPABASE_URL")
+    require_env("SUPABASE_SERVICE_KEY")
+    target_date = target_date or local_today()
+    summary: dict[str, str] = {}
+    for subject in QUIZ_SUBJECTS:
+        quiz_id = build_quiz_id(target_date, subject.key)
+        run = quiz_runs_repo.get(quiz_id)
+        pack = valid_saved_pack(quiz_id, run)
+        if not pack:
+            summary[subject.key] = "missing_or_invalid"
+            continue
+        summary[subject.key] = "exported" if export_static_quiz_json(pack) else "disabled"
+    LOG.info("STATIC_FALLBACK_EXPORT_SUMMARY %s", " ".join(
+        f"{key}={value}" for key, value in summary.items()
+    ))
+    return summary
+
+
 def forum_router() -> ForumRouter:
     return ForumRouter.from_values(TELEGRAM_FORUM_TOPICS_JSON, TELEGRAM_GENERAL_THREAD_ID)
 
@@ -561,6 +581,9 @@ def validate_database_schema() -> None:
         ("question_generation_audits", "id,quiz_id,verdict"),
         ("question_reports", "id,question_id,user_id,status"),
         ("learning_resources", "id,micro_topic_id,verification_status,is_active"),
+        ("resource_feedback", "id,resource_id,user_id,feedback_type"),
+        ("resource_link_checks", "id,resource_id,outcome,error_category"),
+        ("resource_discovery_queue", "id,micro_topic_id,language,status"),
     ):
         client.table(table).select(identifier).limit(1).execute()
 
@@ -593,7 +616,17 @@ def _worker_id() -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Subject-scoped Telegram quiz bot")
-    parser.add_argument("--mode", required=True, choices=["subject-quiz", "recover-missed-quizzes", "announce", "preflight"])
+    parser.add_argument(
+        "--mode",
+        required=True,
+        choices=[
+            "subject-quiz",
+            "recover-missed-quizzes",
+            "export-static-fallbacks",
+            "announce",
+            "preflight",
+        ],
+    )
     parser.add_argument("--subject")
     parser.add_argument("--force-post", action="store_true")
     parser.add_argument("--force-regenerate", action="store_true")
@@ -613,6 +646,8 @@ def main() -> None:
                 raise RuntimeError("Recovery finished with unresolved retryable failures.")
         elif args.mode == "announce":
             send_schedule_announcement()
+        elif args.mode == "export-static-fallbacks":
+            export_daily_static_fallbacks()
         else:
             values = preflight()
             telegram_runtime_configured = all(

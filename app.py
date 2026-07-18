@@ -25,15 +25,20 @@ from config.settings import (
     TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
 )
 from config.subjects import QUIZ_SUBJECTS, SUBJECTS
-from services import learning_resources_service, personal_learning_service, quiz_pack_service
+from services import (
+    learning_resources_service,
+    personal_learning_service,
+    quiz_pack_service,
+    resource_quality_service,
+)
 from storage import stats_repo
 from telegram.auth import TelegramAuthError, verify_init_data
 from telegram.routing import ForumRouter, ForumRoutingError
 from utils.quiz_ids import parse_quiz_id
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title="WB Exam Quiz Pack API", version="5.0.0")
-MIGRATION_VERSION = "20260718192558"
+app = FastAPI(title="WB Exam Quiz Pack API", version="6.0.0")
+MIGRATION_VERSION = "20260718194113"
 
 if CORS_ALLOWED_ORIGINS:
     app.add_middleware(
@@ -154,6 +159,24 @@ class PracticeAnswerRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class ResourceFeedbackRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    feedback_type: str = Field(alias="feedbackType")
+    rating: int | None = Field(default=None, ge=1, le=5)
+    details: str | None = Field(default=None, max_length=500)
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
+class ResourceReviewRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    decision: str
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(ROOT / "index.html")
@@ -191,6 +214,30 @@ def health() -> dict:
     except ForumRoutingError as exc:
         topics_configured = False
         topics_error = _forum_topics_error_code(exc)
+    operational = {
+        "database_connectivity": False,
+        "required_schema_ready": False,
+        "latest_successful_generation": None,
+        "latest_successful_posting": None,
+        "failed_runs_today": None,
+        "static_resource_health": None,
+    }
+    try:
+        if os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY"):
+            operational = resource_quality_service.public_operational_status()
+    except Exception:
+        pass
+    primary = bool(os.environ.get("GEMINI_API_KEY_PRIMARY") or os.environ.get("GEMINI_API_KEY"))
+    secondary = bool(os.environ.get("GEMINI_API_KEY_SECONDARY"))
+    provider_category = (
+        "primary_and_secondary"
+        if primary and secondary
+        else "primary_only"
+        if primary
+        else "secondary_only"
+        if secondary
+        else "unavailable"
+    )
     return {
         "ok": True,
         "application_version": app.version,
@@ -204,6 +251,9 @@ def health() -> dict:
         "forum_topics_configured": topics_configured,
         "forum_topics_error": topics_error,
         "quiz_subject_count": len(QUIZ_SUBJECTS),
+        "gemini_provider_category": provider_category,
+        "static_fallback_available": any((ROOT / "quizzes").glob("????????-*.json")),
+        **operational,
     }
 
 
@@ -242,6 +292,81 @@ def quiz_learning_resources(quiz_id: str) -> dict:
             status_code=503,
             detail="প্রস্তুতির রিসোর্স এখন খোলা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।",
         ) from exc
+
+
+@app.post("/api/resources/{resource_id}/feedback")
+def submit_resource_feedback(resource_id: uuid.UUID, payload: ResourceFeedbackRequest) -> dict:
+    try:
+        return resource_quality_service.submit_feedback(
+            _telegram_user_from_payload(payload),
+            resource_id=str(resource_id),
+            feedback_type=payload.feedback_type,
+            rating=payload.rating,
+            details=payload.details,
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="রিসোর্স মতামত সংরক্ষণ করা যায়নি।") from exc
+
+
+@app.get("/api/admin/operations")
+def admin_operations(
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        return resource_quality_service.admin_operational_status(
+            _telegram_user_from_init_data(init_data)
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Operations status is unavailable.") from exc
+
+
+@app.get("/api/admin/resources/reviews")
+def admin_resource_reviews(
+    limit: int = 50,
+    offset: int = 0,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        return resource_quality_service.admin_review_queue(
+            _telegram_user_from_init_data(init_data),
+            limit=limit,
+            offset=offset,
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Resource review queue is unavailable.") from exc
+
+
+@app.post("/api/admin/resources/{resource_id}/review")
+def review_resource(
+    resource_id: uuid.UUID,
+    payload: ResourceReviewRequest,
+) -> dict:
+    try:
+        return resource_quality_service.review_candidate(
+            _telegram_user_from_payload(payload),
+            resource_id=str(resource_id),
+            decision=payload.decision,
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Resource review could not be saved.") from exc
 
 
 @app.post("/api/quiz/{quiz_id}/submit")
@@ -475,6 +600,8 @@ def _telegram_user_from_payload(
         | BookmarkRequest
         | UserPreferencesRequest
         | PracticeAnswerRequest
+        | ResourceFeedbackRequest
+        | ResourceReviewRequest
     ),
 ) -> dict:
     return _telegram_user_from_init_data(payload.init_data, payload.dev_user)

@@ -2,7 +2,7 @@ from datetime import date
 
 import pytest
 
-from config.schedule import CRON_TO_SUBJECT, RECOVERY_CRON, scheduled_action
+from config.schedule import CRON_TO_SUBJECT, HOURLY_CRON, RECOVERY_CRON, scheduled_action
 from config.subjects import QUIZ_SUBJECTS, SUBJECTS
 from telegram.routing import ForumRouter, ForumRoutingError
 from utils.quiz_ids import build_quiz_id, parse_quiz_id
@@ -86,3 +86,10 @@ def test_every_cron_maps_to_immutable_subject_and_recovery_only():
     for cron, subject in CRON_TO_SUBJECT.items():
         assert scheduled_action(cron) == ("subject-quiz", subject)
     assert scheduled_action(RECOVERY_CRON) == ("recover-missed-quizzes", None)
+    assert scheduled_action(HOURLY_CRON) == ("recover-missed-quizzes", None)
+    expected = {
+        f"{(int(row.scheduled_time_ist.split(':')[1]) + 30) % 60} "
+        f"{(int(row.scheduled_time_ist.split(':')[0]) - 6) % 24} * * *": row.key
+        for row in QUIZ_SUBJECTS
+    }
+    assert CRON_TO_SUBJECT == expected

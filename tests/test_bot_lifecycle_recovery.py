@@ -186,6 +186,31 @@ def test_public_static_export_contains_no_answer_key(monkeypatch, tmp_path, vali
     assert "correct" not in path.read_text(encoding="utf-8")
 
 
+def test_daily_fallback_export_batches_all_valid_subject_packs(monkeypatch):
+    requested = []
+    exported = []
+    monkeypatch.setattr(bot, "require_env", lambda name: requested.append(name))
+    monkeypatch.setattr(bot.quiz_runs_repo, "get", lambda quiz_id: {"quiz_id": quiz_id})
+    monkeypatch.setattr(
+        bot,
+        "valid_saved_pack",
+        lambda quiz_id, run: {"quiz_id": quiz_id, "meta": {"quiz_id": quiz_id}},
+    )
+    monkeypatch.setattr(
+        bot,
+        "export_static_quiz_json",
+        lambda pack: exported.append(pack["quiz_id"]) or object(),
+    )
+
+    summary = bot.export_daily_static_fallbacks(date(2026, 7, 10))
+
+    assert requested == ["SUPABASE_URL", "SUPABASE_SERVICE_KEY"]
+    assert set(summary) == {subject.key for subject in QUIZ_SUBJECTS}
+    assert set(summary.values()) == {"exported"}
+    assert len(exported) == 13
+    assert "20260710-computer" in exported
+
+
 def test_malformed_json_gets_at_most_one_repair(monkeypatch, valid_questions):
     class Pool:
         def __init__(self): self.calls = 0
@@ -277,4 +302,7 @@ def test_database_preflight_checks_all_migration_tables(monkeypatch):
         ("question_generation_audits", "id,quiz_id,verdict"),
         ("question_reports", "id,question_id,user_id,status"),
         ("learning_resources", "id,micro_topic_id,verification_status,is_active"),
+        ("resource_feedback", "id,resource_id,user_id,feedback_type"),
+        ("resource_link_checks", "id,resource_id,outcome,error_category"),
+        ("resource_discovery_queue", "id,micro_topic_id,language,status"),
     ]
