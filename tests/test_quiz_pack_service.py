@@ -19,9 +19,16 @@ def pack():
                 "correct_option": "ABCD"[index % 4],
                 "explanation": "বাংলা ব্যাখ্যা।",
                 "detailed_explanation": "বিস্তারিত বাংলা ব্যাখ্যা।",
+                "subject": "history",
+                "topic": "আধুনিক ভারত",
+                "micro_topic_key": "history:modern-india:core",
             },
         })
-    return {"quiz_id": QUIZ_ID, "items": items, "meta": {"quiz_id": QUIZ_ID}}
+    return {
+        "quiz_id": QUIZ_ID,
+        "items": items,
+        "meta": {"quiz_id": QUIZ_ID, "subject_key": "history", "chapter": "আধুনিক ভারত"},
+    }
 
 
 def setup_common(monkeypatch):
@@ -77,6 +84,9 @@ def test_service_defensively_validates_answers(monkeypatch, answers):
 def test_public_quiz_payload_declares_submission_capability():
     payload = service.public_quiz_payload(pack())
     assert payload["capabilities"] == {"submission": True, "source": "api"}
+    assert payload["qs"][0]["subjectKey"] == "history"
+    assert payload["qs"][0]["chapter"] == "আধুনিক ভারত"
+    assert payload["qs"][0]["microTopicKey"] == "history:modern-india:core"
     assert "correct" not in str(payload).lower()
 
 

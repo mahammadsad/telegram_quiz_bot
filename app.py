@@ -25,15 +25,15 @@ from config.settings import (
     TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
 )
 from config.subjects import QUIZ_SUBJECTS
-from services import quiz_pack_service
+from services import learning_resources_service, quiz_pack_service
 from storage import stats_repo
 from telegram.auth import TelegramAuthError, verify_init_data
 from telegram.routing import ForumRouter, ForumRoutingError
 from utils.quiz_ids import parse_quiz_id
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title="WB Exam Quiz Pack API", version="3.1.0")
-MIGRATION_VERSION = "20260718112044"
+app = FastAPI(title="WB Exam Quiz Pack API", version="3.2.0")
+MIGRATION_VERSION = "20260718172756"
 
 if CORS_ALLOWED_ORIGINS:
     app.add_middleware(
@@ -148,6 +148,23 @@ def get_quiz(quiz_id: str) -> dict:
     if legacy:
         return legacy
     raise HTTPException(status_code=404, detail="Quiz pack not found.")
+
+
+@app.get("/api/quiz/{quiz_id}/resources")
+def quiz_learning_resources(quiz_id: str) -> dict:
+    clean_quiz_id = _clean_quiz_id(quiz_id)
+    try:
+        pack = quiz_pack_service.get_quiz_pack(clean_quiz_id)
+        if not pack:
+            raise HTTPException(status_code=404, detail="Quiz pack not found.")
+        return learning_resources_service.public_resources_for_quiz(clean_quiz_id)
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="প্রস্তুতির রিসোর্স এখন খোলা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।",
+        ) from exc
 
 
 @app.post("/api/quiz/{quiz_id}/submit")

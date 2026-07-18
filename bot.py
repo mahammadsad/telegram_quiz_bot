@@ -217,7 +217,12 @@ def export_static_quiz_json(pack: dict) -> Path | None:
     """Write only public question data—never answers or explanations."""
     if not WRITE_STATIC_QUIZ_JSON:
         return None
-    payload = quiz_pack_service.public_quiz_payload(pack)
+    api_payload = quiz_pack_service.public_quiz_payload(pack)
+    payload = {
+        "meta": api_payload["meta"],
+        "capabilities": {"submission": False, "source": "static_fallback"},
+        "qs": [{"q": item["q"], "o": item["o"]} for item in api_payload["qs"]],
+    }
     quiz_id = str(pack.get("quiz_id") or (pack.get("meta") or {}).get("quiz_id") or "")
     if not quiz_id or len(payload.get("qs") or []) != QUESTION_COUNT:
         raise QuizValidationError("Refusing to export an incomplete public fallback.")
@@ -555,6 +560,7 @@ def validate_database_schema() -> None:
         ("question_verifications", "id,question_id,verdict"),
         ("question_generation_audits", "id,quiz_id,verdict"),
         ("question_reports", "id,question_id,user_id,status"),
+        ("learning_resources", "id,micro_topic_id,verification_status,is_active"),
     ):
         client.table(table).select(identifier).limit(1).execute()
 

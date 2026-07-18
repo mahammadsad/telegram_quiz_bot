@@ -64,6 +64,7 @@ already-applied migration.
 ## Rollout order
 
 After this foundation is deployed, source coverage should be expanded one
-subject bundle at a time. The next product phase is the cached learning-resource
-library and the Bengali `📚 আগে প্রস্তুতি নিন` entry point tied to these
-micro-topic keys.
+subject bundle at a time. The cached learning-resource foundation and Bengali
+`📚 আগে প্রস্তুতি নিন` entry point are tied to these micro-topic keys. Only
+active, operator-verified metadata is served; discovery remains a separate
+review queue and never runs on a learner click.
