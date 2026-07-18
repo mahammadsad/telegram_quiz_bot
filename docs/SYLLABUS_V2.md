@@ -49,6 +49,29 @@ The existing `get_grounding_bundle` function continues to ignore micro-topics
 without verified source documents, so the 648 new rows cannot weaken the
 fail-closed integrity policy.
 
+## Computer Education expansion bundle
+
+`sources/computer_education_expansion_v2.json` is the first gated expansion
+bundle. Its 26 reviewed records cover all 20 micro-topics in the five inactive
+Computer Education chapters: number systems, architecture and memory,
+programming and algorithms, cloud and emerging technology, and digital
+services and e-governance. Composite topics use separate facts for their
+distinct concepts, including bit/character encoding, control structures,
+blockchain/big data/robotics, and digital identity/citizen safety.
+
+The bundle uses official or primary material from NIOS, CBSE, NIST, MeitY,
+CCA, NPCI, UIDAI, and the National Cyber Crime Reporting Portal. Validate it
+without credentials before any environment import:
+
+```bash
+python scripts/import_source_documents.py \
+  sources/computer_education_expansion_v2.json --validate-only
+```
+
+Importing the bundle does not enable the chapters. Rotation remains off until
+the staging generation, independent verification, delivery, and answer-review
+gate has passed and a later idempotent activation migration is applied.
+
 ## Data model
 
 `quiz_chapters` gains stable keys, exam relevance, priority, rotation state,

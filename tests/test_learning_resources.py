@@ -8,6 +8,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase" / "migrations" / "20260718171256_learning_resources_foundation.sql"
 INDEX_MIGRATION = ROOT / "supabase" / "migrations" / "20260718172756_learning_resources_fk_indexes.sql"
 LEGACY_MIGRATION = ROOT / "supabase" / "migrations" / "20260718174844_learning_resources_legacy_pack_compatibility.sql"
+CACHE_DEDUPE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718203218_dedupe_source_resource_cache.sql"
 INDEX = ROOT / "index.html"
 
 
@@ -57,6 +58,21 @@ def test_source_mirror_uses_only_operator_approved_metadata():
     assert "not sd.review_required" in cache
     assert "sd.fact_summary" not in cache
     assert "operator-approved reference used to ground this quiz topic" in cache
+
+
+def test_source_mirror_deduplicates_immutable_fact_versions_before_upsert():
+    sql = CACHE_DEDUPE_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "select distinct on (sd.micro_topic_id, sd.source_url)" in sql
+    assert "sd.source_accessed_at desc" in sql
+    assert "sd.verified_at desc" in sql
+    assert "sd.verification_status = 'verified'" in sql
+    assert "not sd.review_required" in sql
+    assert "from current_sources source" in sql
+    assert "on conflict (micro_topic_id, language, url) do update" in sql
+    assert "source.fact_summary" not in sql
+    assert "security definer" not in sql
+    assert "from public, anon, authenticated" in sql
+    assert "to service_role" in sql
 
 
 def test_legacy_pack_compatibility_is_exact_and_does_not_rewrite_questions():
