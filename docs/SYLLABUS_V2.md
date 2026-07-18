@@ -100,6 +100,32 @@ As with the Computer Education bundle, import and cache readiness do not
 activate the chapters. All six Polity chapters remain fail-closed until the
 separate staging quiz and answer-review gate succeeds.
 
+## English expansion bundle
+
+`sources/english_expansion_v2.json` contains 31 reviewed official or primary
+records covering all 20 micro-topics in the five inactive English chapters:
+parts of speech and tense, error detection and sentence improvement, spelling
+and one-word substitution, cloze and reading comprehension, and sentence
+rearrangement and para-jumbles.
+
+The bundle uses the current CBSE 2026-27 English curricula to preserve exam
+scope, NIOS lessons for grammar and sequencing rules, Cambridge University
+Press dictionary and grammar entries for spelling and vocabulary, and
+institutional writing guidance for parallelism, modifiers, usage, and
+concision. Composite topics retain separate records so a vocabulary definition
+or sentence rule is never inferred from an unrelated source.
+
+Validate it without credentials before importing it into an environment:
+
+```bash
+python scripts/import_source_documents.py \
+  sources/english_expansion_v2.json --validate-only
+```
+
+Importing and caching the records does not enable the five chapters. English
+rotation remains fail-closed until a separate staging quiz passes generation,
+independent verification, Telegram delivery, and answer review.
+
 ## Data model
 
 `quiz_chapters` gains stable keys, exam relevance, priority, rotation state,
