@@ -8,12 +8,17 @@ permissions:
   contents: read
 
 jobs:
-  pytest:
+  quality-and-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements-dev.lock
+      - run: ruff check .
+      - run: mypy
       - run: pytest -q
+      - run: python scripts/check_public_data.py
+      - name: Migration security contract
+        run: pytest -q tests/test_atomic_integrity_contracts.py
