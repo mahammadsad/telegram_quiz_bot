@@ -8,10 +8,13 @@ leaderboards. Every newly generated question cites an operator-verified fact
 bundle, belongs to a normalized micro-topic, and passes a separate source-only
 verification request before the atomic save can activate it.
 
-This stacked phase adds question provenance and authenticated report moderation
-to the integrity foundation. Resource discovery, wrong-answer practice,
-mastery, personalized revision, bookmarks, and exam preferences remain later
-phases.
+The syllabus-v2 foundation preserves the 13 Telegram subjects while expanding
+the curriculum to 162 subject-specific chapters and 648 curated micro-topics.
+New coverage is source-gated and stays out of rotation until its verified bundle
+passes staging. See [`docs/SYLLABUS_V2.md`](docs/SYLLABUS_V2.md) for catalogue,
+activation, compatibility, and rollout details. Resource discovery,
+wrong-answer practice, mastery, personalized revision, bookmarks, and exam
+preferences remain later phases.
 
 ## Architecture
 
@@ -77,9 +80,10 @@ The canonical subjects run hourly from 07:00 through 19:00 IST in this order:
 `polity`, `geography`, `science`, `economics`, `history`, `environment`, and
 `current-affairs`. Recovery runs at 20:30 IST. `general` is announcement-only.
 
-The mapping and subject catalogue live in `config/schedule.py` and
-`config/subjects.py`. Workflow concurrency uses the logical date and subject,
-waits instead of cancelling an active run, and has no run-ID component.
+The schedule and subject identities live in `config/schedule.py` and
+`config/subjects.py`; the complete curriculum lives in
+`config/syllabus_catalog.py`. Workflow concurrency uses the logical date and
+subject, waits instead of cancelling an active run, and has no run-ID component.
 
 ## Configuration
 
