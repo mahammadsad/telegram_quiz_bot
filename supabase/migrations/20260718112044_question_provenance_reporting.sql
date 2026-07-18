@@ -15,7 +15,7 @@ create table if not exists public.quiz_subjects (
 );
 
 create table if not exists public.quiz_chapters (
-    id uuid primary key default gen_random_uuid(),
+    id uuid primary key default extensions.gen_random_uuid(),
     subject_key text not null references public.quiz_subjects(subject_key) on delete restrict,
     name text not null,
     normalized_name text not null,
@@ -28,7 +28,7 @@ create table if not exists public.quiz_chapters (
 );
 
 create table if not exists public.quiz_micro_topics (
-    id uuid primary key default gen_random_uuid(),
+    id uuid primary key default extensions.gen_random_uuid(),
     chapter_id uuid not null references public.quiz_chapters(id) on delete restrict,
     key text not null unique check (key = lower(key) and key !~ '[[:space:]]'),
     name text not null,
@@ -112,7 +112,7 @@ begin
                 exam_relevance, target_coverage, mastery_relevance
             ) values (
                 chapter_id,
-                subject_row.key || ':' || left(encode(digest(chapter_name, 'sha256'), 'hex'), 12) || ':core',
+                subject_row.key || ':' || left(encode(extensions.digest(chapter_name, 'sha256'), 'hex'), 12) || ':core',
                 chapter_name || ' — মূল ধারণা',
                 lower(btrim(chapter_name || ' — মূল ধারণা')),
                 (select exam_relevance from public.quiz_subjects where subject_key = subject_row.key),
@@ -130,7 +130,7 @@ end;
 $$;
 
 create table if not exists public.source_documents (
-    id uuid primary key default gen_random_uuid(),
+    id uuid primary key default extensions.gen_random_uuid(),
     micro_topic_id uuid not null references public.quiz_micro_topics(id) on delete restrict,
     source_url text not null check (source_url ~ '^https://'),
     source_title text not null,
@@ -254,7 +254,7 @@ as $$
 $$;
 
 create table if not exists public.question_verifications (
-    id uuid primary key default gen_random_uuid(),
+    id uuid primary key default extensions.gen_random_uuid(),
     question_id uuid not null references public.questions(id) on delete cascade,
     source_document_id uuid not null references public.source_documents(id) on delete restrict,
     verifier_model text,
@@ -269,7 +269,7 @@ create index if not exists idx_question_verifications_question
     on public.question_verifications (question_id, checked_at desc);
 
 create table if not exists public.question_generation_audits (
-    id uuid primary key default gen_random_uuid(),
+    id uuid primary key default extensions.gen_random_uuid(),
     quiz_id text not null references public.quiz_runs(quiz_id) on delete restrict,
     subject_key text not null references public.quiz_subjects(subject_key) on delete restrict,
     chapter text not null,
@@ -292,7 +292,7 @@ create index if not exists idx_question_generation_audits_rejected
     where verdict = 'rejected';
 
 create table if not exists public.question_reports (
-    id uuid primary key default gen_random_uuid(),
+    id uuid primary key default extensions.gen_random_uuid(),
     question_id uuid not null references public.questions(id) on delete restrict,
     quiz_id text not null references public.quiz_runs(quiz_id) on delete restrict,
     user_id uuid not null references public.users(id) on delete cascade,
