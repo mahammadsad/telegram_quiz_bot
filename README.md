@@ -18,20 +18,24 @@ micro-topics. Completed attempts now update a private spaced-review schedule;
 authenticated learners can answer wrong/due/bookmarked questions in a private
 practice flow, retrieve bookmarks and exam/subject preferences, and view
 SQL-aggregated progress, mastery, streak, and improvement analytics.
+Learners can report cached-resource problems from Telegram. A daily maintenance
+workflow checks links, queues missing Bengali/Hindi coverage, optionally
+discovers bounded YouTube candidates, and keeps every candidate hidden until
+an administrator approves it.
 
 ## Architecture
 
 | Component | Responsibility |
 |---|---|
 | `bot.py` | Claims a date/subject run, selects a chapter, generates/validates a pack, posts once, and recovers missed work |
-| `app.py` | Public quiz reads plus authenticated attempt, revision, preference, bookmark, and dashboard APIs |
+| `app.py` | Public quiz/health reads plus authenticated learning, feedback, and administrator APIs |
 | `services/` | Chapter rotation, source grounding, independent verification, Gemini failover, validation, and quiz-pack rules |
 | `storage/` | Small Supabase repositories; atomic writes use RPCs |
 | `supabase/migrations/` | Current timestamped PostgreSQL migrations and security grants |
 | `index.html` | Telegram-theme-aware quiz UI with a clearly read-only static fallback |
 | `dashboard.html` | Private learner analytics, preferences, and privacy-safe leaderboard families |
 | `practice.html` | Authenticated wrong/due/bookmark/weak-topic practice with post-answer review |
-| `.github/workflows/` | Exact schedule mapping, per-target concurrency, CI, preflight, and recovery |
+| `.github/workflows/` | Hourly recovery, daily fallback batching, CI, and resource-quality maintenance |
 
 The browser never receives a Supabase service-role key. It talks only to
 FastAPI. FastAPI verifies signed Telegram `initData`; the trusted server and bot
@@ -82,6 +86,11 @@ use the service role against RLS-protected tables and explicitly granted RPCs.
     browser receives the correct answer, explanation, source, and next review
     only after submission. Daily/monthly/subject, improvement, consistency,
     and revision-completion leaderboards stay paginated in PostgreSQL.
+15. Signed learners may report a cached resource. Scheduled monitoring records
+    safe availability categories; only three hard failures deactivate a link,
+    while timeouts, rate limits, access denials, and server errors stay
+    transient. Bengali/Hindi replacements enter a bounded discovery queue and
+    remain `pending_review` until an authenticated administrator decides.
 
 Static JSON is an emergency read-only fallback. When the live API is
 unavailable, the Mini App disables submission and scoring, labels the state,
@@ -95,8 +104,11 @@ The canonical subjects run hourly from 07:00 through 19:00 IST in this order:
 `polity`, `geography`, `science`, `economics`, `history`, `environment`, and
 `current-affairs`. Recovery runs at 20:30 IST. `general` is announcement-only.
 
-The schedule and subject identities live in `config/schedule.py` and
-`config/subjects.py`; the complete curriculum lives in
+GitHub invokes one hourly recovery job; the due-subject calculation still comes
+from each subject's canonical IST time, so a delayed run catches up safely.
+The final recovery exports every checksum-valid pack and commits all public
+fallback files in one batch. The schedule and subject identities live in
+`config/schedule.py` and `config/subjects.py`; the complete curriculum lives in
 `config/syllabus_catalog.py`. Workflow concurrency uses the logical date and
 subject, waits instead of cancelling an active run, and has no run-ID component.
 
@@ -130,6 +142,8 @@ Optional server settings:
 - `QUESTION_VERIFICATION_MIN_CONFIDENCE` (default `0.85`)
 - `CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS` (default/database maximum `45`)
 - `QUESTION_REPORT_THRESHOLD` (minimum `2`; default `3`)
+- `YOUTUBE_API_KEY` for optional, quota-bounded YouTube candidate discovery;
+  discovered rows always require administrator review
 - `CORS_ALLOWED_ORIGINS`, `WRITE_STATIC_QUIZ_JSON`
 
 Development-only:
@@ -137,16 +151,15 @@ Development-only:
 - `DEV_ALLOW_UNVERIFIED_TELEGRAM=true` permits a local fake user. It must stay
   false in every public deployment.
 
-No new credential or paid search API is introduced. The learning-resource
-foundation stores metadata and links only; it performs no YouTube or web search
-and requires no `YOUTUBE_API_KEY`.
+No paid search API is required. Without `YOUTUBE_API_KEY`, the daily workflow
+still checks cached links and queues missing coverage but skips discovery.
 
 ## Supabase setup
 
 For a new project, apply `database/schema.sql`, then every file in
 `supabase/migrations/` in timestamp order. Existing projects apply only the
 newer unapplied files. The current stack ends with
-`20260718192558_canonical_subject_storage_compatibility.sql`. The application
+`20260718194113_resource_quality_operations.sql`. The application
 never applies DDL during startup.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,
@@ -158,6 +171,9 @@ rollback notes are in
 `docs/MIGRATION_20260718_PERSONALIZED_LEARNING.md`. Learner analytics, practice
 submission, and canonical subject compatibility are covered by
 `docs/MIGRATION_20260719_LEARNER_ANALYTICS.md`.
+Resource feedback, link health, discovery moderation, security verification,
+and rollback are covered by
+`docs/MIGRATION_20260719_RESOURCE_OPERATIONS.md`.
 
 Before enabling scheduled generation, import approved source facts for every
 due chapter:
@@ -216,6 +232,7 @@ Useful endpoints:
 - `GET /api/health`
 - `GET /api/quiz/{quiz_id}`
 - `GET /api/quiz/{quiz_id}/resources`
+- `POST /api/resources/{resource_id}/feedback`
 - `POST /api/quiz/{quiz_id}/submit`
 - `POST /api/questions/{question_id}/report`
 - `GET /api/me/dashboard`
@@ -227,6 +244,9 @@ Useful endpoints:
 - `GET /api/quiz/{quiz_id}/leaderboard?limit=20&offset=0`
 - `GET /api/leaderboard?limit=20&offset=0`
 - `GET /api/leaderboards/{type}?subject=computer&limit=20&offset=0`
+- `GET /api/admin/operations`
+- `GET /api/admin/resources/reviews?limit=50&offset=0`
+- `POST /api/admin/resources/{resource_id}/review`
 
 Private GET requests send signed Telegram data only in the
 `X-Telegram-Init-Data` header, never in a URL. Example submission shape:
@@ -246,7 +266,10 @@ python bot.py --mode subject-quiz --subject history
 python bot.py --mode subject-quiz --subject history --force-post
 python bot.py --mode subject-quiz --subject history --force-regenerate
 python bot.py --mode recover-missed-quizzes
+python bot.py --mode export-static-fallbacks
 python bot.py --mode announce
+python scripts/check_learning_resources.py --limit 50
+python scripts/discover_learning_resources.py --limit 5
 ```
 
 `--force-post` reuses a checksum-valid saved pack. For `posting_unknown`, first
@@ -255,10 +278,10 @@ explicitly replaces the pack; the flags are mutually exclusive. Recovery skips
 posted/future runs, takes over only expired leases, and reuses valid saved
 content before generating.
 
-The health endpoint returns safe booleans plus application/migration versions.
-It never returns secret values. Structured logs contain provider labels,
-categories, quiz IDs, and safe status codes, not credentials or raw Gemini
-responses.
+The health endpoint returns safe booleans, schema readiness, bounded operational
+counts, provider category, and application/migration versions. It never returns
+secret values. Structured logs contain provider labels, categories, quiz IDs,
+and safe status codes, not credentials or raw Gemini responses.
 
 Deployment and production drills are in `DEPLOYMENT_GUIDE.md`.
 
@@ -288,8 +311,7 @@ Deployment and production drills are in `DEPLOYMENT_GUIDE.md`.
 
 ## Next platform phases
 
-The learner-facing revision, practice, accessibility, and SQL analytics phase
-is complete. The next bounded phase adds operator-reviewed resource feedback,
-scheduled link monitoring, and operations health, followed by verified source
-coverage expansion one subject at a time. Deterministic math/reasoning solvers
-and a moderation admin UI remain separate work.
+The learner, resource-quality, and operations foundations are complete. Source
+coverage now expands one reviewed subject bundle at a time. Deterministic
+math/reasoning solvers and a richer visual moderation console remain separate
+work; the authenticated review API is already available for a future console.

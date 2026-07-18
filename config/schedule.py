@@ -1,30 +1,29 @@
-"""UTC GitHub cron mapping derived from the canonical IST subject schedule."""
+"""Workflow cadence and UTC reference mapping derived from subject settings."""
 
 from config.subjects import QUIZ_SUBJECTS
 
-CRON_TO_SUBJECT = {
-    "30 1 * * *": "computer",
-    "30 2 * * *": "bengali",
-    "30 3 * * *": "reasoning",
-    "30 4 * * *": "mathematics",
-    "30 5 * * *": "english",
-    "30 6 * * *": "miscellaneous",
-    "30 7 * * *": "polity",
-    "30 8 * * *": "geography",
-    "30 9 * * *": "science",
-    "30 10 * * *": "economics",
-    "30 11 * * *": "history",
-    "30 12 * * *": "environment",
-    "30 13 * * *": "current-affairs",
-}
+HOURLY_CRON = "30 1-13 * * *"
 RECOVERY_CRON = "0 15 * * *"
+
+
+def _utc_cron_for_ist(value: str) -> str:
+    hour, minute = (int(part) for part in value.split(":"))
+    utc_minutes = (hour * 60 + minute - 330) % (24 * 60)
+    return f"{utc_minutes % 60} {utc_minutes // 60} * * *"
+
+
+CRON_TO_SUBJECT = {
+    _utc_cron_for_ist(subject.scheduled_time_ist): subject.key
+    for subject in QUIZ_SUBJECTS
+    if subject.scheduled_time_ist
+}
 
 if set(CRON_TO_SUBJECT.values()) != {subject.key for subject in QUIZ_SUBJECTS}:
     raise RuntimeError("Cron mapping must cover every quiz subject exactly once.")
 
 
 def scheduled_action(cron: str) -> tuple[str, str | None]:
-    if cron == RECOVERY_CRON:
+    if cron in {HOURLY_CRON, RECOVERY_CRON}:
         return "recover-missed-quizzes", None
     try:
         return "subject-quiz", CRON_TO_SUBJECT[cron]

@@ -1,0 +1,47 @@
+name: Resource quality
+
+on:
+  schedule:
+    - cron: "15 0 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Resource maintenance mode
+        required: true
+        default: both
+        type: choice
+        options: [both, link-check, discovery]
+      limit:
+        description: Maximum resources or discovery items
+        required: false
+        default: "20"
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: resource-quality
+  cancel-in-progress: false
+
+jobs:
+  maintain-resources:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
+      MODE: ${{ inputs.mode || 'both' }}
+      LIMIT: ${{ inputs.limit || '20' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.lock
+      - name: Check cached resource links
+        if: env.MODE == 'both' || env.MODE == 'link-check'
+        run: python scripts/check_learning_resources.py --limit "$LIMIT"
+      - name: Queue missing resources and discover candidates
+        if: env.MODE == 'both' || env.MODE == 'discovery'
+        run: python scripts/discover_learning_resources.py --limit "$LIMIT"

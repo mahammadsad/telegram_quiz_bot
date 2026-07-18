@@ -5,19 +5,7 @@ permissions:
 
 on:
   schedule:
-    - cron: "30 1 * * *"
-    - cron: "30 2 * * *"
-    - cron: "30 3 * * *"
-    - cron: "30 4 * * *"
-    - cron: "30 5 * * *"
-    - cron: "30 6 * * *"
-    - cron: "30 7 * * *"
-    - cron: "30 8 * * *"
-    - cron: "30 9 * * *"
-    - cron: "30 10 * * *"
-    - cron: "30 11 * * *"
-    - cron: "30 12 * * *"
-    - cron: "30 13 * * *"
+    - cron: "30 1-13 * * *"
     - cron: "0 15 * * *"
   workflow_dispatch:
     inputs:
@@ -26,7 +14,7 @@ on:
         required: true
         default: subject-quiz
         type: choice
-        options: [preflight, subject-quiz, recover-missed-quizzes, announce]
+        options: [preflight, subject-quiz, recover-missed-quizzes, export-static-fallbacks, announce]
       subject:
         description: Canonical subject key (required for subject-quiz)
         required: false
@@ -51,6 +39,7 @@ jobs:
       force_post: ${{ steps.job.outputs.force_post }}
       force_regenerate: ${{ steps.job.outputs.force_regenerate }}
       concurrency_key: ${{ steps.job.outputs.concurrency_key }}
+      commit_fallbacks: ${{ steps.job.outputs.commit_fallbacks }}
     steps:
       - uses: actions/checkout@v4
 
@@ -69,7 +58,7 @@ jobs:
           from datetime import datetime
           from zoneinfo import ZoneInfo
 
-          from config.schedule import scheduled_action
+          from config.schedule import RECOVERY_CRON, scheduled_action
           from config.subjects import get_subject
 
           if os.environ["EVENT_NAME"] == "workflow_dispatch":
@@ -78,6 +67,14 @@ jobs:
           else:
               mode, subject = scheduled_action(os.environ["EVENT_SCHEDULE"])
               subject = subject or ""
+
+          commit_fallbacks = (
+              mode == "export-static-fallbacks"
+              or (
+                  os.environ["EVENT_NAME"] == "schedule"
+                  and os.environ["EVENT_SCHEDULE"] == RECOVERY_CRON
+              )
+          )
 
           force_post = os.environ.get("FORCE_POST", "false").lower() == "true"
           force_regenerate = os.environ.get("FORCE_REGENERATE", "false").lower() == "true"
@@ -98,6 +95,7 @@ jobs:
               handle.write(f"force_post={str(force_post).lower()}\n")
               handle.write(f"force_regenerate={str(force_regenerate).lower()}\n")
               handle.write(f"concurrency_key={target_date}-{logical_target}\n")
+              handle.write(f"commit_fallbacks={str(commit_fallbacks).lower()}\n")
           PY
 
   run-bot:
@@ -138,19 +136,25 @@ jobs:
           QUESTION_VERIFICATION_MIN_CONFIDENCE: ${{ vars.QUESTION_VERIFICATION_MIN_CONFIDENCE || '0.85' }}
           CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS: ${{ vars.CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS || '45' }}
           QUESTION_REPORT_THRESHOLD: ${{ vars.QUESTION_REPORT_THRESHOLD || '3' }}
+          WRITE_STATIC_QUIZ_JSON: ${{ needs.resolve_job.outputs.commit_fallbacks }}
         run: python bot.py --mode preflight
 
       - name: Run exactly one mapped job
         env: *bot-env
         run: |
+          status=0
           args=(--mode "${{ needs.resolve_job.outputs.mode }}")
           if [ -n "${{ needs.resolve_job.outputs.subject }}" ]; then args+=(--subject "${{ needs.resolve_job.outputs.subject }}"); fi
           if [ "${{ needs.resolve_job.outputs.force_post }}" = "true" ]; then args+=(--force-post); fi
           if [ "${{ needs.resolve_job.outputs.force_regenerate }}" = "true" ]; then args+=(--force-regenerate); fi
-          python bot.py "${args[@]}"
+          python bot.py "${args[@]}" || status=$?
+          if [ "${{ needs.resolve_job.outputs.commit_fallbacks }}" = "true" ] && [ "${{ needs.resolve_job.outputs.mode }}" != "export-static-fallbacks" ]; then
+            python bot.py --mode export-static-fallbacks || status=$?
+          fi
+          exit "$status"
 
       - name: Commit only new public fallback files
-        if: needs.resolve_job.outputs.mode == 'subject-quiz' || needs.resolve_job.outputs.mode == 'recover-missed-quizzes'
+        if: always() && needs.resolve_job.outputs.commit_fallbacks == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
