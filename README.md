@@ -179,6 +179,7 @@ Before enabling scheduled generation, import approved source facts for every
 due chapter:
 
 ```bash
+python scripts/import_source_documents.py sources.json --validate-only
 python scripts/import_source_documents.py sources.json --dry-run
 python scripts/import_source_documents.py sources.json --approve
 ```

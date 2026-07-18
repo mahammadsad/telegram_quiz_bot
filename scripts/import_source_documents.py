@@ -5,12 +5,15 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
 
-from config.subjects import get_subject
-from database.client import get_client
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from config.subjects import get_subject  # noqa: E402
 
 
 def main() -> int:
@@ -21,16 +24,25 @@ def main() -> int:
         action="store_true",
         help="Mark every validated row verified; without this flag rows remain drafts.",
     )
+    parser.add_argument(
+        "--validate-only",
+        action="store_true",
+        help="Validate bundle structure and source metadata without connecting to Supabase.",
+    )
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args()
 
     rows = json.loads(args.path.read_text(encoding="utf-8"))
-    if not isinstance(rows, list) or not rows:
-        raise ValueError("Source bundle must be a non-empty JSON array.")
+    clean_rows = validate_source_bundle(rows)
+    if args.validate_only:
+        print(json.dumps({"ok": True, "validated": len(clean_rows), "approved": False}))
+        return 0
+
+    from database.client import get_client
+
     client = get_client()
     imported = []
-    for index, raw in enumerate(rows, start=1):
-        clean = validate_source_row(raw, index)
+    for index, clean in enumerate(clean_rows, start=1):
         chapter = _one(
             client.table("quiz_chapters")
             .select("id,subject_key,name")
@@ -79,6 +91,23 @@ def main() -> int:
     mode = "validated" if args.dry_run else "imported"
     print(json.dumps({"ok": True, mode: len(imported), "approved": args.approve}))
     return 0
+
+
+def validate_source_bundle(rows: object) -> list[dict]:
+    if not isinstance(rows, list) or not rows:
+        raise ValueError("Source bundle must be a non-empty JSON array.")
+    clean_rows = [validate_source_row(raw, index) for index, raw in enumerate(rows, start=1)]
+    identities: set[tuple[str, str, str]] = set()
+    for index, clean in enumerate(clean_rows, start=1):
+        identity = (
+            clean["micro_topic_key"] or clean["micro_topic_name"].strip().lower(),
+            clean["source_url"],
+            clean["fact_version"],
+        )
+        if identity in identities:
+            raise ValueError(f"Source row {index} duplicates a micro-topic, URL, and fact version.")
+        identities.add(identity)
+    return clean_rows
 
 
 def validate_source_row(raw: object, row_number: int) -> dict:
