@@ -69,6 +69,13 @@ def main() -> int:
         ).execute()
         imported.append(result.data[0])
 
+    if args.approve and not args.dry_run:
+        for subject_key in sorted({str(row["subject_key"]) for row in rows}):
+            client.rpc(
+                "cache_verified_source_resources",
+                {"p_subject_key": subject_key},
+            ).execute()
+
     mode = "validated" if args.dry_run else "imported"
     print(json.dumps({"ok": True, mode: len(imported), "approved": args.approve}))
     return 0

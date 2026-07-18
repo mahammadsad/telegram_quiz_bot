@@ -276,4 +276,5 @@ def test_database_preflight_checks_all_migration_tables(monkeypatch):
         ("question_verifications", "id,question_id,verdict"),
         ("question_generation_audits", "id,quiz_id,verdict"),
         ("question_reports", "id,question_id,user_id,status"),
+        ("learning_resources", "id,micro_topic_id,verification_status,is_active"),
     ]

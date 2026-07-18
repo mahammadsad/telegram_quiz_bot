@@ -46,13 +46,33 @@ def test_production_rejects_unverified_browser_user(monkeypatch):
 def test_public_get_is_read_only_and_has_no_answers(monkeypatch):
     pack = {
         "meta": {"quiz_id": QUIZ_ID, "subject": "ইতিহাস", "chapter": "আধুনিক ভারত"},
-        "items": [{"question": {"question_text": f"প্রশ্ন {i}", "option_a": "ক", "option_b": "খ", "option_c": "গ", "option_d": "ঘ", "correct_option": "A"}} for i in range(10)],
+        "items": [{"question": {"question_text": f"প্রশ্ন {i}", "option_a": "ক", "option_b": "খ", "option_c": "গ", "option_d": "ঘ", "correct_option": "A", "subject": "history", "topic": "আধুনিক ভারত", "micro_topic_key": "history:modern-india:core"}} for i in range(10)],
     }
     monkeypatch.setattr(api_module.quiz_pack_service, "get_quiz_pack", lambda quiz_id: pack)
     response = client.get(f"/api/quiz/{QUIZ_ID}")
     assert response.status_code == 200
     text = response.text
     assert "correct" not in text and '"a"' not in text
+    assert response.json()["qs"][0]["microTopicKey"] == "history:modern-india:core"
+
+
+def test_quiz_learning_resources_endpoint_requires_live_pack(monkeypatch):
+    pack = {"quiz_id": QUIZ_ID, "items": [{}] * 10, "meta": {"quiz_id": QUIZ_ID}}
+    expected = {"quizId": QUIZ_ID, "available": False, "topics": [], "policy": {}}
+    monkeypatch.setattr(api_module.quiz_pack_service, "get_quiz_pack", lambda quiz_id: pack)
+    monkeypatch.setattr(
+        api_module.learning_resources_service,
+        "public_resources_for_quiz",
+        lambda quiz_id: expected,
+    )
+    response = client.get(f"/api/quiz/{QUIZ_ID}/resources")
+    assert response.status_code == 200
+    assert response.json() == expected
+
+
+def test_quiz_learning_resources_endpoint_rejects_static_only_quiz(monkeypatch):
+    monkeypatch.setattr(api_module.quiz_pack_service, "get_quiz_pack", lambda quiz_id: None)
+    assert client.get(f"/api/quiz/{QUIZ_ID}/resources").status_code == 404
 
 
 def test_missing_get_returns_404_without_generation(monkeypatch):

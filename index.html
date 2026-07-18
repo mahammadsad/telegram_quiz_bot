@@ -265,6 +265,42 @@
   .report-submit{justify-self:start; border:0; border-radius:999px; padding:9px 13px; background:var(--danger); color:#fff; font-weight:800}
   .report-submit:disabled{opacity:.55}
   .report-message{min-height:20px; font-size:13px; font-weight:700}
+  .resource-note{
+    margin:8px 0 0;
+    line-height:1.65;
+  }
+  .resource-list{display:grid; gap:12px; margin-top:16px}
+  .resource-topic{
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:13px;
+    background:#fbfdff;
+  }
+  .resource-topic h3{margin:0; font-size:17px; line-height:1.5}
+  .resource-topic > small{display:block; margin-top:2px; color:var(--muted)}
+  .resource-links{display:grid; gap:8px; margin-top:11px}
+  .resource-link{
+    display:block;
+    border:1px solid var(--line);
+    border-radius:var(--radius);
+    padding:11px;
+    background:#fff;
+    color:var(--ink);
+    text-decoration:none;
+  }
+  .resource-link:hover{border-color:var(--primary)}
+  .resource-link strong{display:block; margin-top:4px; line-height:1.45}
+  .resource-link small{display:block; margin-top:4px; color:var(--muted)}
+  .resource-badge{
+    display:inline-block;
+    border-radius:999px;
+    padding:3px 8px;
+    background:var(--surface-2);
+    color:var(--primary-strong);
+    font-size:11px;
+    font-weight:800;
+  }
+  .resource-empty{margin:10px 0 0; color:var(--muted); line-height:1.6}
   .score-band{
     display:grid;
     grid-template-columns:130px 1fr;
@@ -341,7 +377,10 @@
       <div class="meta"><b>প্রশ্ন</b><span id="intro-count" class="num">-</span></div>
       <div class="meta"><b>সময়</b><span id="intro-time" class="num">-</span></div>
     </div>
-    <button class="btn btn-primary browser-only" id="btn-start" style="margin-top:18px;">কুইজ শুরু করুন</button>
+    <div class="actions" id="intro-actions">
+      <button class="btn btn-secondary" id="btn-prepare">📚 আগে প্রস্তুতি নিন</button>
+      <button class="btn btn-primary browser-only" id="btn-start">▶ মক টেস্ট শুরু করুন</button>
+    </div>
     <div class="fallback-box hidden" id="fallback-box" role="status">
       <strong>এটি শুধু জরুরি read-only কপি।</strong><br />
       এখন উত্তর যাচাই বা স্কোর সংরক্ষণ করা যাবে না। লাইভ API ফিরে এলে কুইজ শুরু করুন।
@@ -349,6 +388,17 @@
         <button class="btn btn-primary" id="btn-fallback-retry">লাইভ কুইজ আবার চেষ্টা করুন</button>
         <button class="btn btn-secondary" id="btn-preview">শুধু প্রশ্ন দেখুন</button>
       </div>
+    </div>
+  </section>
+
+  <section id="screen-resources" class="surface section hidden" aria-live="polite">
+    <h2 class="hero-title">📚 আগে প্রস্তুতি নিন</h2>
+    <p class="muted resource-note">এই কুইজে থাকা মাইক্রো-টপিকগুলোর জন্য আগে থেকে যাচাই করা রিসোর্স। এখানে ক্লিক করলে কোনো লাইভ সার্চ হয় না।</p>
+    <p class="muted" id="resource-status">রিসোর্স লোড হচ্ছে...</p>
+    <div class="resource-list" id="resource-list"></div>
+    <div class="actions browser-only">
+      <button class="btn btn-secondary" id="btn-resource-back">কুইজ পরিচিতিতে ফিরুন</button>
+      <button class="btn btn-primary" id="btn-resource-start">▶ মক টেস্ট শুরু করুন</button>
     </div>
   </section>
 
@@ -436,11 +486,15 @@
     loading: byId("screen-loading"),
     error: byId("screen-error"),
     intro: byId("screen-intro"),
+    resources: byId("screen-resources"),
     quiz: byId("screen-quiz"),
     result: byId("screen-result")
   };
 
   byId("btn-start").addEventListener("click", startQuiz);
+  byId("btn-prepare").addEventListener("click", loadResources);
+  byId("btn-resource-back").addEventListener("click", function(){ show("intro"); });
+  byId("btn-resource-start").addEventListener("click", startQuiz);
   byId("btn-fallback-retry").addEventListener("click", loadQuiz);
   byId("btn-preview").addEventListener("click", function(){ startQuiz(true); });
   byId("btn-prev").addEventListener("click", goPrev);
@@ -452,11 +506,13 @@
   if (isTelegram) {
     tg.MainButton.onClick(function(){
       if (screen === "intro") legacyLocal ? loadQuiz() : startQuiz();
+      else if (screen === "resources") startQuiz();
       else if (screen === "quiz") nextOrFinish();
       else if (screen === "result") openDashboard();
     });
     tg.BackButton.onClick(function(){
       if (screen === "quiz") goPrev();
+      else if (screen === "resources") show("intro");
       else if (screen === "result") show("intro");
     });
   }
@@ -506,7 +562,10 @@
     if (!isTelegram) return;
     if (screen === "intro") {
       tg.BackButton.hide();
-      tg.MainButton.setParams({text:legacyLocal ? "লাইভ কুইজ আবার চেষ্টা করুন" : "কুইজ শুরু করুন", is_visible:true, color:"#0f766e", text_color:"#ffffff"});
+      tg.MainButton.setParams({text:legacyLocal ? "লাইভ কুইজ আবার চেষ্টা করুন" : "মক টেস্ট শুরু করুন", is_visible:true, color:"#0f766e", text_color:"#ffffff"});
+    } else if (screen === "resources") {
+      tg.BackButton.show();
+      tg.MainButton.setParams({text:"মক টেস্ট শুরু করুন", is_visible:true, color:"#0f766e", text_color:"#ffffff"});
     } else if (screen === "quiz") {
       if (current > 0) tg.BackButton.show(); else tg.BackButton.hide();
       var last = quiz && current === quiz.qs.length - 1;
@@ -580,7 +639,112 @@
     byId("intro-time").textContent = bn(Math.max(5, quiz.qs.length)) + " মিনিট";
     byId("fallback-box").classList.toggle("hidden", !legacyLocal);
     byId("btn-start").classList.toggle("hidden", legacyLocal);
+    byId("btn-prepare").classList.toggle("hidden", legacyLocal);
     show("intro");
+  }
+
+  function loadResources(){
+    if (legacyLocal) return;
+    show("resources");
+    byId("resource-status").textContent = "যাচাই করা রিসোর্স লোড হচ্ছে...";
+    byId("resource-list").textContent = "";
+    fetch(api("/api/quiz/" + encodeURIComponent(quizId) + "/resources"))
+      .then(function(resp){ return jsonOrThrow(resp, "Learning resources API"); })
+      .then(renderResources)
+      .catch(function(err){
+        console.error(err);
+        byId("resource-status").textContent = "রিসোর্স এখন লোড করা যায়নি। কোনো লাইভ সার্চ করা হয়নি; পরে আবার চেষ্টা করুন।";
+        renderResourceTopics(fallbackResourceTopics());
+      });
+  }
+
+  function renderResources(data){
+    var topics = data && Array.isArray(data.topics) ? data.topics : [];
+    var count = topics.reduce(function(total, topic){
+      return total + (Array.isArray(topic.resources) ? topic.resources.length : 0);
+    }, 0);
+    byId("resource-status").textContent = count
+      ? bn(count) + "টি যাচাই করা রিসোর্স পাওয়া গেছে।"
+      : "এই মাইক্রো-টপিকগুলোর যাচাই করা রিসোর্স এখনও প্রস্তুত হচ্ছে। কোনো লাইভ সার্চ করা হয়নি।";
+    renderResourceTopics(topics.length ? topics : fallbackResourceTopics());
+  }
+
+  function renderResourceTopics(topics){
+    var list = byId("resource-list");
+    list.textContent = "";
+    if (!topics.length) {
+      var message = document.createElement("p");
+      message.className = "resource-empty";
+      message.textContent = "এই কুইজে এখনও কোনো স্বাভাবিকীকৃত মাইক্রো-টপিক পাওয়া যায়নি।";
+      list.appendChild(message);
+      return;
+    }
+    topics.forEach(function(topic){
+      var card = document.createElement("article");
+      card.className = "resource-topic";
+      var heading = document.createElement("h3");
+      heading.textContent = topic.microTopic || topic.microTopicKey || "মাইক্রো-টপিক";
+      card.appendChild(heading);
+      var chapter = document.createElement("small");
+      chapter.textContent = topic.chapter || (quiz.meta && quiz.meta.chapter) || "";
+      card.appendChild(chapter);
+      var resources = Array.isArray(topic.resources) ? topic.resources : [];
+      if (!resources.length) {
+        var empty = document.createElement("p");
+        empty.className = "resource-empty";
+        empty.textContent = "এই টপিকের রিসোর্স যাচাই চলছে।";
+        card.appendChild(empty);
+      } else {
+        var links = document.createElement("div");
+        links.className = "resource-links";
+        resources.forEach(function(resource){
+          if (!resource.url || resource.url.indexOf("https://") !== 0) return;
+          var link = document.createElement("a");
+          link.className = "resource-link";
+          link.href = resource.url;
+          link.target = "_blank";
+          link.rel = "noopener noreferrer";
+          var badge = document.createElement("span");
+          badge.className = "resource-badge";
+          badge.textContent = languageLabel(resource.language) + " · " + resourceTypeLabel(resource.type);
+          link.appendChild(badge);
+          var title = document.createElement("strong");
+          title.textContent = resource.title || "পড়ার রিসোর্স";
+          link.appendChild(title);
+          var source = document.createElement("small");
+          source.textContent = resource.source || resource.domain || "যাচাই করা উৎস";
+          link.appendChild(source);
+          links.appendChild(link);
+        });
+        card.appendChild(links);
+      }
+      list.appendChild(card);
+    });
+  }
+
+  function fallbackResourceTopics(){
+    var seen = {};
+    return (quiz && quiz.qs ? quiz.qs : []).reduce(function(topics, question){
+      var key = question.microTopicKey || "";
+      if (!key || seen[key]) return topics;
+      seen[key] = true;
+      topics.push({
+        chapter: question.chapter || (quiz.meta && quiz.meta.chapter) || "",
+        microTopicKey: key,
+        microTopic: key,
+        resources: []
+      });
+      return topics;
+    }, []);
+  }
+
+  function languageLabel(language){
+    return language === "bn" ? "বাংলা" : language === "hi" ? "হিন্দি" : "English";
+  }
+
+  function resourceTypeLabel(type){
+    var labels = {youtube:"YouTube", article:"Article", official_webpage:"Official", pdf:"PDF", study_note:"Study note", internal_note:"Note"};
+    return labels[type] || "Resource";
   }
 
   function startQuiz(previewOnly){

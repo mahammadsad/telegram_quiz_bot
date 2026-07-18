@@ -178,6 +178,9 @@ def public_quiz_payload(pack: dict) -> dict:
                     item["question"]["option_c"],
                     item["question"]["option_d"],
                 ],
+                "subjectKey": pack["meta"].get("subject_key") or item["question"].get("subject") or "",
+                "chapter": item["question"].get("topic") or pack["meta"].get("chapter") or "",
+                "microTopicKey": item["question"].get("micro_topic_key") or "",
             }
             for item in pack["items"]
         ],

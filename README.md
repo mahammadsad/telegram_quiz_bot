@@ -12,9 +12,10 @@ The syllabus-v2 foundation preserves the 13 Telegram subjects while expanding
 the curriculum to 162 subject-specific chapters and 648 curated micro-topics.
 New coverage is source-gated and stays out of rotation until its verified bundle
 passes staging. See [`docs/SYLLABUS_V2.md`](docs/SYLLABUS_V2.md) for catalogue,
-activation, compatibility, and rollout details. Resource discovery,
-wrong-answer practice, mastery, personalized revision, bookmarks, and exam
-preferences remain later phases.
+activation, compatibility, and rollout details. The preparation screen reads
+only cached, operator-approved learning-resource metadata for the exact quiz
+micro-topics. Automated discovery, wrong-answer practice, mastery,
+personalized revision, bookmarks, and exam preferences remain later phases.
 
 ## Architecture
 
@@ -62,10 +63,13 @@ use the service role against RLS-protected tables and explicitly granted RPCs.
    server, writes the parent attempt and ten question-level rows atomically,
    and returns review, rank, personal best, and attempt number. Reusing a client
    `attemptId` is idempotent; a new ID is an intentional retake.
-10. Review cards show the verified source and accept signed, attempt-owned
+10. Before starting, the preparation screen lists unique quiz micro-topics and
+    at most three cached, verified resources per language and topic. It never
+    performs a live search or sends a database credential to the browser.
+11. Review cards show the verified source and accept signed, attempt-owned
     question reports. Duplicate/rate-limited reports are rejected; credible
     reports automatically quarantine a question for moderation.
-11. Leaderboards aggregate and paginate in PostgreSQL. Public rows contain a
+12. Leaderboards aggregate and paginate in PostgreSQL. Public rows contain a
    generated alias or opted-in display name, never a Telegram ID.
 
 Static JSON is an emergency read-only fallback. When the live API is
@@ -122,17 +126,17 @@ Development-only:
 - `DEV_ALLOW_UNVERIFIED_TELEGRAM=true` permits a local fake user. It must stay
   false in every public deployment.
 
-No new credential or paid search API is introduced by either migration. The
-planned learning-resource phase may add a `YOUTUBE_API_KEY`; it is not used or
-required now.
+No new credential or paid search API is introduced. The learning-resource
+foundation stores metadata and links only; it performs no YouTube or web search
+and requires no `YOUTUBE_API_KEY`.
 
 ## Supabase setup
 
-For a new project, apply `database/schema.sql`, then
-`20260718015054_atomic_quiz_integrity.sql`, then
-`20260718112044_question_provenance_reporting.sql`. Existing projects apply
-the two timestamped migrations in that order. The application never applies
-DDL during startup.
+For a new project, apply `database/schema.sql`, then every file in
+`supabase/migrations/` in timestamp order. Existing projects apply only the
+newer unapplied files. The current stack ends with
+`20260718174844_learning_resources_legacy_pack_compatibility.sql`. The
+application never applies DDL during startup.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,
 and locks tables, legacy views, and private functions to the service role. Full
@@ -147,6 +151,9 @@ due chapter:
 python scripts/import_source_documents.py sources.json --dry-run
 python scripts/import_source_documents.py sources.json --approve
 ```
+
+An approved import also mirrors safe title/link/publisher metadata into
+`learning_resources`. It does not copy `fact_summary` or publisher content.
 
 After applying, run Supabase security and performance advisors, then:
 
@@ -193,6 +200,7 @@ Useful endpoints:
 
 - `GET /api/health`
 - `GET /api/quiz/{quiz_id}`
+- `GET /api/quiz/{quiz_id}/resources`
 - `POST /api/quiz/{quiz_id}/submit`
 - `POST /api/questions/{question_id}/report`
 - `GET /api/quiz/{quiz_id}/leaderboard?limit=20&offset=0`
@@ -257,7 +265,8 @@ Deployment and production drills are in `DEPLOYMENT_GUIDE.md`.
 
 ## Next platform phases
 
-The next phase can build the resource library/YouTube discovery, approval and
-link checks, deterministic math/reasoning answer solvers, and moderation admin
-UI. Wrong-question practice, spaced review, preferences, mastery analytics,
-and personalized revision can follow on the question-level attempt model.
+The next phase can add operator-reviewed discovery and link checks to the
+cached resource library, then expand verified source/resource coverage one
+subject at a time. Deterministic math/reasoning solvers, moderation admin UI,
+wrong-question practice, spaced review, preferences, mastery analytics, and
+personalized revision can follow on the question-level attempt model.

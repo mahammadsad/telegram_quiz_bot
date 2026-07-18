@@ -6,18 +6,22 @@ deploy the new application before the atomic RPCs exist.
 
 ## 1. Apply the database migration
 
-For an existing production database that already contains `quiz_runs` and
-`quiz_submissions`, apply only:
+The current timestamped stack is:
 
 ```text
 supabase/migrations/20260718015054_atomic_quiz_integrity.sql
 supabase/migrations/20260718112044_question_provenance_reporting.sql
+supabase/migrations/20260718160722_syllabus_v2_catalogue.sql
+supabase/migrations/20260718171256_learning_resources_foundation.sql
+supabase/migrations/20260718172756_learning_resources_fk_indexes.sql
+supabase/migrations/20260718174844_learning_resources_legacy_pack_compatibility.sql
 ```
 
-For a new empty project, first apply `database/schema.sql`, then both timestamped
-migrations in order. The SQL is additive and rerunnable. The foundation backfills historical
-question mappings and valid ten-position submissions while preserving every
-legacy table/row.
+For a new empty project, first apply `database/schema.sql`, then the timestamped
+migrations in order. An existing project applies only its newer unapplied
+migrations. The SQL is additive and rerunnable. The foundation backfills
+historical question mappings and valid ten-position submissions while
+preserving every legacy table/row.
 
 Read `docs/MIGRATION_20260718.md` and
 `docs/MIGRATION_20260718_PROVENANCE.md` before applying. Take a database backup or
@@ -38,6 +42,10 @@ and manually review source bundles, then run:
 python scripts/import_source_documents.py sources.json --dry-run
 python scripts/import_source_documents.py sources.json --approve
 ```
+
+After the learning-resource migration, an approved import also mirrors only
+safe resource metadata (title, link, publisher, language/type defaults) from
+the approved source rows. It never stores the source text or `fact_summary`.
 
 Keep scheduled generation paused until every enabled chapter has at least one
 approved, unexpired fact bundle. Missing sources fail closed; current affairs
@@ -142,8 +150,8 @@ Keep `DEV_ALLOW_UNVERIFIED_TELEGRAM=false` in every public environment. Set
 different trusted origin; same-origin deployment needs no CORS list.
 
 Check `GET /api/health`. It should show safe configured booleans,
-`application_version=3.1.0`, and
-`migration_version=20260718112044`; it never proves the database migration was
+`application_version=3.2.0`, and
+`migration_version=20260718174844`; it never proves the database migration was
 applied, so preflight remains mandatory.
 
 ## 4. Configure forum topics and BotFather
@@ -177,20 +185,23 @@ different named-app deployment.
 6. Confirm the Telegram post appears only once in the correct thread and opens
    the subject-scoped quiz ID.
 7. Confirm live mode renders ten questions; submit with a new `attemptId`.
-8. Verify one `quiz_attempts` row and exactly ten
+8. Open `📚 আগে প্রস্তুতি নিন`; confirm it shows only the quiz's unique
+   micro-topics and cached verified resources. Confirm the browser makes only
+   the FastAPI `/resources` request and no live YouTube/web search.
+9. Verify one `quiz_attempts` row and exactly ten
    `quiz_attempt_answers` rows. Retry the identical request and confirm no new
    row; retake with a new ID and confirm a second parent attempt.
-9. Submit one question report from the authenticated review card. Confirm it is
+10. Submit one question report from the authenticated review card. Confirm it is
    bound to that attempt, a duplicate returns conflict, and unrelated users or
    attempts cannot report it. Test the quarantine threshold with test users.
-10. Check quiz/global leaderboard pages and confirm response rows contain no
+11. Check quiz/global leaderboard pages and confirm response rows contain no
    Telegram IDs, first/last names, or non-opted-in usernames.
-11. Stop the API temporarily and open an existing static pack. Confirm the UI
+12. Stop the API temporarily and open an existing static pack. Confirm the UI
    labels read-only fallback and cannot submit or claim a score.
-12. Run `python scripts/check_public_data.py`; it must pass.
-13. Trigger two manual runs for the same date/subject close together. One may
-    proceed; the other must report that another worker owns the active lease.
-14. Run Supabase advisors again and investigate every error/warning. Expected
+13. Run `python scripts/check_public_data.py`; it must pass.
+14. Trigger two manual runs for the same date/subject close together. One may
+   proceed; the other must report that another worker owns the active lease.
+15. Run Supabase advisors again and investigate every error/warning. Expected
     RLS-without-policy information is documented in the migration guide.
 
 For provider failover, use a disposable test environment rather than changing
@@ -224,7 +235,7 @@ backup timestamp; see `docs/MIGRATION_20260718.md`.
 - Static quiz files are still committed by each scheduled subject job, so the
   repository may receive up to 13 small fallback commits per day. Consolidated
   storage/commit batching belongs in a later operations phase.
-- Source collection is an operator import in this phase; automated official
-  feed collection and learning-resource/YouTube integration are not included.
+- Source collection and learning-resource approval are operator imports in this
+  phase; automated official-feed and YouTube discovery are not included.
 - Post-migration advisor results cannot be known until an operator applies the
   migration; rerunning both advisors is a required deployment gate.
