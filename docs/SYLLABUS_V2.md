@@ -126,6 +126,32 @@ Importing and caching the records does not enable the five chapters. English
 rotation remains fail-closed until a separate staging quiz passes generation,
 independent verification, Telegram delivery, and answer review.
 
+## Mathematics expansion bundle
+
+`sources/mathematics_expansion_v2.json` contains 47 reviewed official or
+primary records covering all 36 micro-topics in the nine inactive Mathematics
+chapters. It expands competitive-exam coverage across simplification, averages
+and ages, partnership, mixture and alligation, algebra, geometry, mensuration,
+trigonometry, data interpretation, statistics, and probability.
+
+The bundle uses NIOS course material for arithmetic, algebra, geometry,
+mensuration, trigonometry, data representation, and probability. Publisher-
+authored OpenStax material independently grounds weighted and combined means,
+age and proportion models, partnership allocation, direct variation, and
+mixture conservation. Composite topics retain separate records where one
+source does not independently cover each included concept.
+
+Validate it without credentials before importing it into an environment:
+
+```bash
+python scripts/import_source_documents.py \
+  sources/mathematics_expansion_v2.json --validate-only
+```
+
+Importing and caching these records does not enable any of the nine chapters.
+Mathematics rotation remains fail-closed until a separate staging quiz passes
+generation, independent verification, Telegram delivery, and answer review.
+
 ## Data model
 
 `quiz_chapters` gains stable keys, exam relevance, priority, rotation state,
