@@ -336,6 +336,15 @@
     border-radius:var(--radius);
     line-height:1.6;
   }
+  .resume-box{margin-top:16px;border:1px solid color-mix(in srgb,var(--primary) 45%,var(--line));background:color-mix(in srgb,var(--primary) 9%,var(--surface));padding:14px;border-radius:var(--radius);line-height:1.6}
+  .navigator{display:grid;grid-template-columns:repeat(10,minmax(36px,1fr));gap:6px;padding:13px 18px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--surface) 92%,transparent)}
+  .nav-q{min-height:38px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--muted);font-weight:800;cursor:pointer;position:relative}
+  .nav-q.answered{border-color:var(--success);color:var(--success)}.nav-q.current{background:var(--primary);border-color:var(--primary);color:#fff}.nav-q.marked:after{content:'★';position:absolute;right:2px;top:-6px;color:var(--warning);font-size:12px}.nav-q:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 38%,transparent);outline-offset:2px}
+  .question-tools{display:flex;justify-content:space-between;gap:9px;align-items:center;margin:12px 0}.mark-btn{width:auto;min-height:44px;border:1px solid var(--line);border-radius:12px;padding:9px 12px;background:var(--surface);color:var(--muted);font-weight:800;cursor:pointer}.mark-btn.active{border-color:var(--warning);color:var(--warning);background:color-mix(in srgb,var(--warning) 9%,var(--surface))}
+  .result-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}.result-metric{border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--surface)}.result-metric b{display:block;color:var(--muted);font-size:11px}.result-metric span{font-weight:800}
+  .modal{position:fixed;inset:0;z-index:20;display:grid;place-items:center;padding:18px;background:rgba(5,15,22,.56)}.modal-card{width:min(100%,480px);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:0 20px 60px rgba(0,0,0,.28)}.modal-card h2{margin:0 0 8px}.modal-card p{line-height:1.7}
+  .bottom-nav{position:fixed;left:50%;bottom:9px;z-index:10;transform:translateX(-50%);width:min(calc(100% - 20px),720px);display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:6px;background:color-mix(in srgb,var(--surface) 94%,transparent);border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 28px rgba(16,32,44,.16);backdrop-filter:blur(12px)}.bottom-nav a{text-align:center;text-decoration:none;color:var(--muted);padding:9px 4px;border-radius:12px;font-size:12px;font-weight:800;min-height:44px;display:grid;place-items:center}.bottom-nav a.active{background:color-mix(in srgb,var(--primary) 12%,transparent);color:var(--primary)}
+  @media (prefers-color-scheme:dark){:root{--line:#344653;--surface-2:#193934;--primary-strong:#6ee7d4}.surface,.meta,.quiz-head,.option,.review,.resource-topic,.resource-link,.score-ring,.result-metric{background:var(--surface)}.error-box{background:#351d22;color:#ffb5bd;border-color:#70404a}.fallback-box{background:#382e17;color:#f7d58a;border-color:#77622b}.score-ring{background:radial-gradient(circle at center,var(--surface) 58%,transparent 59%),conic-gradient(var(--primary) var(--score-deg,0deg),#344653 0)}}
   @media (max-width:560px){
     .app{padding:12px 10px 86px}
     .brand h1{font-size:20px}
@@ -344,6 +353,8 @@
     .actions{flex-direction:column}
     .score-band{grid-template-columns:1fr; text-align:center}
     .score-ring{width:126px; margin:0 auto}
+    .navigator{grid-template-columns:repeat(5,1fr)}
+    .result-metrics{grid-template-columns:repeat(2,1fr)}
   }
   @media (prefers-reduced-motion:reduce){
     *{animation:none!important; transition:none!important}
@@ -389,6 +400,10 @@
         <button class="btn btn-secondary" id="btn-preview">শুধু প্রশ্ন দেখুন</button>
       </div>
     </div>
+    <div class="resume-box hidden" id="resume-box" role="status">
+      <strong>আপনার অসম্পূর্ণ মক টেস্ট পাওয়া গেছে।</strong>
+      <div class="actions"><button class="btn btn-primary" id="btn-resume" type="button">চালিয়ে যান</button><button class="btn btn-secondary" id="btn-new-attempt" type="button">নতুন করে শুরু করুন</button></div>
+    </div>
   </section>
 
   <section id="screen-resources" class="surface section hidden" aria-live="polite">
@@ -413,11 +428,13 @@
     <div class="progress-wrap">
       <div class="progress-line"><div class="progress-fill" id="progress-fill"></div></div>
     </div>
+    <nav class="navigator" id="question-navigator" aria-label="প্রশ্ন নেভিগেটর"></nav>
     <div class="question-wrap">
       <div class="q-kicker">
         <span id="q-index" class="num">প্রশ্ন ১ / ১০</span>
         <span id="answered-count" class="num">উত্তর ০</span>
       </div>
+      <div class="question-tools"><button class="mark-btn" id="btn-mark" type="button" aria-pressed="false">☆ রিভিউয়ের জন্য চিহ্নিত করুন</button><span class="muted" id="mode-label"></span></div>
       <p class="q-text" id="q-text">-</p>
       <div class="options" id="options-wrap"></div>
       <div class="actions browser-only">
@@ -437,13 +454,17 @@
         <p class="muted" id="result-subtitle">উত্তরপত্র নিচে দেখো।</p>
       </div>
     </div>
+    <div class="result-metrics" id="result-metrics">
+      <div class="result-metric"><b>সঠিকতা</b><span id="result-accuracy">০%</span></div><div class="result-metric"><b>সময়</b><span id="result-time">০:০০</span></div><div class="result-metric"><b>প্রতি প্রশ্ন</b><span id="result-average">০ সেকেন্ড</span></div><div class="result-metric"><b>উত্তরহীন</b><span id="result-unanswered">০</span></div>
+    </div>
     <div class="actions">
-      <button class="btn btn-secondary" id="btn-retake">আবার পরীক্ষা দিন</button>
-      <button class="btn btn-primary" id="btn-dashboard">ড্যাশবোর্ড দেখুন</button>
+      <button class="btn btn-secondary" id="btn-wrong-practice">ভুল প্রশ্ন অনুশীলন</button><button class="btn btn-secondary" id="btn-revise">আবার রিভিশন</button><button class="btn btn-secondary" id="btn-retake">পুনরায় পরীক্ষা</button><button class="btn btn-primary" id="btn-dashboard">ড্যাশবোর্ড</button>
     </div>
     <div class="review-list" id="review-list"></div>
   </section>
 </main>
+<div class="modal hidden" id="submit-modal" role="dialog" aria-modal="true" aria-labelledby="submit-title"><div class="modal-card"><h2 id="submit-title">উত্তরপত্র সাবমিট করবেন?</h2><p id="submit-summary"></p><div class="actions"><button class="btn btn-secondary" id="btn-submit-back" type="button">ফিরে যান</button><button class="btn btn-primary" id="btn-submit-confirm" type="button">তবুও সাবমিট করুন</button></div></div></div>
+<nav class="bottom-nav" aria-label="প্রধান নেভিগেশন"><a class="active" href="index.html">কুইজ</a><a href="practice.html?source=wrong">অনুশীলন</a><a href="practice.html?source=due">রিভিশন</a><a href="dashboard.html">পরিসংখ্যান</a></nav>
 
 <script>
 (function(){
@@ -480,6 +501,11 @@
   var lastApiError = null;
   var submitting = false;
   var attemptId = "";
+  var markedForReview = [];
+  var responseTimes = [];
+  var startedAt = 0;
+  var questionStartedAt = 0;
+  var quizMode = "timed";
   var retryAction = loadQuiz;
 
   var screens = {
@@ -501,6 +527,13 @@
   byId("btn-next").addEventListener("click", nextOrFinish);
   byId("btn-retake").addEventListener("click", startQuiz);
   byId("btn-dashboard").addEventListener("click", openDashboard);
+  byId("btn-wrong-practice").addEventListener("click", openWrongPractice);
+  byId("btn-revise").addEventListener("click", loadResources);
+  byId("btn-mark").addEventListener("click", toggleMarked);
+  byId("btn-resume").addEventListener("click", resumeDraft);
+  byId("btn-new-attempt").addEventListener("click", function(){ discardDraft(); startQuiz(); });
+  byId("btn-submit-back").addEventListener("click", hideSubmitConfirmation);
+  byId("btn-submit-confirm").addEventListener("click", function(){ hideSubmitConfirmation(); finishQuiz(true); });
   byId("btn-retry").addEventListener("click", function(){ retryAction(); });
 
   if (isTelegram) {
@@ -521,6 +554,7 @@
     if (screen !== "quiz") return;
     if (["1","2","3","4"].indexOf(event.key) >= 0) {
       answers[current] = Number(event.key) - 1;
+      saveDraft();
       renderQuestion();
     } else if (event.key === "ArrowLeft") goPrev();
     else if (event.key === "ArrowRight") nextOrFinish();
@@ -530,6 +564,7 @@
     showError("কুইজ আইডি পাওয়া যায়নি। Telegram পোস্টের কুইজ বাটন থেকে খুলুন।");
   } else {
     byId("quiz-id-pill").textContent = "#" + quizId;
+    loadQuizPreferences();
     loadQuiz();
   }
 
@@ -550,6 +585,58 @@
     var params = new URLSearchParams(window.location.search);
     if (isTelegram && tg.initDataUnsafe && tg.initDataUnsafe.start_param) return tg.initDataUnsafe.start_param;
     return params.get("quiz") || params.get("id") || params.get("startapp") || "";
+  }
+
+  function loadQuizPreferences(){
+    if (!isTelegram) return;
+    fetch(api("/api/me/preferences"), {headers:{"X-Telegram-Init-Data":tg.initData}})
+      .then(function(resp){ return jsonOrThrow(resp, "Preferences API"); })
+      .then(function(data){
+        quizMode = data.quizMode === "practice" ? "practice" : "timed";
+        if (quiz) renderIntro();
+      })
+      .catch(function(){ quizMode = "timed"; });
+  }
+
+  function draftKey(){ return "telegram-quiz-draft:" + quizId; }
+  function readDraft(){
+    try {
+      var draft = JSON.parse(localStorage.getItem(draftKey()) || "null");
+      if (!draft || draft.quizId !== quizId || !Array.isArray(draft.answers) || draft.answers.length !== 10) return null;
+      if (!draft.savedAt || Date.now() - draft.savedAt > 24 * 60 * 60 * 1000) { discardDraft(); return null; }
+      return draft;
+    } catch(e) { return null; }
+  }
+  function saveDraft(){
+    if (!quiz || readOnlyMode || screen !== "quiz") return;
+    try {
+      localStorage.setItem(draftKey(), JSON.stringify({
+        quizId:quizId, attemptId:attemptId, answers:answers, current:current,
+        markedForReview:markedForReview, responseTimes:responseTimes,
+        timeLeft:timeLeft, totalSeconds:totalSeconds, startedAt:startedAt,
+        savedAt:Date.now(), quizMode:quizMode
+      }));
+    } catch(e) {}
+  }
+  function discardDraft(){ try { localStorage.removeItem(draftKey()); } catch(e) {} }
+  function resumeDraft(){
+    var draft = readDraft();
+    if (!draft) { startQuiz(); return; }
+    readOnlyMode = false;
+    attemptId = draft.attemptId || newAttemptId();
+    answers = draft.answers.map(function(value){ return value === null || [0,1,2,3].indexOf(value) >= 0 ? value : null; });
+    markedForReview = Array.isArray(draft.markedForReview) && draft.markedForReview.length === 10 ? draft.markedForReview.map(Boolean) : quiz.qs.map(function(){ return false; });
+    responseTimes = Array.isArray(draft.responseTimes) && draft.responseTimes.length === 10 ? draft.responseTimes : quiz.qs.map(function(){ return null; });
+    current = Math.max(0, Math.min(9, Number(draft.current) || 0));
+    totalSeconds = Number(draft.totalSeconds) || Math.max(300, quiz.qs.length * 60);
+    var offline = Math.max(0, Math.floor((Date.now() - draft.savedAt) / 1000));
+    timeLeft = quizMode === "practice" ? totalSeconds : Math.max(0, (Number(draft.timeLeft) || totalSeconds) - offline);
+    startedAt = Number(draft.startedAt) || Date.now();
+    questionStartedAt = Date.now();
+    prepareQuizHeader();
+    renderQuestion();
+    startTimer();
+    show("quiz");
   }
 
   function show(name){
@@ -636,10 +723,11 @@
     byId("intro-title").textContent = meta.chapter || "আজকের মক টেস্ট";
     byId("intro-subject").textContent = meta.subject || "মক টেস্ট";
     byId("intro-count").textContent = bn(quiz.qs.length) + "টি";
-    byId("intro-time").textContent = bn(Math.max(5, quiz.qs.length)) + " মিনিট";
+    byId("intro-time").textContent = quizMode === "practice" ? "Untimed practice" : bn(Math.max(5, quiz.qs.length)) + " মিনিট";
     byId("fallback-box").classList.toggle("hidden", !legacyLocal);
     byId("btn-start").classList.toggle("hidden", legacyLocal);
     byId("btn-prepare").classList.toggle("hidden", legacyLocal);
+    byId("resume-box").classList.toggle("hidden", legacyLocal || !readDraft());
     show("intro");
   }
 
@@ -715,6 +803,14 @@
           source.textContent = resource.source || resource.domain || "যাচাই করা উৎস";
           link.appendChild(source);
           links.appendChild(link);
+          if (isTelegram && resource.id) {
+            var bookmark = document.createElement("button");
+            bookmark.type = "button";
+            bookmark.className = "btn btn-secondary";
+            bookmark.textContent = "☆ রিসোর্স বুকমার্ক";
+            bookmark.addEventListener("click", function(){ setBookmark(bookmark, "resource", resource.id); });
+            links.appendChild(bookmark);
+          }
         });
         card.appendChild(links);
       }
@@ -753,16 +849,27 @@
       return;
     }
     readOnlyMode = legacyLocal;
+    discardDraft();
     attemptId = newAttemptId();
     answers = quiz.qs.map(function(){ return null; });
+    markedForReview = quiz.qs.map(function(){ return false; });
+    responseTimes = quiz.qs.map(function(){ return null; });
     current = 0;
     totalSeconds = Math.max(300, quiz.qs.length * 60);
     timeLeft = totalSeconds;
-    byId("quiz-subject").textContent = (quiz.meta && quiz.meta.subject) || "মক টেস্ট";
-    byId("quiz-chapter").textContent = (quiz.meta && quiz.meta.chapter) || "";
+    startedAt = Date.now();
+    questionStartedAt = Date.now();
+    prepareQuizHeader();
     renderQuestion();
     startTimer();
     show("quiz");
+    saveDraft();
+  }
+
+  function prepareQuizHeader(){
+    byId("quiz-subject").textContent = (quiz.meta && quiz.meta.subject) || "মক টেস্ট";
+    byId("quiz-chapter").textContent = (quiz.meta && quiz.meta.chapter) || "";
+    byId("mode-label").textContent = quizMode === "practice" ? "Practice mode · untimed" : "Timed mode";
   }
 
   function renderQuestion(){
@@ -783,6 +890,7 @@
       button.addEventListener("click", function(){
         answers[current] = index;
         haptic("select");
+        saveDraft();
         renderQuestion();
       });
       wrap.appendChild(button);
@@ -790,15 +898,63 @@
     byId("btn-prev").disabled = current === 0;
     byId("btn-next").textContent = current === quiz.qs.length - 1 ? (readOnlyMode ? "শেষ করুন" : "সাবমিট করুন") : "পরবর্তী";
     syncTelegramButtons();
+    renderNavigator();
+    var marked = !!markedForReview[current];
+    byId("btn-mark").classList.toggle("active", marked);
+    byId("btn-mark").setAttribute("aria-pressed", marked ? "true" : "false");
+    byId("btn-mark").textContent = marked ? "★ রিভিউয়ের জন্য চিহ্নিত" : "☆ রিভিউয়ের জন্য চিহ্নিত করুন";
+  }
+
+  function renderNavigator(){
+    var nav = byId("question-navigator");
+    nav.textContent = "";
+    quiz.qs.forEach(function(_, index){
+      var button = document.createElement("button");
+      button.type = "button";
+      button.className = "nav-q" + (answers[index] !== null ? " answered" : "") + (markedForReview[index] ? " marked" : "") + (index === current ? " current" : "");
+      button.textContent = bn(index + 1);
+      button.setAttribute("aria-label", "প্রশ্ন " + bn(index + 1) + (answers[index] !== null ? ", উত্তর দেওয়া" : ", উত্তর বাকি") + (markedForReview[index] ? ", রিভিউ চিহ্নিত" : ""));
+      button.addEventListener("click", function(){ moveToQuestion(index); });
+      nav.appendChild(button);
+    });
+  }
+
+  function toggleMarked(){
+    markedForReview[current] = !markedForReview[current];
+    haptic("select");
+    saveDraft();
+    renderQuestion();
+  }
+
+  function trackCurrentTime(){
+    if (!questionStartedAt || !responseTimes.length) return;
+    var elapsed = Math.max(0, (Date.now() - questionStartedAt) / 1000);
+    responseTimes[current] = Math.min(3600, Number(responseTimes[current] || 0) + elapsed);
+    questionStartedAt = Date.now();
+  }
+
+  function moveToQuestion(index){
+    if (index === current) return;
+    trackCurrentTime();
+    current = Math.max(0, Math.min(quiz.qs.length - 1, index));
+    questionStartedAt = Date.now();
+    saveDraft();
+    renderQuestion();
   }
 
   function startTimer(){
     clearInterval(timerHandle);
+    if (quizMode === "practice" && !readOnlyMode) {
+      byId("timer").textContent = "Practice";
+      byId("timer").classList.remove("low");
+      return;
+    }
     tick();
     timerHandle = setInterval(function(){
       timeLeft -= 1;
       tick();
-      if (timeLeft <= 0) finishQuiz();
+      if (timeLeft % 5 === 0) saveDraft();
+      if (timeLeft <= 0) finishQuiz(true);
     }, 1000);
   }
 
@@ -813,21 +969,19 @@
 
   function goPrev(){
     if (current > 0) {
-      current -= 1;
-      renderQuestion();
+      moveToQuestion(current - 1);
     }
   }
 
   function nextOrFinish(){
     if (current < quiz.qs.length - 1) {
-      current += 1;
-      renderQuestion();
+      moveToQuestion(current + 1);
     } else {
       finishQuiz();
     }
   }
 
-  function finishQuiz(){
+  function finishQuiz(confirmed){
     if (submitting) return;
     if (readOnlyMode) {
       retryAction = loadQuiz;
@@ -835,6 +989,11 @@
       showError("Read-only কপি শেষ হয়েছে। এখানে উত্তর যাচাই বা স্কোর সংরক্ষণ করা হয়নি।");
       return;
     }
+    if (confirmed !== true) {
+      showSubmitConfirmation();
+      return;
+    }
+    trackCurrentTime();
     submitting = true;
     retryAction = finishQuiz;
     clearInterval(timerHandle);
@@ -846,7 +1005,10 @@
       body:JSON.stringify({
         initData: isTelegram ? tg.initData : "",
         answers: answers,
-        attemptId: attemptId
+        attemptId: attemptId,
+        durationSeconds: Math.min(86400, Math.max(0, Math.round((Date.now() - startedAt) / 1000))),
+        responseTimes: responseTimes.map(function(value){ return value === null ? null : Math.round(value * 100) / 100; }),
+        markedForReview: markedForReview
       })
     })
       .then(function(resp){
@@ -855,7 +1017,7 @@
         }
         return resp.json();
       })
-      .then(function(result){ submitting = false; renderResult(result); })
+      .then(function(result){ submitting = false; discardDraft(); renderResult(result); })
       .catch(function(err){
         submitting = false;
         console.error(err);
@@ -869,8 +1031,29 @@
       });
   }
 
+  function showSubmitConfirmation(){
+    var answered = answers.filter(function(value){ return value !== null; }).length;
+    var unanswered = answers.length - answered;
+    var marked = markedForReview.filter(Boolean).length;
+    byId("submit-summary").textContent =
+      "আপনি " + bn(answered) + "টি প্রশ্নের উত্তর দিয়েছেন। " +
+      bn(unanswered) + "টি প্রশ্ন এখনও বাকি। " +
+      bn(marked) + "টি প্রশ্ন রিভিউয়ের জন্য চিহ্নিত।";
+    byId("submit-modal").classList.remove("hidden");
+    byId("btn-submit-back").focus();
+  }
+
+  function hideSubmitConfirmation(){
+    byId("submit-modal").classList.add("hidden");
+  }
+
   function openDashboard(){
     window.location.href = "dashboard.html?quiz=" + encodeURIComponent(quizId);
+  }
+
+  function openWrongPractice(){
+    var subject = quiz && quiz.meta ? (quiz.meta.subject_key || quiz.meta.subjectKey || "") : "";
+    window.location.href = "practice.html?source=wrong" + (subject ? "&subject=" + encodeURIComponent(subject) : "");
   }
 
   function newAttemptId(){
@@ -880,6 +1063,9 @@
 
   function renderResult(result){
     var pct = result.total ? Math.round(result.score / result.total * 100) : 0;
+    var duration = result.duration_seconds === null || result.duration_seconds === undefined
+      ? Math.max(0, Math.round((Date.now() - startedAt) / 1000))
+      : result.duration_seconds;
     byId("score-ring").style.setProperty("--score-deg", (pct * 3.6) + "deg");
     byId("score-text").textContent = bn(result.score) + "/" + bn(result.total);
     byId("result-title").textContent = resultTitle(pct);
@@ -888,6 +1074,10 @@
       "। আপনার সেরা স্কোর " + bn(result.best_score === undefined ? result.score : result.best_score) +
       "/" + bn(result.total) + "; Rank: " + bn(result.rank || "-") + " / " +
       bn(result.participants || 0) + "। ড্যাশবোর্ডে সর্বশেষ চেষ্টার স্কোর দেখাবে। আবার পরীক্ষা দিতে পারেন।";
+    byId("result-accuracy").textContent = bn(pct) + "%";
+    byId("result-time").textContent = bn(Math.floor(duration / 60) + ":" + pad2(duration % 60));
+    byId("result-average").textContent = bn(result.total ? Math.round(duration / result.total) : 0) + " সেকেন্ড";
+    byId("result-unanswered").textContent = bn(Math.max(0, result.total - (result.answered || 0)));
 
     var list = byId("review-list");
     list.innerHTML = "";
@@ -902,6 +1092,7 @@
         '<p class="answer correct"></p>' +
         '<p class="explanation"></p>' +
         '<p class="source" hidden></p>' +
+        '<button type="button" class="btn btn-secondary bookmark-submit">☆ প্রশ্ন বুকমার্ক</button>' +
         '<details class="report-box"><summary>প্রশ্নটি রিপোর্ট করুন</summary>' +
           '<div class="report-fields">' +
             '<select aria-label="রিপোর্টের কারণ">' +
@@ -937,10 +1128,26 @@
       row.querySelector(".report-submit").addEventListener("click", function(){
         submitQuestionReport(row, item);
       });
+      row.querySelector(".bookmark-submit").addEventListener("click", function(){
+        setBookmark(row.querySelector(".bookmark-submit"), "question", item.questionId);
+      });
       list.appendChild(row);
     });
     haptic(pct >= 50 ? "success" : "warning");
     show("result");
+  }
+
+  function setBookmark(button, itemType, itemId){
+    if (!isTelegram || !itemId || button.disabled) return;
+    button.disabled = true;
+    fetch(api("/api/me/bookmarks"), {
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({initData:tg.initData,itemType:itemType,itemId:itemId,active:true})
+    })
+      .then(function(resp){ return jsonOrThrow(resp, "Bookmark API"); })
+      .then(function(){ button.textContent = "★ বুকমার্ক করা হয়েছে"; haptic("success"); })
+      .catch(function(){ button.disabled = false; button.textContent = "বুকমার্ক করা যায়নি"; });
   }
 
   function submitQuestionReport(row, item){
