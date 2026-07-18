@@ -31,7 +31,7 @@ from config.settings import (
 from config.subjects import QUIZ_SUBJECTS, get_subject
 from database.client import get_client
 from errors import TelegramPostingError
-from services import chapter_selector, quiz_pack_service
+from services import chapter_selector, question_verification, quiz_pack_service, source_grounding
 from services.gemini_provider_pool import GeminiProviderPool
 from services.question_validation import (
     QUESTION_COUNT,
@@ -61,19 +61,29 @@ MCQ_JSON_SCHEMA = {
             "difficulty": {"type": "STRING"},
             "subject_key": {"type": "STRING"},
             "chapter": {"type": "STRING"},
+            "micro_topic_key": {"type": "STRING"},
+            "source_document_id": {"type": "STRING"},
         },
-        "required": ["question", "options", "correct_index", "explanation", "detailed_explanation", "difficulty", "subject_key", "chapter"],
+        "required": ["question", "options", "correct_index", "explanation", "detailed_explanation", "difficulty", "subject_key", "chapter", "micro_topic_key", "source_document_id"],
     },
 }
 
 
-def build_mcq_prompt(subject_key: str, chapter: str) -> str:
+def build_mcq_prompt(
+    subject_key: str,
+    chapter: str,
+    bundle: source_grounding.GroundingBundle,
+) -> str:
     subject = get_subject(subject_key, require_quiz_enabled=True)
     return f"""You are an expert Bengali question setter for Indian and West Bengal competitive exams.
 Create exactly 10 MCQs for the single scheduled subject and chapter below.
 Canonical subject key: {subject.key}
 Internal subject: {subject.internal_subject}
 Chapter: {chapter}
+Canonical micro-topic key: {bundle.micro_topic_key}
+Micro-topic: {bundle.micro_topic_name}
+Verified source facts (JSON):
+{json.dumps(bundle.prompt_facts(), ensure_ascii=False, separators=(',', ':'))}
 
 Rules:
 1. Return one JSON array containing exactly 10 objects and nothing else.
@@ -81,11 +91,13 @@ Rules:
 3. Bengali question text, a short Bengali explanation, and a detailed Bengali explanation are mandatory.
 4. English tests may contain English tested text; Bengali instructions and explanations remain mandatory.
 5. Supply exactly four unique non-empty options and correct_index 0..3.
-6. Every object must repeat subject_key exactly as {subject.key} and chapter exactly as {chapter}.
+6. Every object must repeat subject_key exactly as {subject.key}, chapter exactly as {chapter}, and micro_topic_key exactly as {bundle.micro_topic_key}.
 7. Use exactly 3 easy, 5 medium, and 2 hard questions.
 8. Balance correct_index across all four positions: two positions appear twice and two positions appear three times. Avoid predictable sequences.
 9. Avoid duplicates, truncation, answer-revealing wording, and ambiguity.
 10. Questions must suit WBCS, WBPSC, WBP, SSC, Railway, Banking, or TET preparation.
+11. Use only the verified source facts above. Do not use model memory or infer an unstated fact.
+12. Every question must cite one supplied source_document_id whose facts directly support the answer and explanation.
 """
 
 
@@ -94,9 +106,17 @@ def generate_mcqs(
     chapter: str,
     *,
     pool: GeminiProviderPool | None = None,
+    target_date: date | None = None,
+    grounding_bundle: source_grounding.GroundingBundle | None = None,
+    quiz_id: str | None = None,
 ) -> tuple[list[dict], dict]:
     pool = pool or GeminiProviderPool()
-    prompt = build_mcq_prompt(subject_key, chapter)
+    grounding_bundle = grounding_bundle or source_grounding.load_grounding_bundle(
+        subject_key,
+        chapter,
+        target_date or local_today(),
+    )
+    prompt = build_mcq_prompt(subject_key, chapter, grounding_bundle)
     raw_text, generation = pool.generate_subject_quiz(prompt=prompt, response_schema=MCQ_JSON_SCHEMA)
     try:
         raw = json.loads(raw_text)
@@ -116,10 +136,42 @@ def generate_mcqs(
     enriched = []
     for item in raw:
         if isinstance(item, dict):
-            enriched.append({"subject_key": subject_key, "chapter": chapter, **item})
+            enriched.append({
+                "subject_key": subject_key,
+                "chapter": chapter,
+                "micro_topic_id": grounding_bundle.micro_topic_id,
+                **item,
+            })
         else:
             enriched.append(item)
-    return validate_questions(enriched, subject_key, chapter), generation
+    generated = validate_questions(
+        enriched,
+        subject_key,
+        chapter,
+        micro_topic_id=grounding_bundle.micro_topic_id,
+        micro_topic_key=grounding_bundle.micro_topic_key,
+        allowed_source_ids=grounding_bundle.source_ids,
+        require_verification=False,
+    )
+    verified, verification = question_verification.verify_questions(
+        generated,
+        grounding_bundle,
+        pool,
+        quiz_id=quiz_id,
+    )
+    clean = validate_questions(
+        verified,
+        subject_key,
+        chapter,
+        micro_topic_id=grounding_bundle.micro_topic_id,
+        micro_topic_key=grounding_bundle.micro_topic_key,
+        allowed_source_ids=grounding_bundle.source_ids,
+        require_verification=True,
+    )
+    generation["verification_provider"] = verification.get("provider")
+    generation["verification_model"] = verification.get("model")
+    generation["verification_attempts"] = verification.get("attempts")
+    return clean, generation
 
 
 def valid_saved_pack(quiz_id: str, run: dict | None = None) -> dict | None:
@@ -140,7 +192,16 @@ def valid_saved_pack(quiz_id: str, run: dict | None = None) -> dict | None:
             "detailed_explanation": question.get("detailed_explanation"),
             "subject_key": subject_key,
             "chapter": chapter,
+            "micro_topic_id": question.get("micro_topic_id"),
+            "micro_topic_key": question.get("micro_topic_key"),
+            "source_document_id": question.get("source_document_id"),
             "difficulty": question.get("difficulty"),
+            "verification_status": question.get("verification_status"),
+            "verification_score": question.get("verification_score"),
+            "verification_notes": question.get("verification_notes"),
+            "verification_checks": question.get("verification_checks"),
+            "verified_at": question.get("verified_at"),
+            "verification_model": question.get("verification_model"),
         })
     try:
         validate_questions(raw, subject_key, chapter, enforce_composition=False)
@@ -252,7 +313,13 @@ def run_subject_quiz(
                 question_count=0,
             )
         try:
-            questions, generation = generate_mcqs(subject_key, chapter, pool=pool)
+            questions, generation = generate_mcqs(
+                subject_key,
+                chapter,
+                pool=pool,
+                target_date=target_date,
+                quiz_id=quiz_id,
+            )
             if not quiz_runs_repo.claim(
                 quiz_id,
                 worker_id,
@@ -270,6 +337,7 @@ def run_subject_quiz(
                     "subject_display_name": subject.telegram_display_name,
                     "chapter": chapter,
                     "generation_model": generation["model"],
+                    "micro_topic_key": questions[0]["micro_topic_key"],
                 },
                 chat_id=_chat_id_as_int(TELEGRAM_CHAT_ID),
                 worker_id=worker_id,
@@ -480,6 +548,13 @@ def validate_database_schema() -> None:
         ("quiz_questions", "id,quiz_id,question_order"),
         ("quiz_attempts", "id,client_attempt_id,attempt_number"),
         ("quiz_attempt_answers", "id,attempt_id,question_order"),
+        ("quiz_subjects", "subject_key,display_name"),
+        ("quiz_chapters", "id,subject_key,name"),
+        ("quiz_micro_topics", "id,chapter_id,key"),
+        ("source_documents", "id,micro_topic_id,verification_status"),
+        ("question_verifications", "id,question_id,verdict"),
+        ("question_generation_audits", "id,quiz_id,verdict"),
+        ("question_reports", "id,question_id,user_id,status"),
     ):
         client.table(table).select(identifier).limit(1).execute()
 
@@ -554,7 +629,7 @@ def main() -> None:
                 validate_database_schema()
             except Exception:
                 raise RuntimeError(
-                    "Configuration preflight failed: atomic integrity migration 20260718015054 is unavailable."
+                    "Configuration preflight failed: provenance migration 20260718112044 is unavailable."
                 ) from None
     except Exception as exc:
         LOG.error("RUN_FAILED category=%s", getattr(exc, "category", type(exc).__name__))

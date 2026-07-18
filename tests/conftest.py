@@ -15,6 +15,23 @@ def valid_questions():
             "subject_key": "history",
             "chapter": "আধুনিক ভারত",
             "difficulty": "easy" if index < 3 else "medium" if index < 8 else "hard",
+            "micro_topic_id": "11111111-1111-4111-8111-111111111111",
+            "micro_topic_key": "history:modern-india:core",
+            "source_document_id": "22222222-2222-4222-8222-222222222222",
+            "verification_status": "verified",
+            "verification_score": 0.95,
+            "verification_notes": "All source-grounded checks passed.",
+            "verification_checks": {
+                "correct_answer_supported": True,
+                "options_distinct": True,
+                "explanation_supported": True,
+                "unambiguous": True,
+                "fact_current": True,
+                "micro_topic_match": True,
+                "difficulty_match": True,
+            },
+            "verified_at": "2026-07-18T10:00:00+00:00",
+            "verification_model": "test-verifier",
         }
         for index in range(10)
     ]

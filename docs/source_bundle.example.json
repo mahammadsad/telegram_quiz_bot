@@ -1,0 +1,17 @@
+[
+  {
+    "subject_key": "current-affairs",
+    "chapter": "জাতীয় সাম্প্রতিক ঘটনা",
+    "micro_topic_name": "কেন্দ্রীয় সরকারি ঘোষণা",
+    "source_url": "https://example.gov.in/official-release",
+    "source_title": "Replace with the exact official release title",
+    "source_domain": "example.gov.in",
+    "source_kind": "official",
+    "source_published_at": "2026-07-18T09:00:00+00:00",
+    "source_accessed_at": "2026-07-18T10:00:00+00:00",
+    "fact_summary": "Replace this with a concise, manually checked set of atomic facts from the cited official release.",
+    "fact_version": "2026-07-18",
+    "expires_at": "2026-08-17T00:00:00+00:00",
+    "verification_notes": "Checked against the named official release by an operator."
+  }
+]

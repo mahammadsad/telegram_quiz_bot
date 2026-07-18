@@ -10,7 +10,7 @@ convenience methods instead of passing raw dicts everywhere.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 
 @dataclass
@@ -34,6 +34,15 @@ class Question:
     week_number: Optional[int] = None
     bot_type: str = "daily_mcq"
     status: str = "active"
+    micro_topic_id: Optional[str] = None
+    micro_topic_key: Optional[str] = None
+    source_document_id: Optional[str] = None
+    verification_status: str = "generated"
+    verification_score: Optional[float] = None
+    verification_notes: str = ""
+    verification_checks: Optional[dict[str, Any]] = None
+    verified_at: Optional[str] = None
+    verification_model: Optional[str] = None
 
     # scheduler metadata
     last_used_at: Optional[str] = None
@@ -72,6 +81,15 @@ class Question:
             "question_hash": self.question_hash,
             "normalized_text": self.normalized_text,
             "status": self.status,
+            "micro_topic_id": self.micro_topic_id,
+            "micro_topic_key": self.micro_topic_key,
+            "source_document_id": self.source_document_id,
+            "verification_status": self.verification_status,
+            "verification_score": self.verification_score,
+            "verification_notes": self.verification_notes,
+            "verification_checks": self.verification_checks or {},
+            "verified_at": self.verified_at,
+            "verification_model": self.verification_model,
         }
 
     @classmethod
@@ -96,6 +114,15 @@ class Question:
             week_number=row.get("week_number"),
             bot_type=row.get("bot_type", "daily_mcq"),
             status=row.get("status", "active"),
+            micro_topic_id=row.get("micro_topic_id"),
+            micro_topic_key=row.get("micro_topic_key"),
+            source_document_id=row.get("source_document_id"),
+            verification_status=row.get("verification_status", "generated"),
+            verification_score=row.get("verification_score"),
+            verification_notes=row.get("verification_notes") or "",
+            verification_checks=row.get("verification_checks") or {},
+            verified_at=row.get("verified_at"),
+            verification_model=row.get("verification_model"),
             last_used_at=row.get("last_used_at"),
             usage_count=row.get("usage_count", 0),
             next_global_review=row.get("next_global_review"),

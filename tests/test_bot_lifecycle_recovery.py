@@ -9,6 +9,8 @@ import pytest
 import bot
 from config.subjects import QUIZ_SUBJECTS
 from services.gemini_provider_pool import GeminiGenerationError
+from services.question_verification import CHECK_FIELDS
+from services.source_grounding import GroundingBundle, SourceDocument
 from telegram.routing import ForumRouter
 from utils.quiz_ids import build_quiz_id
 
@@ -29,6 +31,15 @@ def pack_from_questions(questions, subject_key="history", chapter="আধুন�
                 "difficulty": row["difficulty"],
                 "subject": subject_key,
                 "topic": chapter,
+                "micro_topic_id": row["micro_topic_id"],
+                "micro_topic_key": row["micro_topic_key"],
+                "source_document_id": row["source_document_id"],
+                "verification_status": row["verification_status"],
+                "verification_score": row["verification_score"],
+                "verification_notes": row["verification_notes"],
+                "verification_checks": row["verification_checks"],
+                "verified_at": row["verified_at"],
+                "verification_model": row["verification_model"],
             },
         })
     return {"quiz_id": "20260710-history", "meta": {"quiz_id": "20260710-history", "subject_key": subject_key, "subject": "ইতিহাস", "chapter": chapter}, "items": items}
@@ -36,6 +47,41 @@ def pack_from_questions(questions, subject_key="history", chapter="আধুন�
 
 def router():
     return ForumRouter({row.key: 100 + index for index, row in enumerate(QUIZ_SUBJECTS)})
+
+
+def grounding_bundle():
+    return GroundingBundle(
+        subject_key="history",
+        chapter="আধুনিক ভারত",
+        micro_topic_id="11111111-1111-4111-8111-111111111111",
+        micro_topic_key="history:modern-india:core",
+        micro_topic_name="আধুনিক ভারত — মূল ধারণা",
+        documents=(SourceDocument(
+            id="22222222-2222-4222-8222-222222222222",
+            url="https://ncert.nic.in/example",
+            title="NCERT history source",
+            domain="ncert.nic.in",
+            kind="official",
+            published_at=None,
+            accessed_at="2026-07-18T09:00:00+00:00",
+            fact_summary="This is a sufficiently detailed verified fact summary for test generation.",
+            fact_version="2026-07-18",
+            expires_at=None,
+        ),),
+    )
+
+
+def verifier_rows():
+    return [
+        {
+            "question_number": index,
+            "verdict": "verified",
+            "confidence": 0.95,
+            **{name: True for name in CHECK_FIELDS},
+            "notes": "Verified against source facts.",
+        }
+        for index in range(1, 11)
+    ]
 
 
 def setup_run(monkeypatch, valid_questions, existing_run=None):
@@ -147,10 +193,14 @@ def test_malformed_json_gets_at_most_one_repair(monkeypatch, valid_questions):
             self.calls += 1
             if self.calls == 1:
                 return "not-json", {}
-            return json.dumps(valid_questions, ensure_ascii=False), {"provider": "secondary", "model": "m", "attempts": 2}
+            if self.calls == 2:
+                return json.dumps(valid_questions, ensure_ascii=False), {"provider": "secondary", "model": "m", "attempts": 2}
+            return json.dumps(verifier_rows()), {"provider": "primary", "model": "v", "attempts": 1}
     pool = Pool()
-    clean, _ = bot.generate_mcqs("history", "আধুনিক ভারত", pool=pool)
-    assert len(clean) == 10 and pool.calls == 2
+    clean, _ = bot.generate_mcqs(
+        "history", "আধুনিক ভারত", pool=pool, grounding_bundle=grounding_bundle()
+    )
+    assert len(clean) == 10 and pool.calls == 3
 
 
 def test_invalid_repaired_json_is_never_accepted():
@@ -164,7 +214,9 @@ def test_invalid_repaired_json_is_never_accepted():
 
     pool = Pool()
     with pytest.raises(bot.QuizValidationError):
-        bot.generate_mcqs("history", "আধুনিক ভারত", pool=pool)
+        bot.generate_mcqs(
+            "history", "আধুনিক ভারত", pool=pool, grounding_bundle=grounding_bundle()
+        )
     assert pool.calls == 2
 
 
@@ -217,4 +269,11 @@ def test_database_preflight_checks_all_migration_tables(monkeypatch):
         ("quiz_questions", "id,quiz_id,question_order"),
         ("quiz_attempts", "id,client_attempt_id,attempt_number"),
         ("quiz_attempt_answers", "id,attempt_id,question_order"),
+        ("quiz_subjects", "subject_key,display_name"),
+        ("quiz_chapters", "id,subject_key,name"),
+        ("quiz_micro_topics", "id,chapter_id,key"),
+        ("source_documents", "id,micro_topic_id,verification_status"),
+        ("question_verifications", "id,question_id,verdict"),
+        ("question_generation_audits", "id,quiz_id,verdict"),
+        ("question_reports", "id,question_id,user_id,status"),
     ]

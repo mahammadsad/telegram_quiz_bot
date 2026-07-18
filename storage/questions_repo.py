@@ -13,7 +13,7 @@ import logging
 from datetime import date, timedelta
 from typing import Optional
 
-from config.settings import BOT_TYPE, SIMILARITY_THRESHOLD
+from config.settings import BOT_TYPE, CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS, SIMILARITY_THRESHOLD
 from database.client import get_client
 from models.question import Question
 
@@ -99,12 +99,23 @@ def get_eligible_pool(subject: str, bot_type: str = BOT_TYPE, limit: int = 50) -
         .select("*")
         .eq("bot_type", bot_type)
         .eq("status", "active")
+        .eq("verification_status", "verified")
+        .eq("review_required", False)
         .eq("subject", subject)
         .or_(f"next_global_review.is.null,next_global_review.lte.{today}")
         .limit(limit)
         .execute()
     )
-    return res.data or []
+    rows = res.data or []
+    current_cutoff = (date.today() - timedelta(days=CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS)).isoformat()
+    return [
+        row for row in rows
+        if (not row.get("expires_at") or str(row["expires_at"])[:10] >= today)
+        and (
+            subject != "current-affairs"
+            or bool(row.get("source_published_at") and str(row["source_published_at"])[:10] >= current_cutoff)
+        )
+    ]
 
 
 def mark_used(question_id: str, usage_count: int, min_gap_days: int, max_gap_days: int) -> None:

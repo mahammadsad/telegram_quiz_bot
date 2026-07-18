@@ -79,6 +79,20 @@ GEMINI_FACTUAL_TEMPERATURE = min(
     max(0.0, float(os.environ.get("GEMINI_FACTUAL_TEMPERATURE", "0.3"))),
 )
 
+# Every newly generated pack is grounded in operator-verified source facts and
+# then checked by a separate source-only Gemini request. Current-affairs facts
+# expire quickly even when a source row has a later explicit expiry.
+QUESTION_VERIFICATION_MIN_CONFIDENCE = min(
+    1.0,
+    max(0.5, float(os.environ.get("QUESTION_VERIFICATION_MIN_CONFIDENCE", "0.85"))),
+)
+CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS = max(
+    1, min(45, int(os.environ.get("CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS", "45")))
+)
+QUESTION_REPORT_THRESHOLD = max(
+    2, int(os.environ.get("QUESTION_REPORT_THRESHOLD", "3"))
+)
+
 # --------------------------------------------------------------------------
 # Telegram
 # --------------------------------------------------------------------------
