@@ -14,15 +14,16 @@ New coverage is source-gated and stays out of rotation until its verified bundle
 passes staging. See [`docs/SYLLABUS_V2.md`](docs/SYLLABUS_V2.md) for catalogue,
 activation, compatibility, and rollout details. The preparation screen reads
 only cached, operator-approved learning-resource metadata for the exact quiz
-micro-topics. Automated discovery, wrong-answer practice, mastery,
-personalized revision, bookmarks, and exam preferences remain later phases.
+micro-topics. Completed attempts now update a private spaced-review schedule;
+authenticated learners can retrieve due reviews, current wrong questions,
+bookmarks, exam/subject preferences, and compact progress analytics.
 
 ## Architecture
 
 | Component | Responsibility |
 |---|---|
 | `bot.py` | Claims a date/subject run, selects a chapter, generates/validates a pack, posts once, and recovers missed work |
-| `app.py` | Public quiz reads and authenticated submission/leaderboard APIs |
+| `app.py` | Public quiz reads plus authenticated attempt, revision, preference, bookmark, and dashboard APIs |
 | `services/` | Chapter rotation, source grounding, independent verification, Gemini failover, validation, and quiz-pack rules |
 | `storage/` | Small Supabase repositories; atomic writes use RPCs |
 | `supabase/migrations/` | Current timestamped PostgreSQL migrations and security grants |
@@ -70,7 +71,11 @@ use the service role against RLS-protected tables and explicitly granted RPCs.
     question reports. Duplicate/rate-limited reports are rejected; credible
     reports automatically quarantine a question for moderation.
 12. Leaderboards aggregate and paginate in PostgreSQL. Public rows contain a
-   generated alias or opted-in display name, never a Telegram ID.
+    generated alias or opted-in display name, never a Telegram ID.
+13. Each question-level attempt atomically advances a testable 1/3/7/14/30/60
+    day review schedule. FastAPI-authenticated private endpoints return due and
+    current wrong questions without answer keys, plus preferences/bookmarks and
+    SQL-aggregated progress.
 
 Static JSON is an emergency read-only fallback. When the live API is
 unavailable, the Mini App disables submission and scoring, labels the state,
@@ -135,14 +140,16 @@ and requires no `YOUTUBE_API_KEY`.
 For a new project, apply `database/schema.sql`, then every file in
 `supabase/migrations/` in timestamp order. Existing projects apply only the
 newer unapplied files. The current stack ends with
-`20260718174844_learning_resources_legacy_pack_compatibility.sql`. The
-application never applies DDL during startup.
+`20260718183203_personalized_learning_fk_compatibility.sql`. The application
+never applies DDL during startup.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,
 and locks tables, legacy views, and private functions to the service role. Full
 preflight, verification, security, backfill, and rollback notes are in
 `docs/MIGRATION_20260718.md` and
-`docs/MIGRATION_20260718_PROVENANCE.md`.
+`docs/MIGRATION_20260718_PROVENANCE.md`. Personalized-learning verification and
+rollback notes are in
+`docs/MIGRATION_20260718_PERSONALIZED_LEARNING.md`.
 
 Before enabling scheduled generation, import approved source facts for every
 due chapter:
@@ -203,10 +210,16 @@ Useful endpoints:
 - `GET /api/quiz/{quiz_id}/resources`
 - `POST /api/quiz/{quiz_id}/submit`
 - `POST /api/questions/{question_id}/report`
+- `GET /api/me/dashboard`
+- `GET /api/me/reviews/due?limit=20&offset=0`
+- `GET /api/me/wrong-questions?subject=mathematics&limit=20&offset=0`
+- `GET|POST /api/me/bookmarks`
+- `GET|PUT /api/me/preferences`
 - `GET /api/quiz/{quiz_id}/leaderboard?limit=20&offset=0`
 - `GET /api/leaderboard?limit=20&offset=0`
 
-Example submission shape:
+Private GET requests send signed Telegram data only in the
+`X-Telegram-Init-Data` header, never in a URL. Example submission shape:
 
 ```json
 {"initData":"<signed Telegram data>","attemptId":"<new UUID>","answers":[0,2,1,null,3,0,1,2,3,0]}
@@ -265,8 +278,7 @@ Deployment and production drills are in `DEPLOYMENT_GUIDE.md`.
 
 ## Next platform phases
 
-The next phase can add operator-reviewed discovery and link checks to the
-cached resource library, then expand verified source/resource coverage one
-subject at a time. Deterministic math/reasoning solvers, moderation admin UI,
-wrong-question practice, spaced review, preferences, mastery analytics, and
-personalized revision can follow on the question-level attempt model.
+The next phase completes the learner-facing revision/practice interface and
+adds deeper SQL analytics, then operator-reviewed resource monitoring and
+source coverage can expand one subject at a time. Deterministic
+math/reasoning solvers and a moderation admin UI remain separate bounded work.

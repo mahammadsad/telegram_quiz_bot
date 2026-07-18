@@ -15,6 +15,8 @@ supabase/migrations/20260718160722_syllabus_v2_catalogue.sql
 supabase/migrations/20260718171256_learning_resources_foundation.sql
 supabase/migrations/20260718172756_learning_resources_fk_indexes.sql
 supabase/migrations/20260718174844_learning_resources_legacy_pack_compatibility.sql
+supabase/migrations/20260718181849_personalized_learning_foundation.sql
+supabase/migrations/20260718183203_personalized_learning_fk_compatibility.sql
 ```
 
 For a new empty project, first apply `database/schema.sql`, then the timestamped
@@ -24,7 +26,8 @@ historical question mappings and valid ten-position submissions while
 preserving every legacy table/row.
 
 Read `docs/MIGRATION_20260718.md` and
-`docs/MIGRATION_20260718_PROVENANCE.md` before applying. Take a database backup or
+`docs/MIGRATION_20260718_PROVENANCE.md` before applying. Also read
+`docs/MIGRATION_20260718_PERSONALIZED_LEARNING.md`. Take a database backup or
 project-branch checkpoint, run its preflight SQL, apply the canonical file with
 the Supabase migration workflow or SQL Editor, and run its verification SQL.
 Then rerun both Supabase advisors. Do not paste a database password or service
@@ -150,8 +153,8 @@ Keep `DEV_ALLOW_UNVERIFIED_TELEGRAM=false` in every public environment. Set
 different trusted origin; same-origin deployment needs no CORS list.
 
 Check `GET /api/health`. It should show safe configured booleans,
-`application_version=3.2.0`, and
-`migration_version=20260718174844`; it never proves the database migration was
+`application_version=4.0.0`, and
+`migration_version=20260718183203`; it never proves the database migration was
 applied, so preflight remains mandatory.
 
 ## 4. Configure forum topics and BotFather
@@ -191,17 +194,23 @@ different named-app deployment.
 9. Verify one `quiz_attempts` row and exactly ten
    `quiz_attempt_answers` rows. Retry the identical request and confirm no new
    row; retake with a new ID and confirm a second parent attempt.
-10. Submit one question report from the authenticated review card. Confirm it is
+10. Verify each answer created/updated one private review schedule and that
+    wrong, uncertain/slow, and repeated-correct paths use the documented
+    1/3/7/14/30/60-day intervals. Confirm private revision endpoints reject a
+    missing or invalid `X-Telegram-Init-Data` header.
+11. Save exam/subject preferences and question/resource bookmarks; verify only
+    the same Telegram-authenticated user receives them.
+12. Submit one question report from the authenticated review card. Confirm it is
    bound to that attempt, a duplicate returns conflict, and unrelated users or
    attempts cannot report it. Test the quarantine threshold with test users.
-11. Check quiz/global leaderboard pages and confirm response rows contain no
+13. Check quiz/global leaderboard pages and confirm response rows contain no
    Telegram IDs, first/last names, or non-opted-in usernames.
-12. Stop the API temporarily and open an existing static pack. Confirm the UI
+14. Stop the API temporarily and open an existing static pack. Confirm the UI
    labels read-only fallback and cannot submit or claim a score.
-13. Run `python scripts/check_public_data.py`; it must pass.
-14. Trigger two manual runs for the same date/subject close together. One may
+15. Run `python scripts/check_public_data.py`; it must pass.
+16. Trigger two manual runs for the same date/subject close together. One may
    proceed; the other must report that another worker owns the active lease.
-15. Run Supabase advisors again and investigate every error/warning. Expected
+17. Run Supabase advisors again and investigate every error/warning. Expected
     RLS-without-policy information is documented in the migration guide.
 
 For provider failover, use a disposable test environment rather than changing
