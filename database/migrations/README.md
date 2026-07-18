@@ -3,21 +3,28 @@
 `001_init.sql` is the initial schema. `002_subject_quiz_runs.sql` adds the
 subject-run lifecycle, chapter history, initial quiz submissions, and
 recovery/leaderboard indexes. `003_repeat_quiz_attempts.sql` preserves those
-rows while allowing unlimited intentional retakes with an idempotent client
-attempt ID and latest-attempt leaderboard indexes. `database/schema.sql` always reflects the full
-**current** schema (apply that one for a brand-new Supabase project); this
-folder is the incremental history for projects that are already running.
+rows while allowing intentional retakes with idempotent client attempt IDs.
+
+New migrations use the Supabase CLI timestamp convention and live in
+`supabase/migrations/`. The current sequence for every installation is:
+
+1. `database/schema.sql` for a brand-new project, or legacy migrations
+   `001` through `003` for an existing project that has not run them.
+2. `supabase/migrations/20260718015054_atomic_quiz_integrity.sql`.
+
+`database/schema.sql` is therefore the legacy bootstrap schema, not the final
+post-migration state. This avoids duplicating the transactional function bodies
+in two files that could drift apart.
 
 Convention for future changes:
 
-1. Add a new sequential file such as `004_<short_description>.sql`.
+1. Run `supabase migration new <short_description>` and edit the timestamped
+   file in `supabase/migrations/`.
 2. Write it as `alter table ...` / `create table if not exists ...` — additive
    and idempotent, never a destructive rewrite of existing data.
-3. Also update `database/schema.sql` so it stays the single source of truth
-   for "what does the schema look like today."
-4. Run the new file in the Supabase SQL Editor against production.
+3. Add migration, backfill, verification, and rollback notes under `docs/`.
+4. Validate syntax locally, then apply the file through the Supabase migration
+   workflow or SQL Editor only after a backup/checkpoint.
 
-No migration runner is wired up (no psycopg2/alembic dependency) to keep
-the project on the free-tier, dependency-light footprint — for a bot that
-runs twice a day, pasting SQL into the Supabase dashboard a few times a
-year is simpler and safer than adding a migration framework.
+The application process does not run DDL. Supabase CLI or SQL Editor remains an
+explicit operator step, which keeps web and bot startup safe and predictable.
