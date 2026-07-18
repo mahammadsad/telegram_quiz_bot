@@ -159,7 +159,7 @@ still checks cached links and queues missing coverage but skips discovery.
 For a new project, apply `database/schema.sql`, then every file in
 `supabase/migrations/` in timestamp order. Existing projects apply only the
 newer unapplied files. The current stack ends with
-`20260718194113_resource_quality_operations.sql`. The application
+`20260718203218_dedupe_source_resource_cache.sql`. The application
 never applies DDL during startup.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,
