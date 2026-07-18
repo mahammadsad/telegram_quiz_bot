@@ -116,6 +116,19 @@ def test_quiz_specific_leaderboard_endpoint(monkeypatch):
     assert response.status_code == 200 and response.json() == expected
 
 
+def test_typed_leaderboard_endpoint_validates_and_delegates(monkeypatch):
+    expected = {"type": "subject_accuracy", "participants": 2, "rows": []}
+    monkeypatch.setattr(
+        api_module.stats_repo,
+        "typed_leaderboard",
+        lambda board_type, subject_key, limit, offset: expected,
+    )
+    response = client.get("/api/leaderboards/subject_accuracy?subject=computer&limit=40&offset=3")
+    assert response.status_code == 200
+    assert response.json() == {**expected, "unavailable": False}
+    assert client.get("/api/leaderboards/subject_accuracy?subject=unknown").status_code == 400
+
+
 def test_health_is_safe_and_never_returns_secret_values(monkeypatch):
     monkeypatch.setattr(api_module, "TELEGRAM_BOT_TOKEN", "super-secret-token")
     response = client.get("/api/health")

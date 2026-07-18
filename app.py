@@ -1,4 +1,4 @@
-"""Read-only quiz API, authenticated submissions, and quiz leaderboards."""
+"""Quiz delivery, authenticated learning workflows, and safe leaderboards."""
 
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from config.settings import (
     TELEGRAM_GENERAL_THREAD_ID,
     TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
 )
-from config.subjects import QUIZ_SUBJECTS
+from config.subjects import QUIZ_SUBJECTS, SUBJECTS
 from services import learning_resources_service, personal_learning_service, quiz_pack_service
 from storage import stats_repo
 from telegram.auth import TelegramAuthError, verify_init_data
@@ -32,8 +32,8 @@ from telegram.routing import ForumRouter, ForumRoutingError
 from utils.quiz_ids import parse_quiz_id
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title="WB Exam Quiz Pack API", version="4.0.0")
-MIGRATION_VERSION = "20260718184505"
+app = FastAPI(title="WB Exam Quiz Pack API", version="5.0.0")
+MIGRATION_VERSION = "20260718192558"
 
 if CORS_ALLOWED_ORIGINS:
     app.add_middleware(
@@ -138,6 +138,22 @@ class UserPreferencesRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class PracticeAnswerRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    selected_option: int = Field(alias="selectedIndex", ge=0, le=3)
+    source_type: str = Field(default="wrong", alias="sourceType")
+    response_time_seconds: float | None = Field(
+        default=None,
+        alias="responseTimeSeconds",
+        ge=0,
+        le=3600,
+    )
+    marked_for_review: bool = Field(default=False, alias="markedForReview")
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(ROOT / "index.html")
@@ -147,6 +163,12 @@ def index() -> FileResponse:
 @app.get("/dashboard.html")
 def dashboard() -> FileResponse:
     return FileResponse(ROOT / "dashboard.html")
+
+
+@app.get("/practice")
+@app.get("/practice.html")
+def practice() -> FileResponse:
+    return FileResponse(ROOT / "practice.html")
 
 
 @app.get("/quizzes/{quiz_file}")
@@ -319,6 +341,25 @@ def my_wrong_questions(
         raise HTTPException(status_code=503, detail="ভুল প্রশ্ন এখন লোড করা যাচ্ছে না।") from exc
 
 
+@app.post("/api/me/practice/{question_id}")
+def submit_my_practice_answer(question_id: uuid.UUID, payload: PracticeAnswerRequest) -> dict:
+    try:
+        return personal_learning_service.submit_practice_answer(
+            _telegram_user_from_payload(payload),
+            question_id=str(question_id),
+            selected_option=payload.selected_option,
+            source_type=payload.source_type,
+            response_time_seconds=payload.response_time_seconds,
+            marked_for_review=payload.marked_for_review,
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="অনুশীলনের উত্তর সংরক্ষণ করা যায়নি।") from exc
+
+
 @app.get("/api/me/bookmarks")
 def my_bookmarks(
     init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
@@ -402,8 +443,39 @@ def leaderboard(limit: int = 20, offset: int = 0) -> dict:
         return {"rows": [], "unavailable": True}
 
 
+@app.get("/api/leaderboards/{board_type}")
+def typed_leaderboard(
+    board_type: str,
+    subject: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    try:
+        if subject and subject not in SUBJECTS:
+            raise ValueError("Unknown subject key.")
+        return {
+            **stats_repo.typed_leaderboard(
+                board_type,
+                subject_key=subject,
+                limit=max(1, min(limit, 100)),
+                offset=max(0, offset),
+            ),
+            "unavailable": False,
+        }
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Leaderboard সাময়িকভাবে পাওয়া যাচ্ছে না।") from exc
+
+
 def _telegram_user_from_payload(
-    payload: SubmitQuizRequest | ReportQuestionRequest | BookmarkRequest | UserPreferencesRequest,
+    payload: (
+        SubmitQuizRequest
+        | ReportQuestionRequest
+        | BookmarkRequest
+        | UserPreferencesRequest
+        | PracticeAnswerRequest
+    ),
 ) -> dict:
     return _telegram_user_from_init_data(payload.init_data, payload.dev_user)
 
