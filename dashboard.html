@@ -4,325 +4,68 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="quiz-api-base" content="" />
-<title>মক টেস্ট ড্যাশবোর্ড</title>
-
+<title>প্রস্তুতি ড্যাশবোর্ড</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-
 <style>
-  :root{
-    color-scheme:light dark;
-    --bg:var(--tg-theme-bg-color,#f5f7fb);
-    --surface:var(--tg-theme-secondary-bg-color,#ffffff);
-    --ink:var(--tg-theme-text-color,#17202a);
-    --muted:var(--tg-theme-hint-color,#627084);
-    --line:#d9e0ea;
-    --primary:var(--tg-theme-button-color,#0f766e);
-    --accent:#2563eb;
-    --success:#16834a;
-    --gold:#c99722;
-    --silver:#8996a8;
-    --bronze:#b87345;
-    --shadow:0 16px 38px rgba(23,32,42,.12);
-    --radius:8px;
-    --font:'Noto Sans Bengali', system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  }
-  *{box-sizing:border-box}
-  html,body{min-height:100%}
-  body{
-    margin:0;
-    background:
-      linear-gradient(135deg, rgba(15,118,110,.08), transparent 34%),
-      linear-gradient(315deg, rgba(37,99,235,.08), transparent 32%),
-      var(--bg);
-    color:var(--ink);
-    font-family:var(--font);
-    -webkit-font-smoothing:antialiased;
-  }
-  .app{width:min(100%,900px); margin:0 auto; padding:18px 14px 48px}
-  .topbar{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    gap:14px;
-    margin-bottom:16px;
-  }
-  .brand small{
-    display:block;
-    color:var(--primary);
-    font-size:12px;
-    font-weight:800;
-    letter-spacing:.04em;
-    text-transform:uppercase;
-  }
-  .brand h1{margin:3px 0 0; font-size:25px; line-height:1.25}
-  .nav-link{
-    flex:0 0 auto;
-    text-decoration:none;
-    color:#fff;
-    background:var(--primary);
-    border-radius:var(--radius);
-    padding:10px 13px;
-    font-weight:800;
-  }
-  .surface{
-    background:rgba(255,255,255,.94);
-    border:1px solid var(--line);
-    border-radius:var(--radius);
-    box-shadow:var(--shadow);
-    overflow:hidden;
-  }
-  .summary{
-    display:grid;
-    grid-template-columns:repeat(3,minmax(0,1fr));
-    gap:1px;
-    background:var(--line);
-  }
-  .metric{
-    background:#fff;
-    padding:16px;
-  }
-  .metric b{
-    display:block;
-    color:var(--muted);
-    font-size:12px;
-    margin-bottom:4px;
-  }
-  .metric span{
-    display:block;
-    font-size:23px;
-    font-weight:800;
-  }
-  .list{padding:8px}
-  .row{
-    display:grid;
-    grid-template-columns:48px 42px minmax(0,1fr) auto;
-    gap:12px;
-    align-items:center;
-    padding:12px 10px;
-    border-bottom:1px solid var(--line);
-  }
-  .row:last-child{border-bottom:0}
-  .rank{
-    width:38px;
-    height:38px;
-    border-radius:50%;
-    display:grid;
-    place-items:center;
-    border:1px solid var(--line);
-    color:var(--muted);
-    font-weight:800;
-    background:#fff;
-  }
-  .rank.top1{background:var(--gold); border-color:var(--gold); color:#2f2305}
-  .rank.top2{background:var(--silver); border-color:var(--silver); color:#17202a}
-  .rank.top3{background:var(--bronze); border-color:var(--bronze); color:#fff}
-  .avatar{
-    width:42px;
-    height:42px;
-    border-radius:50%;
-    display:grid;
-    place-items:center;
-    background:#e8f5f2;
-    color:var(--primary);
-    font-weight:800;
-    border:1px solid #c6e6df;
-  }
-  .who{min-width:0}
-  .name{
-    font-weight:800;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-  }
-  .meta{
-    color:var(--muted);
-    font-size:13px;
-    margin-top:2px;
-    white-space:nowrap;
-    overflow:hidden;
-    text-overflow:ellipsis;
-  }
-  .score{text-align:right}
-  .score strong{display:block; font-size:18px}
-  .score span{display:block; color:var(--muted); font-size:13px}
-  .state{
-    padding:42px 18px;
-    text-align:center;
-    color:var(--muted);
-    line-height:1.65;
-  }
-  .loader{
-    width:38px;
-    height:38px;
-    border-radius:50%;
-    border:4px solid var(--line);
-    border-top-color:var(--primary);
-    margin:0 auto 12px;
-    animation:spin .8s linear infinite;
-  }
-  @keyframes spin{to{transform:rotate(360deg)}}
-  .hidden{display:none!important}
-  .num{font-variant-numeric:tabular-nums}
-  @media (max-width:640px){
-    .app{padding:14px 10px 36px}
-    .topbar{align-items:flex-start}
-    .brand h1{font-size:21px}
-    .summary{grid-template-columns:1fr}
-    .row{grid-template-columns:40px 38px minmax(0,1fr); gap:9px}
-    .score{grid-column:3; text-align:left}
-  }
-  @media (prefers-reduced-motion:reduce){
-    *{animation:none!important; transition:none!important}
-  }
+  :root{color-scheme:light dark;--bg:var(--tg-theme-bg-color,#f2f6f7);--surface:var(--tg-theme-secondary-bg-color,#fff);--text:var(--tg-theme-text-color,#14212b);--hint:var(--tg-theme-hint-color,#687784);--link:var(--tg-theme-link-color,#087f8c);--button:var(--tg-theme-button-color,#087f6c);--button-text:var(--tg-theme-button-text-color,#fff);--line:color-mix(in srgb,var(--hint) 24%,transparent);--success:#158047;--gold:#b57b05;--radius:16px;--font:'Noto Sans Bengali',system-ui,sans-serif}
+  *{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.55}button,input,select{font:inherit}button,a,input,select{min-height:44px}button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible{outline:3px solid color-mix(in srgb,var(--link) 45%,transparent);outline-offset:2px}
+  .app{width:min(100%,980px);margin:auto;padding:18px 14px 96px}.top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}.brand small{display:block;color:var(--button);font-size:12px;font-weight:800;letter-spacing:.04em}.brand h1{margin:3px 0 0;font-size:26px}.quiz-link{display:grid;place-items:center;padding:9px 13px;border-radius:13px;background:var(--button);color:var(--button-text);font-weight:800;text-decoration:none}
+  .hidden{display:none!important}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:14px}.card{grid-column:span 12;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:0 12px 34px rgba(16,32,44,.08)}.card h2{margin:0 0 12px;font-size:19px}.muted{color:var(--hint)}
+  .hero{display:grid;grid-template-columns:1.3fr .7fr;gap:18px;align-items:center;background:linear-gradient(135deg,color-mix(in srgb,var(--button) 14%,var(--surface)),var(--surface))}.hero h2{font-size:25px;margin-bottom:5px}.goal{height:12px;border-radius:99px;background:color-mix(in srgb,var(--hint) 18%,transparent);overflow:hidden;margin-top:12px}.goal span{display:block;height:100%;background:linear-gradient(90deg,var(--button),var(--link))}.goal-copy{text-align:right;font-size:34px;font-weight:800}
+  .metrics{grid-column:span 12;display:grid;grid-template-columns:repeat(6,1fr);gap:1px;padding:0;overflow:hidden;background:var(--line)}.metric{background:var(--surface);padding:15px}.metric b{display:block;color:var(--hint);font-size:12px}.metric span{display:block;font-size:23px;font-weight:800;margin-top:3px}
+  .half{grid-column:span 6}.third{grid-column:span 4}.bars{display:grid;gap:11px}.bar-row{display:grid;grid-template-columns:minmax(110px,1fr) 2fr auto;gap:9px;align-items:center;font-size:13px}.bar-row b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bar{height:9px;background:color-mix(in srgb,var(--hint) 16%,transparent);border-radius:99px;overflow:hidden}.bar span{display:block;height:100%;background:var(--button)}
+  .activity{height:130px;display:flex;align-items:end;gap:5px;padding-top:12px}.day{flex:1;min-width:4px;background:color-mix(in srgb,var(--button) 70%,var(--link));border-radius:5px 5px 2px 2px;position:relative}.day:hover:after,.day:focus:after{content:attr(data-label);position:absolute;left:50%;bottom:calc(100% + 5px);transform:translateX(-50%);white-space:nowrap;background:var(--text);color:var(--bg);padding:3px 6px;border-radius:6px;font-size:11px;z-index:2}
+  .actions{display:flex;gap:9px;flex-wrap:wrap}.btn{border:1px solid var(--line);border-radius:13px;padding:10px 13px;background:transparent;color:var(--text);font-weight:800;text-decoration:none;cursor:pointer}.primary{background:var(--button);border-color:var(--button);color:var(--button-text)}
+  .board-tools{display:grid;grid-template-columns:1fr 1fr auto;gap:9px;margin-bottom:12px}.field{width:100%;border:1px solid var(--line);border-radius:12px;padding:9px;background:var(--surface);color:var(--text)}.board-list{display:grid}.row{display:grid;grid-template-columns:42px minmax(0,1fr) auto;gap:11px;align-items:center;padding:12px 4px;border-bottom:1px solid var(--line)}.row:last-child{border-bottom:0}.rank{width:38px;height:38px;display:grid;place-items:center;border-radius:50%;border:1px solid var(--line);font-weight:800}.row:nth-child(1) .rank{background:#e6bd4b;color:#302100}.row:nth-child(2) .rank{background:#b9c4cf;color:#19222b}.row:nth-child(3) .rank{background:#b87345;color:white}.name{font-weight:800}.meta{color:var(--hint);font-size:12px}.value{text-align:right;font-weight:800}
+  details summary{cursor:pointer;font-weight:800}.settings{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-top:14px}.settings label{display:grid;gap:5px;font-size:13px;font-weight:700}.settings .wide{grid-column:1/-1}.checks{display:flex;flex-wrap:wrap;gap:7px}.checks label{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:999px;padding:5px 9px;font-weight:600}.checks input{min-height:auto}.toggle{display:flex!important;align-items:center;gap:8px}.toggle input{width:20px;height:20px;min-height:auto}.status{text-align:center;color:var(--hint);padding:28px}.loader{width:36px;height:36px;margin:0 auto 10px;border:4px solid var(--line);border-top-color:var(--button);border-radius:50%;animation:spin .8s linear infinite}@keyframes spin{to{transform:rotate(360deg)}}
+  .bottom{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);width:min(calc(100% - 20px),760px);display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:6px;background:color-mix(in srgb,var(--surface) 94%,transparent);border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 28px rgba(16,32,44,.16);backdrop-filter:blur(12px)}.bottom a{text-align:center;text-decoration:none;color:var(--hint);padding:9px 4px;border-radius:12px;font-size:12px;font-weight:800}.bottom a.active{background:color-mix(in srgb,var(--button) 12%,transparent);color:var(--button)}
+  @media(max-width:760px){.app{padding:14px 10px 92px}.brand h1{font-size:22px}.hero{grid-template-columns:1fr}.goal-copy{text-align:left;font-size:26px}.metrics{grid-template-columns:repeat(2,1fr)}.half,.third{grid-column:span 12}.board-tools{grid-template-columns:1fr}.settings{grid-template-columns:1fr}.settings .wide{grid-column:auto}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
 </head>
 <body>
 <main class="app">
-  <header class="topbar">
-    <div class="brand">
-      <small>লাইভ স্কোরবোর্ড</small>
-      <h1 id="board-title">মক টেস্ট ড্যাশবোর্ড</h1>
-    </div>
-    <a class="nav-link" href="index.html">কুইজে ফিরুন</a>
-  </header>
-
-  <section class="surface">
-    <div class="summary">
-      <div class="metric"><b>শিক্ষার্থী</b><span class="num" id="m-students">০</span></div>
-      <div class="metric"><b>মোট চেষ্টা</b><span class="num" id="m-attempts">০</span></div>
-      <div class="metric"><b>সেরা স্কোর</b><span class="num" id="m-best">০</span></div>
-    </div>
-
-    <div id="state-loading" class="state">
-      <div class="loader"></div>
-      ড্যাশবোর্ড লোড হচ্ছে...
-    </div>
-    <div id="state-empty" class="state hidden">
-      এখনও কেউ কুইজ শেষ করেনি। প্রথম ফলাফল জমা হলেই তালিকা দেখা যাবে।
-    </div>
-    <div id="state-error" class="state hidden">
-      স্কোরবোর্ড সাময়িকভাবে দেখা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।
-    </div>
-    <div id="list" class="list hidden"></div>
-  </section>
+  <header class="top"><div class="brand"><small>আপনার শেখার কেন্দ্র</small><h1>প্রস্তুতি ড্যাশবোর্ড</h1></div><a class="quiz-link" href="index.html">কুইজ খুলুন</a></header>
+  <div id="loading" class="card status"><div class="loader"></div>ড্যাশবোর্ড লোড হচ্ছে...</div>
+  <div id="content" class="grid hidden">
+    <section id="personal" class="card hero hidden"><div><h2>আজকের লক্ষ্য</h2><p class="muted" id="goal-note"></p><div class="goal"><span id="goal-bar"></span></div></div><div class="goal-copy" id="goal-copy"></div></section>
+    <section id="personal-metrics" class="card metrics hidden">
+      <div class="metric"><b>সঠিকতা</b><span id="m-accuracy">০%</span></div><div class="metric"><b>মোট উত্তর</b><span id="m-answered">০</span></div><div class="metric"><b>রিভিশন বাকি</b><span id="m-due">০</span></div><div class="metric"><b>বর্তমান স্ট্রিক</b><span id="m-streak">০ দিন</span></div><div class="metric"><b>সেরা স্ট্রিক</b><span id="m-longest">০ দিন</span></div><div class="metric"><b>Retake উন্নতি</b><span id="m-improvement">০%</span></div>
+    </section>
+    <section id="activity-card" class="card half hidden"><h2>৩০ দিনের অগ্রগতি</h2><div id="activity" class="activity" aria-label="দৈনিক উত্তর বার চার্ট"></div></section>
+    <section id="subjects-card" class="card half hidden"><h2>বিষয়ভিত্তিক সঠিকতা</h2><div id="subjects" class="bars"></div></section>
+    <section id="weak-card" class="card half hidden"><h2>এখন যে টপিকগুলো ঝালানো দরকার</h2><div id="weak" class="bars"></div><div class="actions" style="margin-top:14px"><a class="btn primary" href="practice.html?source=weak_topic">দুর্বল টপিক অনুশীলন</a><a class="btn" href="practice.html?source=due">আজকের রিভিশন</a></div></section>
+    <section id="mastery-card" class="card half hidden"><h2>রিভিশন mastery</h2><p class="muted" id="mastery-copy"></p><div class="goal"><span id="mastery-bar"></span></div><div class="actions" style="margin-top:14px"><a class="btn" href="practice.html?source=wrong">ভুল প্রশ্ন</a><a class="btn" href="practice.html?source=bookmark">বুকমার্ক</a></div></section>
+    <section class="card" id="analytics"><h2 id="board-title">Leaderboard</h2><div class="board-tools"><select class="field" id="board-type" aria-label="Leaderboard ধরন"><option value="weekly_accuracy">সাপ্তাহিক সঠিকতা</option><option value="daily_accuracy">আজকের সঠিকতা</option><option value="monthly_accuracy">মাসিক সঠিকতা</option><option value="subject_accuracy">বিষয়ভিত্তিক সঠিকতা</option><option value="improvement">উন্নতি</option><option value="consistency">ধারাবাহিকতা</option><option value="revision_completion">রিভিশন সম্পূর্ণতা</option></select><select class="field" id="board-subject" aria-label="বিষয়"></select><button class="btn primary" id="board-load" type="button">দেখুন</button></div><p class="muted" id="tie-break"></p><div id="board-state" class="status">তালিকা লোড হচ্ছে...</div><div id="board" class="board-list hidden"></div></section>
+    <details id="settings-card" class="card hidden"><summary>পছন্দ ও গোপনীয়তা সেটিং</summary><form id="settings" class="settings"><label>দৈনিক প্রশ্ন লক্ষ্য<input class="field" id="daily-target" type="number" min="1" max="130" required /></label><label>পছন্দের ভাষা<select class="field" id="language"><option value="bn">বাংলা</option><option value="hi">হিন্দি</option><option value="en">English</option></select></label><label>কুইজ মোড<select class="field" id="quiz-mode"><option value="timed">Timed</option><option value="practice">Practice</option></select></label><label>কঠিনতার পছন্দ<select class="field" id="difficulty"><option value="adaptive">Adaptive</option><option value="easy">সহজ</option><option value="medium">মাঝারি</option><option value="hard">কঠিন</option></select></label><label class="wide">Leaderboard নাম<input class="field" id="display-name" maxlength="40" placeholder="ঐচ্ছিক public নাম" /></label><div class="wide"><b>টার্গেট পরীক্ষা</b><div class="checks" id="exam-checks"></div></div><div class="wide"><b>পছন্দের বিষয়</b><div class="checks" id="subject-checks"></div></div><label class="toggle"><input id="leaderboard-visible" type="checkbox" /> Public leaderboard-এ দেখান</label><label class="toggle"><input id="username-visible" type="checkbox" /> Telegram username দেখান</label><label class="toggle"><input id="reminder" type="checkbox" /> দৈনিক reminder পছন্দ</label><div class="wide actions"><button class="btn primary" type="submit">সেটিং সংরক্ষণ</button><span id="settings-message" class="muted" aria-live="polite"></span></div></form></details>
+  </div>
 </main>
-
+<nav class="bottom" aria-label="প্রধান নেভিগেশন"><a class="active" href="dashboard.html">হোম</a><a href="practice.html?source=wrong">অনুশীলন</a><a href="practice.html?source=due">রিভিশন</a><a href="#analytics">পরিসংখ্যান</a></nav>
 <script>
-(function(){
-  "use strict";
-
-  var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
-  if (tg) {
-    try {
-      tg.ready();
-      tg.expand();
-      try { tg.setHeaderColor("#f5f7fb"); tg.setBackgroundColor("#f5f7fb"); } catch(e){}
-    } catch(e){}
-  }
-
-  var API_BASE = (window.QUIZ_API_BASE || document.querySelector('meta[name="quiz-api-base"]').content || "").replace(/\/$/, "");
-  var BN = ["০","১","২","৩","৪","৫","৬","৭","৮","৯"];
-  var quizId = new URLSearchParams(window.location.search).get("quiz") || "";
-  function byId(id){ return document.getElementById(id); }
-  function bn(value){ return String(value).replace(/[0-9]/g, function(d){ return BN[+d]; }); }
-  function api(path){ return API_BASE + path; }
-
-  load();
-  setInterval(load, 30000);
-
-  function setState(name){
-    ["loading","empty","error"].forEach(function(state){
-      byId("state-" + state).classList.toggle("hidden", state !== name);
-    });
-    byId("list").classList.toggle("hidden", name !== "ok");
-  }
-
-  function load(){
-    var path = quizId ? "/api/quiz/" + encodeURIComponent(quizId) + "/leaderboard?limit=20" : "/api/leaderboard?limit=20";
-    if (quizId) byId("board-title").textContent = "এই কুইজের Leaderboard";
-    fetch(api(path))
-      .then(function(resp){
-        if (!resp.ok) throw new Error("Leaderboard API returned " + resp.status);
-        return resp.json();
-      })
-      .then(function(data){
-        if (data.unavailable) {
-          setMetrics(0, 0, 0);
-          setState("error");
-          return;
-        }
-        render(data);
-      })
-      .catch(function(err){
-        console.error(err);
-        setMetrics(0, 0, 0);
-        setState("error");
-      });
-  }
-
-  function render(data){
-    var rows = data.rows || [];
-    var totalAttempts = rows.reduce(function(sum,row){ return sum + (quizId ? (row.attempts_count || 0) : (row.total_attempts || 0)); }, 0);
-    var best = rows.length ? (quizId ? rows[0].score : rows[0].correct_attempts) || 0 : 0;
-    setMetrics(data.participants === undefined ? rows.length : data.participants, totalAttempts, best);
-
-    if (!rows.length) {
-      setState("empty");
-      return;
-    }
-
-    var list = byId("list");
-    list.innerHTML = "";
-    rows.forEach(function(row, index){
-      var rank = row.rank || index + 1;
-      var name = displayName(row);
-      var score = quizId ? row.score : row.correct_attempts;
-      var total = quizId ? row.total : row.total_attempts;
-      var accuracy = total ? Math.round((score / total) * 100) : 0;
-      var item = document.createElement("article");
-      item.className = "row";
-      item.innerHTML =
-        '<div class="rank"></div>' +
-        '<div class="avatar"></div>' +
-        '<div class="who"><div class="name"></div><div class="meta num"></div></div>' +
-        '<div class="score num"><strong></strong><span></span></div>';
-      var rankEl = item.querySelector(".rank");
-      rankEl.className = "rank" + (rank <= 3 ? " top" + rank : "");
-      rankEl.textContent = bn(rank);
-      item.querySelector(".avatar").textContent = initial(name);
-      item.querySelector(".name").textContent = name;
-      item.querySelector(".meta").textContent = quizId
-        ? bn(row.attempts_count || 1) + "টি চেষ্টা · সর্বশেষ ফলে " + bn(row.answered || 0) + "/১০টি উত্তর"
-        : bn(row.total_attempts || 0) + "টি উত্তর জমা";
-      item.querySelector(".score strong").textContent = bn(score || 0);
-      item.querySelector(".score span").textContent = bn(accuracy) + "% সঠিক";
-      list.appendChild(item);
-    });
-    setState("ok");
-  }
-
-  function setMetrics(students, attempts, best){
-    byId("m-students").textContent = bn(students);
-    byId("m-attempts").textContent = bn(attempts);
-    byId("m-best").textContent = bn(best);
-  }
-
-  function displayName(row){
-    if (row.display_name) return row.display_name;
-    var full = [row.first_name, row.last_name].filter(Boolean).join(" ").trim();
-    if (full) return full;
-    if (row.username) return "@" + row.username;
-    return "শিক্ষার্থী";
-  }
-
-  function initial(name){
-    var trimmed = (name || "?").trim();
-    return trimmed ? trimmed[0].toUpperCase() : "?";
-  }
+(function(){"use strict";
+  var tg=window.Telegram&&window.Telegram.WebApp?window.Telegram.WebApp:null,initData=tg&&tg.initData?tg.initData:"";if(tg){try{tg.ready();tg.expand()}catch(e){}}
+  var API_BASE=(window.QUIZ_API_BASE||document.querySelector('meta[name="quiz-api-base"]').content||"").replace(/\/$/,""),BN=["০","১","২","৩","৪","৫","৬","৭","৮","৯"],quizId=new URLSearchParams(location.search).get("quiz")||"";
+  var subjects={"history":"ইতিহাস","geography":"ভূগোল","polity":"সংবিধান","economics":"অর্থনীতি","science":"বিজ্ঞান","mathematics":"গণিত","reasoning":"রিজনিং","english":"ইংরেজি","bengali":"বাংলা","computer":"কম্পিউটার","current-affairs":"কারেন্ট অ্যাফেয়ার্স","environment":"পরিবেশ","miscellaneous":"বিবিধ সাধারণ জ্ঞান"};
+  var exams={WBCS:"WBCS",WBPSC_CLERKSHIP:"WBPSC Clerkship",WBPSC_MISC:"WBPSC Misc",WBP_CONSTABLE:"WBP Constable",WBP_SI:"WBP SI",KOLKATA_POLICE:"Kolkata Police",PRIMARY_TET:"Primary TET",UPPER_PRIMARY_TET:"Upper Primary TET",SSC:"SSC",RAILWAY:"Railway",BANKING:"Banking"};
+  function el(id){return document.getElementById(id)}function bn(v){return String(v).replace(/[0-9]/g,function(d){return BN[+d]})}function api(p){return API_BASE+p}function check(r){if(!r.ok)throw new Error(String(r.status));return r.json()}function authHeaders(){return {"X-Telegram-Init-Data":initData}}
+  buildOptions();el("board-load").addEventListener("click",loadBoard);el("board-type").addEventListener("change",syncSubject);el("settings").addEventListener("submit",savePreferences);syncSubject();loadBoard();
+  if(initData){Promise.all([fetch(api("/api/me/dashboard"),{headers:authHeaders()}).then(check),fetch(api("/api/me/preferences"),{headers:authHeaders()}).then(check)]).then(function(values){renderPersonal(values[0]);fillPreferences(values[1]);el("loading").classList.add("hidden");el("content").classList.remove("hidden")}).catch(showPublic)}else showPublic();
+  function showPublic(){el("loading").classList.add("hidden");el("content").classList.remove("hidden")}
+  function renderPersonal(d){["personal","personal-metrics","activity-card","subjects-card","weak-card","mastery-card","settings-card"].forEach(function(id){el(id).classList.remove("hidden")});var target=d.dailyTarget||30,today=d.todayAnswered||0,pct=Math.min(100,Math.round(today/target*100));el("goal-copy").textContent=bn(today)+" / "+bn(target);el("goal-note").textContent=pct>=100?"আজকের লক্ষ্য পূর্ণ হয়েছে—এখন রিভিশন করুন।":"আর "+bn(Math.max(0,target-today))+"টি প্রশ্ন বাকি।";el("goal-bar").style.width=pct+"%";el("m-accuracy").textContent=bn(d.accuracy||0)+"%";el("m-answered").textContent=bn(d.totalAnswered||0);el("m-due").textContent=bn(d.dueReviews||0);el("m-streak").textContent=bn(d.currentStreak||0)+" দিন";el("m-longest").textContent=bn(d.longestStreak||0)+" দিন";el("m-improvement").textContent=bn(d.averageImprovement||0)+"%";renderActivity(d.progressOverTime||[]);renderBars("subjects",d.subjectPerformance||[],function(x){return subjects[x.subjectKey]||x.subjectKey},"accuracy");renderBars("weak",d.weakestTopics||[],function(x){return x.chapter||x.microTopicKey},"accuracy");el("mastery-copy").textContent=bn(d.revisionMastered||0)+" / "+bn(d.revisionTotal||0)+"টি প্রশ্ন mastered";el("mastery-bar").style.width=Math.min(100,d.revisionCompletion||0)+"%"}
+  function renderActivity(rows){var box=el("activity"),max=Math.max.apply(null,[1].concat(rows.map(function(x){return x.answered||0})));box.textContent="";rows.forEach(function(x){var bar=document.createElement("span");bar.className="day";bar.tabIndex=0;bar.style.height=Math.max(3,(x.answered||0)/max*100)+"%";bar.dataset.label=x.date+": "+bn(x.answered||0)+"টি";box.appendChild(bar)})}
+  function renderBars(id,rows,label,value){var box=el(id);box.textContent="";if(!rows.length){box.textContent="এখনও যথেষ্ট তথ্য নেই।";box.className="muted";return}rows.slice(0,8).forEach(function(x){var row=document.createElement("div");row.className="bar-row";var b=document.createElement("b");b.textContent=label(x);var bar=document.createElement("div");bar.className="bar";var fill=document.createElement("span");fill.style.width=Math.min(100,x[value]||0)+"%";bar.appendChild(fill);var n=document.createElement("span");n.textContent=bn(x[value]||0)+"%";row.append(b,bar,n);box.appendChild(row)})}
+  function loadBoard(){var type=el("board-type").value,subject=el("board-subject").value,path=quizId?"/api/quiz/"+encodeURIComponent(quizId)+"/leaderboard?limit=50":"/api/leaderboards/"+type+"?limit=50"+(type==="subject_accuracy"?"&subject="+encodeURIComponent(subject):"");el("board").classList.add("hidden");el("board-state").classList.remove("hidden");el("board-state").textContent="তালিকা লোড হচ্ছে...";fetch(api(path)).then(check).then(renderBoard).catch(function(){el("board-state").textContent="Leaderboard এখন পাওয়া যাচ্ছে না।"})}
+  function renderBoard(data){var rows=data.rows||[];el("tie-break").textContent=data.tieBreak?"Tie-break: "+data.tieBreak:"Quiz score, উত্তর সংখ্যা ও নিরাপদ সময়ের ক্রম";el("board-state").classList.toggle("hidden",!!rows.length);el("board-state").textContent=rows.length?"":"এখনও পর্যাপ্ত ফলাফল নেই।";var box=el("board");box.textContent="";rows.forEach(function(x){var r=document.createElement("article");r.className="row";var rank=document.createElement("div");rank.className="rank";rank.textContent=bn(x.rank);var who=document.createElement("div");var name=document.createElement("div");name.className="name";name.textContent=x.display_name||"শিক্ষার্থী";var meta=document.createElement("div");meta.className="meta";meta.textContent=quizId?bn(x.attempts_count||1)+"টি চেষ্টা":bn(x.total_answered||0)+"টি উত্তর";who.append(name,meta);var value=document.createElement("div");value.className="value";value.textContent=quizId?bn(x.score)+"/"+bn(x.total):boardValue(data.type,x);r.append(rank,who,value);box.appendChild(r)});box.classList.toggle("hidden",!rows.length)}
+  function boardValue(type,x){if(type==="consistency")return bn(x.value||0)+" দিন";if(type==="improvement")return "+"+bn(x.value||0)+"%";return bn(x.value||0)+"%"}
+  function syncSubject(){el("board-subject").classList.toggle("hidden",el("board-type").value!=="subject_accuracy")}
+  function buildOptions(){Object.keys(subjects).forEach(function(k){var o=document.createElement("option");o.value=k;o.textContent=subjects[k];el("board-subject").appendChild(o)});buildChecks("exam-checks",exams);buildChecks("subject-checks",subjects)}
+  function buildChecks(id,items){var box=el(id);Object.keys(items).forEach(function(k){var l=document.createElement("label"),i=document.createElement("input");i.type="checkbox";i.value=k;l.append(i,document.createTextNode(items[k]));box.appendChild(l)})}
+  function fillPreferences(p){el("daily-target").value=p.dailyQuestionTarget||30;el("language").value=p.preferredLanguage||"bn";el("quiz-mode").value=p.quizMode||"timed";el("difficulty").value=p.difficultyPreference||"adaptive";el("display-name").value=p.publicDisplayName||"";el("leaderboard-visible").checked=p.leaderboardVisible!==false;el("username-visible").checked=!!p.usernameVisible;el("reminder").checked=!!p.dailyReminderEnabled;checkValues("exam-checks",p.targetExams||[]);checkValues("subject-checks",p.preferredSubjects||[])}
+  function checkValues(id,values){el(id).querySelectorAll("input").forEach(function(i){i.checked=values.indexOf(i.value)>=0})}function checked(id){return Array.from(el(id).querySelectorAll("input:checked")).map(function(i){return i.value})}
+  function savePreferences(e){e.preventDefault();var msg=el("settings-message");msg.textContent="সংরক্ষণ হচ্ছে...";fetch(api("/api/me/preferences"),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:initData,targetExams:checked("exam-checks"),preferredSubjects:checked("subject-checks"),dailyQuestionTarget:+el("daily-target").value,preferredLanguage:el("language").value,difficultyPreference:el("difficulty").value,quizMode:el("quiz-mode").value,leaderboardVisible:el("leaderboard-visible").checked,publicDisplayName:el("display-name").value||null,usernameVisible:el("username-visible").checked,dailyReminderEnabled:el("reminder").checked})}).then(check).then(function(){msg.textContent="সেটিং সংরক্ষিত হয়েছে।"}).catch(function(){msg.textContent="সেটিং সংরক্ষণ করা যায়নি।"})}
 })();
 </script>
 </body>

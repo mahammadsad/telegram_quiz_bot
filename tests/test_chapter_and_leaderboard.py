@@ -84,3 +84,45 @@ def test_global_leaderboard_uses_database_rpc_without_row_cap(monkeypatch):
     monkeypatch.setattr(stats_repo, "get_client", Client)
     assert stats_repo.leaderboard(limit=20, offset=12000)["participants"] == 15000
     assert calls[0][0] == "get_global_leaderboard_page"
+
+
+def test_typed_leaderboard_uses_bounded_database_rpc(monkeypatch):
+    calls = []
+
+    class Result:
+        data = {"type": "weekly_accuracy", "participants": 32000, "rows": []}
+
+    class Client:
+        def rpc(self, name, params):
+            calls.append((name, params))
+            return self
+
+        def execute(self):
+            return Result()
+
+    monkeypatch.setattr(stats_repo, "get_client", Client)
+    board = stats_repo.typed_leaderboard(
+        "weekly_accuracy",
+        subject_key=None,
+        limit=50,
+        offset=20000,
+    )
+    assert board["participants"] == 32000
+    assert calls == [(
+        "get_leaderboard_page",
+        {
+            "p_type": "weekly_accuracy",
+            "p_subject_key": None,
+            "p_limit": 50,
+            "p_offset": 20000,
+        },
+    )]
+
+
+def test_typed_leaderboard_rejects_unknown_or_subjectless_type():
+    import pytest
+
+    with pytest.raises(ValueError, match="Unknown leaderboard"):
+        stats_repo.typed_leaderboard("volume", subject_key=None)
+    with pytest.raises(ValueError, match="requires a subject"):
+        stats_repo.typed_leaderboard("subject_accuracy", subject_key=None)

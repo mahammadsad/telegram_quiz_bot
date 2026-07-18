@@ -25,6 +25,7 @@ LANGUAGES = {"bn", "hi", "en"}
 DIFFICULTIES = {"adaptive", "easy", "medium", "hard"}
 QUIZ_MODES = {"timed", "practice"}
 BOOKMARK_TYPES = {"question", "resource"}
+PRACTICE_SOURCES = {"wrong", "due", "bookmark", "weak_topic"}
 
 
 def dashboard(telegram_user: dict) -> dict:
@@ -57,6 +58,33 @@ def wrong_questions(
             subject_key=clean_subject,
             limit=_page_limit(limit),
             offset=max(0, offset),
+        )
+    )
+
+
+def submit_practice_answer(
+    telegram_user: dict,
+    *,
+    question_id: str,
+    selected_option: int,
+    source_type: str,
+    response_time_seconds: float | None,
+    marked_for_review: bool,
+) -> dict:
+    if isinstance(selected_option, bool) or selected_option not in range(4):
+        raise ValueError("Selected option must be between 0 and 3.")
+    if source_type not in PRACTICE_SOURCES:
+        raise ValueError("Invalid practice source.")
+    if response_time_seconds is not None and not 0 <= response_time_seconds <= 3600:
+        raise ValueError("Invalid response time.")
+    return _safe(
+        personal_learning_repo.submit_practice_answer(
+            _user_id(telegram_user),
+            question_id=question_id,
+            selected_option=selected_option,
+            source_type=source_type,
+            response_time_seconds=response_time_seconds,
+            marked_for_review=marked_for_review,
         )
     )
 

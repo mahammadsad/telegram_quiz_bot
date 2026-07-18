@@ -37,6 +37,28 @@ def wrong_questions(
     )
 
 
+def submit_practice_answer(
+    user_id: str,
+    *,
+    question_id: str,
+    selected_option: int,
+    source_type: str,
+    response_time_seconds: float | None,
+    marked_for_review: bool,
+) -> dict:
+    return _rpc(
+        "submit_personal_practice_answer",
+        {
+            "p_user_id": user_id,
+            "p_question_id": question_id,
+            "p_selected_option": selected_option,
+            "p_source_type": source_type,
+            "p_response_time_seconds": response_time_seconds,
+            "p_marked_for_review": marked_for_review,
+        },
+    )
+
+
 def bookmarks(user_id: str) -> dict:
     return _rpc("get_user_bookmarks", {"p_user_id": user_id})
 

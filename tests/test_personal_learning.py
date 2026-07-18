@@ -12,6 +12,9 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = ROOT / "supabase" / "migrations" / "20260718181849_personalized_learning_foundation.sql"
 FK_MIGRATION = ROOT / "supabase" / "migrations" / "20260718183203_personalized_learning_fk_compatibility.sql"
 UNIQUE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718184505_remove_redundant_personal_review_unique.sql"
+ANALYTICS_MIGRATION = ROOT / "supabase" / "migrations" / "20260718185905_learning_analytics_leaderboards.sql"
+PRACTICE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718190639_personal_practice_answers.sql"
+SUBJECT_PROJECTION_MIGRATION = ROOT / "supabase" / "migrations" / "20260718192154_canonical_subject_learning_projections.sql"
 client = TestClient(api_module.app)
 
 
@@ -71,6 +74,67 @@ def test_legacy_review_unique_constraint_is_not_duplicated():
     assert "array['user_id', 'question_id']::name[]" in foundation
 
 
+def test_learning_analytics_stay_in_private_paginated_sql_rpcs():
+    sql = ANALYTICS_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "function public.get_user_learning_dashboard" in sql
+    assert "function public.get_leaderboard_page" in sql
+    for key in (
+        "longeststreak",
+        "subjectperformance",
+        "chapterperformance",
+        "microtopicperformance",
+        "difficultyperformance",
+        "averageimprovement",
+        "revisioncompletion",
+        "progressovertime",
+    ):
+        assert f"'{key}'" in sql
+    for board_type in (
+        "daily_accuracy",
+        "weekly_accuracy",
+        "monthly_accuracy",
+        "subject_accuracy",
+        "improvement",
+        "consistency",
+        "revision_completion",
+    ):
+        assert f"'{board_type}'" in sql
+    assert "from public, anon, authenticated" in sql
+    assert "to service_role" in sql
+    assert "security definer" not in sql
+
+
+def test_personal_practice_scores_only_after_authenticated_submission():
+    sql = PRACTICE_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "create table if not exists public.personal_practice_answers" in sql
+    assert "function public.submit_personal_practice_answer" in sql
+    assert "function public.advance_personal_review_schedule" in sql
+    assert "selected option must be between 0 and 3" in sql
+    assert "'correctindex'" in sql
+    assert "alter table public.personal_practice_answers enable row level security" in sql
+    assert "from public, anon, authenticated" in sql
+    assert "to service_role" in sql
+    assert "security definer" not in sql
+
+
+def test_learner_apis_translate_internal_subject_names_to_canonical_keys():
+    sql = SUBJECT_PROJECTION_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "function public.canonical_subject_key" in sql
+    assert "function public.canonical_subject_internal_name" in sql
+    assert "function public.canonicalize_subject_rows" in sql
+    for function_name in (
+        "get_user_learning_dashboard",
+        "get_user_due_reviews",
+        "get_user_wrong_questions",
+        "get_user_bookmarks",
+        "get_leaderboard_page",
+    ):
+        assert f"function public.{function_name}" in sql
+    assert "from public, anon, authenticated" in sql
+    assert "to service_role" in sql
+    assert "security definer" not in sql
+
+
 def test_dashboard_endpoint_requires_telegram_header(monkeypatch):
     monkeypatch.setattr(api_module, "DEV_ALLOW_UNVERIFIED_TELEGRAM", False)
     assert client.get("/api/me/dashboard").status_code == 401
@@ -105,6 +169,41 @@ def test_private_learning_endpoints_project_authenticated_user(monkeypatch):
     assert client.get(
         "/api/me/wrong-questions?subject=computer", headers=headers
     ).json()["total"] == 2
+
+
+def test_practice_answer_requires_auth_and_returns_post_attempt_review(monkeypatch):
+    question_id = "22222222-2222-4222-8222-222222222222"
+    assert client.post(
+        f"/api/me/practice/{question_id}",
+        json={"selectedIndex": 1, "sourceType": "wrong"},
+    ).status_code == 401
+    monkeypatch.setattr(api_module, "verify_init_data", lambda *args: {"id": 123})
+    captured = {}
+    monkeypatch.setattr(
+        api_module.personal_learning_service,
+        "submit_practice_answer",
+        lambda user, **kwargs: captured.update(kwargs)
+        or {"isCorrect": True, "correctIndex": 1, "nextReview": "2026-07-26"},
+    )
+    response = client.post(
+        f"/api/me/practice/{question_id}",
+        json={
+            "initData": "signed",
+            "selectedIndex": 1,
+            "sourceType": "due",
+            "responseTimeSeconds": 12.5,
+            "markedForReview": False,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["correctIndex"] == 1
+    assert captured == {
+        "question_id": question_id,
+        "selected_option": 1,
+        "source_type": "due",
+        "response_time_seconds": 12.5,
+        "marked_for_review": False,
+    }
 
 
 def test_bookmark_and_preference_contracts(monkeypatch):

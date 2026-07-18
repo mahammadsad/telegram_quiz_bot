@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="quiz-api-base" content="" />
+<title>ব্যক্তিগত অনুশীলন</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    color-scheme:light dark;
+    --bg:var(--tg-theme-bg-color,#f3f7f8);
+    --surface:var(--tg-theme-secondary-bg-color,#fff);
+    --text:var(--tg-theme-text-color,#14212b);
+    --hint:var(--tg-theme-hint-color,#687784);
+    --link:var(--tg-theme-link-color,#087f8c);
+    --button:var(--tg-theme-button-color,#087f6c);
+    --button-text:var(--tg-theme-button-text-color,#fff);
+    --line:color-mix(in srgb,var(--hint) 25%,transparent);
+    --success:#158047;
+    --danger:#c93f4b;
+    --warning:#b16c00;
+    --radius:16px;
+    --font:'Noto Sans Bengali',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.55}
+  button,a{font:inherit}
+  button{min-height:48px}
+  button:focus-visible,a:focus-visible{outline:3px solid color-mix(in srgb,var(--link) 45%,transparent);outline-offset:3px}
+  .app{width:min(100%,760px);margin:auto;padding:18px 14px 92px}
+  .top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+  .top h1{margin:0;font-size:24px}.top p{margin:2px 0 0;color:var(--hint);font-size:13px}
+  .chip{border:1px solid var(--line);border-radius:999px;padding:8px 11px;color:var(--hint);font-weight:700}
+  .card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px;box-shadow:0 12px 36px rgba(16,32,44,.09)}
+  .hidden{display:none!important}.state{text-align:center;padding:36px 18px;color:var(--hint)}
+  .loader{width:38px;height:38px;margin:0 auto 12px;border:4px solid var(--line);border-top-color:var(--button);border-radius:50%;animation:spin .8s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .progress{height:8px;background:color-mix(in srgb,var(--hint) 18%,transparent);border-radius:99px;overflow:hidden;margin-bottom:16px}
+  .progress span{display:block;height:100%;background:var(--button);transition:width .2s ease}
+  .kicker{display:flex;justify-content:space-between;gap:8px;color:var(--hint);font-size:13px;font-weight:700}
+  .question{font-size:21px;font-weight:800;margin:10px 0 18px}
+  .options{display:grid;gap:10px}
+  .option{display:grid;grid-template-columns:34px 1fr;align-items:center;gap:10px;width:100%;padding:12px;border:1.5px solid var(--line);border-radius:14px;background:transparent;color:var(--text);text-align:left;cursor:pointer}
+  .option.selected{border-color:var(--button);background:color-mix(in srgb,var(--button) 10%,var(--surface))}
+  .option.correct{border-color:var(--success);background:color-mix(in srgb,var(--success) 10%,var(--surface))}
+  .option.wrong{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,var(--surface))}
+  .key{display:grid;place-items:center;width:30px;height:30px;border:1px solid var(--line);border-radius:50%;font-weight:800}
+  .actions{display:flex;gap:10px;margin-top:16px}.btn{flex:1;border:1px solid var(--line);border-radius:14px;padding:11px 14px;background:transparent;color:var(--text);font-weight:800;cursor:pointer}.primary{background:var(--button);border-color:var(--button);color:var(--button-text)}
+  .mark{display:flex;align-items:center;gap:9px;margin-top:14px;color:var(--hint);font-weight:700}.mark input{width:20px;height:20px}
+  .feedback{margin-top:16px;border-left:4px solid var(--success);padding:12px 14px;background:color-mix(in srgb,var(--success) 8%,var(--surface));border-radius:10px}.feedback.bad{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 8%,var(--surface))}.feedback h2{font-size:18px;margin:0 0 6px}.feedback p{margin:5px 0}.feedback a{color:var(--link);font-weight:700}
+  .bottom{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);width:min(calc(100% - 20px),720px);display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:6px;background:color-mix(in srgb,var(--surface) 94%,transparent);border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 28px rgba(16,32,44,.16);backdrop-filter:blur(12px)}
+  .bottom a{text-align:center;text-decoration:none;color:var(--hint);padding:9px 4px;border-radius:12px;font-size:12px;font-weight:800}.bottom a.active{background:color-mix(in srgb,var(--button) 12%,transparent);color:var(--button)}
+  @media(max-width:520px){.app{padding:14px 10px 88px}.card{padding:15px}.question{font-size:19px}.actions{flex-direction:column}}
+  @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style>
+</head>
+<body>
+<main class="app">
+  <header class="top">
+    <div><h1 id="title">ব্যক্তিগত অনুশীলন</h1><p id="subtitle">উত্তর দেওয়ার পরেই সমাধান দেখা যাবে</p></div>
+    <span class="chip" id="count">০টি</span>
+  </header>
+  <section class="card" aria-live="polite">
+    <div id="loading" class="state"><div class="loader"></div>প্রশ্ন লোড হচ্ছে...</div>
+    <div id="empty" class="state hidden">এই তালিকায় এখন কোনো প্রশ্ন নেই। নতুন কুইজ শেষ করলে এখানে প্রশ্ন যোগ হবে।</div>
+    <div id="error" class="state hidden">অনুশীলন খুলতে Telegram-এর কুইজ বাটন ব্যবহার করুন, অথবা পরে আবার চেষ্টা করুন।</div>
+    <div id="practice" class="hidden">
+      <div class="progress" aria-hidden="true"><span id="bar"></span></div>
+      <div class="kicker"><span id="position"></span><span id="topic"></span></div>
+      <p class="question" id="question"></p>
+      <div class="options" id="options" role="group" aria-label="উত্তরের বিকল্প"></div>
+      <label class="mark"><input id="marked" type="checkbox" /> পরে আবার দেখার জন্য চিহ্নিত করুন</label>
+      <div class="actions"><button class="btn primary" id="submit" type="button">উত্তর যাচাই করুন</button></div>
+      <div id="feedback" class="feedback hidden"></div>
+      <div class="actions hidden" id="next-wrap"><button class="btn primary" id="next" type="button">পরবর্তী প্রশ্ন</button></div>
+    </div>
+  </section>
+</main>
+<nav class="bottom" aria-label="প্রধান নেভিগেশন">
+  <a href="dashboard.html">হোম</a><a class="active" href="practice.html?source=wrong">অনুশীলন</a><a href="practice.html?source=due">রিভিশন</a><a href="dashboard.html#analytics">পরিসংখ্যান</a>
+</nav>
+<script>
+(function(){
+  "use strict";
+  var tg=window.Telegram&&window.Telegram.WebApp?window.Telegram.WebApp:null;
+  var initData=tg&&tg.initData?tg.initData:"";
+  if(tg){try{tg.ready();tg.expand();}catch(e){}}
+  var API_BASE=(window.QUIZ_API_BASE||document.querySelector('meta[name="quiz-api-base"]').content||"").replace(/\/$/,"");
+  var params=new URLSearchParams(location.search),source=params.get("source")||"wrong",subject=params.get("subject")||"";
+  if(["wrong","due","bookmark","weak_topic"].indexOf(source)<0)source="wrong";
+  var rows=[],index=0,selected=null,started=0,locked=false,LETTERS=["A","B","C","D"],BN=["০","১","২","৩","৪","৫","৬","৭","৮","৯"];
+  function el(id){return document.getElementById(id)}function bn(v){return String(v).replace(/[0-9]/g,function(d){return BN[+d]})}function api(p){return API_BASE+p}
+  function state(name){["loading","empty","error","practice"].forEach(function(k){el(k).classList.toggle("hidden",k!==name)})}
+  var labels={wrong:["ভুল প্রশ্ন অনুশীলন","সাম্প্রতিক ভুলগুলো আবার চেষ্টা করুন"],due:["আজকের রিভিশন","নির্ধারিত প্রশ্নগুলো মনে করুন"],bookmark:["বুকমার্ক অনুশীলন","সংরক্ষিত প্রশ্নগুলো ঝালিয়ে নিন"],weak_topic:["দুর্বল টপিক","কম mastery-র প্রশ্ন অনুশীলন করুন"]};
+  el("title").textContent=labels[source][0];el("subtitle").textContent=labels[source][1];
+  el("submit").addEventListener("click",submit);el("next").addEventListener("click",next);
+  document.addEventListener("keydown",function(e){if(locked)return;if(["1","2","3","4"].indexOf(e.key)>=0){selected=+e.key-1;renderOptions()}else if(e.key==="Enter"&&selected!==null)submit()});
+  load();
+  function load(){if(!initData){state("error");return}var path=source==="due"?"/api/me/reviews/due?limit=100":source==="bookmark"?"/api/me/bookmarks":"/api/me/wrong-questions?limit=100"+(subject?"&subject="+encodeURIComponent(subject):"");fetch(api(path),{headers:{"X-Telegram-Init-Data":initData}}).then(check).then(function(data){rows=source==="bookmark"?(data.questions||[]):(data.rows||[]);if(source==="weak_topic")rows.sort(function(a,b){return (a.masteryScore||0)-(b.masteryScore||0)});el("count").textContent=bn(rows.length)+"টি";if(!rows.length){state("empty");return}render()}).catch(function(){state("error")})}
+  function check(r){if(!r.ok)throw new Error(String(r.status));return r.json()}
+  function render(){state("practice");locked=false;selected=null;started=performance.now();el("marked").checked=!!rows[index].markedForReview;el("feedback").classList.add("hidden");el("next-wrap").classList.add("hidden");el("submit").parentElement.classList.remove("hidden");el("position").textContent="প্রশ্ন "+bn(index+1)+" / "+bn(rows.length);el("topic").textContent=rows[index].chapter||rows[index].subjectKey||"";el("question").textContent=rows[index].q;el("bar").style.width=((index+1)/rows.length*100)+"%";renderOptions()}
+  function renderOptions(review){var wrap=el("options");wrap.textContent="";(rows[index].o||[]).forEach(function(label,i){var b=document.createElement("button");b.type="button";b.className="option"+(selected===i?" selected":"");if(review){if(i===review.correctIndex)b.classList.add("correct");else if(i===selected)b.classList.add("wrong")}b.disabled=locked;b.innerHTML='<span class="key">'+LETTERS[i]+'</span><span></span>';b.lastChild.textContent=label;b.addEventListener("click",function(){if(!locked){selected=i;renderOptions()}});wrap.appendChild(b)})}
+  function submit(){if(locked||selected===null)return;locked=true;el("submit").disabled=true;var seconds=Math.min(3600,Math.max(0,(performance.now()-started)/1000));fetch(api("/api/me/practice/"+encodeURIComponent(rows[index].questionId)),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:initData,selectedIndex:selected,sourceType:source,responseTimeSeconds:seconds,markedForReview:el("marked").checked})}).then(check).then(function(result){el("submit").disabled=false;renderOptions(result);var box=el("feedback");box.className="feedback"+(result.isCorrect?"":" bad");box.textContent="";var h=document.createElement("h2");h.textContent=result.isCorrect?"সঠিক উত্তর":"আরও একবার মনে রাখুন";box.appendChild(h);var p=document.createElement("p");p.textContent=result.explanation||"সঠিক উত্তর: "+rows[index].o[result.correctIndex];box.appendChild(p);if(result.sourceUrl&&/^https:\/\//i.test(result.sourceUrl)){var a=document.createElement("a");a.href=result.sourceUrl;a.target="_blank";a.rel="noopener noreferrer";a.textContent="যাচাই করা উৎস দেখুন";box.appendChild(a)}box.classList.remove("hidden");el("submit").parentElement.classList.add("hidden");el("next-wrap").classList.remove("hidden")}).catch(function(){locked=false;el("submit").disabled=false;alert("উত্তর সংরক্ষণ করা যায়নি। আবার চেষ্টা করুন।")})}
+  function next(){if(index<rows.length-1){index++;render()}else{state("empty");el("empty").textContent="আজকের এই অনুশীলন শেষ। আপনার revision schedule আপডেট হয়েছে।"}}
+})();
+</script>
+</body>
+</html>
