@@ -464,13 +464,13 @@
       <div class="result-metric"><b>সঠিকতা</b><span id="result-accuracy">০%</span></div><div class="result-metric"><b>সময়</b><span id="result-time">০:০০</span></div><div class="result-metric"><b>প্রতি প্রশ্ন</b><span id="result-average">০ সেকেন্ড</span></div><div class="result-metric"><b>উত্তরহীন</b><span id="result-unanswered">০</span></div>
     </div>
     <div class="actions">
-      <button class="btn btn-secondary" id="btn-wrong-practice">ভুল প্রশ্ন অনুশীলন</button><button class="btn btn-secondary" id="btn-revise">আবার রিভিশন</button><button class="btn btn-secondary" id="btn-retake">পুনরায় পরীক্ষা</button><button class="btn btn-primary" id="btn-dashboard">ড্যাশবোর্ড</button>
+      <button class="btn btn-secondary" id="btn-wrong-practice">ভুল প্রশ্ন অনুশীলন</button><button class="btn btn-secondary" id="btn-revise">পুনরাবৃত্তি করুন</button><button class="btn btn-secondary" id="btn-retake">পুনরায় পরীক্ষা</button><button class="btn btn-primary" id="btn-dashboard">কুইজ র‍্যাঙ্কিং</button><button class="btn btn-secondary" id="btn-personal-dashboard">আমার ড্যাশবোর্ড</button>
     </div>
     <div class="review-list" id="review-list"></div>
   </section>
 </main>
 <div class="modal hidden" id="submit-modal" role="dialog" aria-modal="true" aria-labelledby="submit-title"><div class="modal-card"><h2 id="submit-title">উত্তরপত্র সাবমিট করবেন?</h2><p id="submit-summary"></p><div class="actions"><button class="btn btn-secondary" id="btn-submit-back" type="button">ফিরে যান</button><button class="btn btn-primary" id="btn-submit-confirm" type="button">তবুও সাবমিট করুন</button></div></div></div>
-<nav class="bottom-nav" aria-label="প্রধান নেভিগেশন"><a class="active" href="index.html">কুইজ</a><a href="practice.html?source=wrong">অনুশীলন</a><a href="practice.html?source=due">রিভিশন</a><a href="dashboard.html">পরিসংখ্যান</a></nav>
+<nav class="bottom-nav" aria-label="প্রধান নেভিগেশন"><a class="active" href="index.html">কুইজ</a><a href="practice.html?source=wrong">অনুশীলন</a><a href="practice.html?source=due">পুনরাবৃত্তি</a><a href="dashboard.html">পরিসংখ্যান</a></nav>
 
 <script>
 (function(){
@@ -495,6 +495,7 @@
   var LETTERS = ["A","B","C","D"];
 
   var quizId = getQuizId();
+  var requestedAttemptId = getResultAttemptId();
   var quiz = null;
   var legacyLocal = false;
   var readOnlyMode = false;
@@ -533,6 +534,7 @@
   byId("btn-next").addEventListener("click", nextOrFinish);
   byId("btn-retake").addEventListener("click", startQuiz);
   byId("btn-dashboard").addEventListener("click", openDashboard);
+  byId("btn-personal-dashboard").addEventListener("click", function(){window.location.href="dashboard.html";});
   byId("btn-wrong-practice").addEventListener("click", openWrongPractice);
   byId("btn-revise").addEventListener("click", loadResources);
   byId("btn-mark").addEventListener("click", toggleMarked);
@@ -593,13 +595,39 @@
     return params.get("quiz") || params.get("id") || params.get("startapp") || "";
   }
 
+  function validAttemptId(value){
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value || "");
+  }
+
+  function getResultAttemptId(){
+    var value = new URLSearchParams(window.location.search).get("attempt") || "";
+    return validAttemptId(value) ? value.toLowerCase() : "";
+  }
+
+  function rememberResultLocation(value){
+    if (!validAttemptId(value) || !window.history || !window.history.replaceState) return;
+    requestedAttemptId = value.toLowerCase();
+    var url = new URL(window.location.href);
+    url.searchParams.set("quiz", quizId);
+    url.searchParams.set("attempt", requestedAttemptId);
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  }
+
+  function clearResultLocation(){
+    requestedAttemptId = "";
+    if (!window.history || !window.history.replaceState) return;
+    var url = new URL(window.location.href);
+    url.searchParams.delete("attempt");
+    window.history.replaceState(null, "", url.pathname + url.search + url.hash);
+  }
+
   function loadQuizPreferences(){
     if (!isTelegram) return;
     fetch(api("/api/me/preferences"), {headers:{"X-Telegram-Init-Data":tg.initData}})
       .then(function(resp){ return jsonOrThrow(resp, "Preferences API"); })
       .then(function(data){
         quizMode = data.quizMode === "practice" ? "practice" : "timed";
-        if (quiz) renderIntro();
+        if (quiz && !requestedAttemptId && screen === "intro") renderIntro();
       })
       .catch(function(){ quizMode = "timed"; });
   }
@@ -685,7 +713,8 @@
         quiz = data;
         legacyLocal = !(data.capabilities && data.capabilities.submission === true);
         answers = quiz.qs.map(function(){ return null; });
-        renderIntro();
+        if (!legacyLocal && requestedAttemptId) loadAttemptResult(requestedAttemptId);
+        else renderIntro();
       })
       .catch(function(err){
         console.error(err);
@@ -695,6 +724,30 @@
           return;
         }
         showError(err.message || "কুইজ লোড করা যায়নি। একটু পরে আবার চেষ্টা করুন।");
+      });
+  }
+
+  function loadAttemptResult(value){
+    retryAction = function(){ loadAttemptResult(value); };
+    byId("btn-retry").textContent = "ফল আবার লোড করুন";
+    show("loading");
+    byId("loading-message").textContent = "আপনার ফলাফল লোড হচ্ছে...";
+    fetch(api("/api/quiz/" + encodeURIComponent(quizId) + "/attempt/" + encodeURIComponent(value)), {
+      headers:{"X-Telegram-Init-Data":isTelegram ? tg.initData : ""}
+    })
+      .then(function(resp){ return jsonOrThrow(resp, "Attempt result API"); })
+      .then(function(result){ attemptId = value; discardDraft(); renderResult(result); })
+      .catch(function(err){
+        console.error(err);
+        if (err.status === 401) {
+          showError("ফল দেখতে Telegram-এর কুইজ বাটন থেকে Mini App খুলুন।");
+          return;
+        }
+        if (err.status === 404) {
+          showError("এই কুইজে আপনার সংরক্ষিত ফলটি পাওয়া যায়নি। নতুন করে পরীক্ষা দিতে পারেন।");
+          return;
+        }
+        showError("ফলাফল এখন লোড করা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।");
       });
   }
 
@@ -729,7 +782,7 @@
     byId("intro-title").textContent = meta.chapter || "আজকের মক টেস্ট";
     byId("intro-subject").textContent = meta.subject || "মক টেস্ট";
     byId("intro-count").textContent = bn(quiz.qs.length) + "টি";
-    byId("intro-time").textContent = quizMode === "practice" ? "Untimed practice" : bn(Math.max(5, quiz.qs.length)) + " মিনিট";
+    byId("intro-time").textContent = quizMode === "practice" ? "সময়সীমাহীন অনুশীলন" : bn(Math.max(5, quiz.qs.length)) + " মিনিট";
     byId("fallback-box").classList.toggle("hidden", !legacyLocal);
     byId("btn-start").classList.toggle("hidden", legacyLocal);
     byId("btn-prepare").classList.toggle("hidden", legacyLocal);
@@ -901,6 +954,7 @@
       return;
     }
     readOnlyMode = legacyLocal;
+    clearResultLocation();
     discardDraft();
     attemptId = newAttemptId();
     answers = quiz.qs.map(function(){ return null; });
@@ -921,7 +975,7 @@
   function prepareQuizHeader(){
     byId("quiz-subject").textContent = (quiz.meta && quiz.meta.subject) || "মক টেস্ট";
     byId("quiz-chapter").textContent = (quiz.meta && quiz.meta.chapter) || "";
-    byId("mode-label").textContent = quizMode === "practice" ? "Practice mode · untimed" : "Timed mode";
+    byId("mode-label").textContent = quizMode === "practice" ? "অনুশীলন মোড · সময়সীমা নেই" : "সময়বদ্ধ মোড";
   }
 
   function renderQuestion(){
@@ -1069,7 +1123,7 @@
         }
         return resp.json();
       })
-      .then(function(result){ submitting = false; discardDraft(); renderResult(result); })
+      .then(function(result){ submitting = false; discardDraft(); rememberResultLocation(result.attemptId || attemptId); renderResult(result); })
       .catch(function(err){
         submitting = false;
         console.error(err);
@@ -1110,21 +1164,34 @@
 
   function newAttemptId(){
     if (window.crypto && typeof window.crypto.randomUUID === "function") return window.crypto.randomUUID();
-    return Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+    if (!window.crypto || typeof window.crypto.getRandomValues !== "function") {
+      throw new Error("এই ব্রাউজার নতুন চেষ্টার নিরাপদ পরিচয় তৈরি করতে পারে না। Telegram আপডেট করে আবার চেষ্টা করুন।");
+    }
+    var bytes = new Uint8Array(16);
+    window.crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 15) | 64;
+    bytes[8] = (bytes[8] & 63) | 128;
+    var hex = Array.prototype.map.call(bytes, function(value){ return value.toString(16).padStart(2,"0"); }).join("");
+    return hex.slice(0,8)+"-"+hex.slice(8,12)+"-"+hex.slice(12,16)+"-"+hex.slice(16,20)+"-"+hex.slice(20);
   }
 
   function renderResult(result){
+    if (validAttemptId(result.attemptId)) attemptId = result.attemptId.toLowerCase();
+    rememberResultLocation(attemptId);
+    var durationValue = result.duration_seconds === undefined ? result.durationSeconds : result.duration_seconds;
+    var attemptNumber = result.attempt_number === undefined ? result.attemptNumber : result.attempt_number;
+    var bestScore = result.best_score === undefined ? result.bestScore : result.best_score;
     var pct = result.total ? Math.round(result.score / result.total * 100) : 0;
-    var duration = result.duration_seconds === null || result.duration_seconds === undefined
+    var duration = durationValue === null || durationValue === undefined
       ? Math.max(0, Math.round((Date.now() - startedAt) / 1000))
-      : result.duration_seconds;
+      : durationValue;
     byId("score-ring").style.setProperty("--score-deg", (pct * 3.6) + "deg");
     byId("score-text").textContent = bn(result.score) + "/" + bn(result.total);
     byId("result-title").textContent = resultTitle(pct);
     byId("result-subtitle").textContent =
-      "চেষ্টা " + bn(result.attempt_number || 1) + ": " + bn(result.score) + "/" + bn(result.total) +
-      "। আপনার সেরা স্কোর " + bn(result.best_score === undefined ? result.score : result.best_score) +
-      "/" + bn(result.total) + "; Rank: " + bn(result.rank || "-") + " / " +
+      "চেষ্টা " + bn(attemptNumber || 1) + ": " + bn(result.score) + "/" + bn(result.total) +
+      "। আপনার সেরা স্কোর " + bn(bestScore === undefined ? result.score : bestScore) +
+      "/" + bn(result.total) + "; র‍্যাঙ্ক: " + bn(result.rank || "-") + " / " +
       bn(result.participants || 0) + "। ড্যাশবোর্ডে সর্বশেষ চেষ্টার স্কোর দেখাবে। আবার পরীক্ষা দিতে পারেন।";
     byId("result-accuracy").textContent = bn(pct) + "%";
     byId("result-time").textContent = bn(Math.floor(duration / 60) + ":" + pad2(duration % 60));
@@ -1242,7 +1309,7 @@
   function resultTitle(pct){
     if (pct >= 80) return "দারুণ প্রস্তুতি";
     if (pct >= 50) return "ভালো, আরও ধারালো করো";
-    return "রিভিশন দরকার";
+    return "পুনরাবৃত্তি দরকার";
   }
 
   function showError(message){

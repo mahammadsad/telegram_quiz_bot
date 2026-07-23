@@ -17,6 +17,7 @@ import requests
 
 from config.settings import (
     APP_TIMEZONE,
+    EXPECTED_SUPABASE_PROJECT_REF,
     MINIAPP_SHORT_NAME,
     SUPABASE_SERVICE_KEY,
     SUPABASE_URL,
@@ -27,9 +28,14 @@ from config.settings import (
     TELEGRAM_GENERAL_THREAD_ID,
     WRITE_STATIC_QUIZ_JSON,
     require_env,
+    supabase_project_ref_matches,
 )
 from config.subjects import QUIZ_SUBJECTS, get_subject
-from database.client import get_client
+from database.contract import (
+    DATABASE_CONTRACT_KEY,
+    DATABASE_CONTRACT_VERSION,
+    REQUIRED_MIGRATION_VERSION,
+)
 from errors import TelegramPostingError
 from services import chapter_selector, question_verification, quiz_pack_service, source_grounding
 from services.gemini_provider_pool import GeminiProviderPool
@@ -39,7 +45,7 @@ from services.question_validation import (
     checksum_for_pack,
     validate_questions,
 )
-from storage import chapter_history_repo, quiz_runs_repo
+from storage import chapter_history_repo, quiz_runs_repo, schema_contract_repo
 from telegram.routing import ForumRouter
 from utils.local_time import local_today
 from utils.quiz_ids import build_quiz_id
@@ -134,13 +140,27 @@ def generate_mcqs(
     if not isinstance(raw, list):
         raise QuizValidationError("Gemini response must be a JSON array.")
     enriched = []
+    source_by_id = {document.id: document for document in grounding_bundle.documents}
     for item in raw:
         if isinstance(item, dict):
+            source = source_by_id.get(str(item.get("source_document_id") or "").strip())
             enriched.append({
+                **item,
                 "subject_key": subject_key,
                 "chapter": chapter,
                 "micro_topic_id": grounding_bundle.micro_topic_id,
-                **item,
+                "micro_topic_key": grounding_bundle.micro_topic_key,
+                "language": "bn-en" if subject_key == "english" else "bn",
+                **({
+                    "source_url": source.url,
+                    "source_title": source.title,
+                    "source_domain": source.domain,
+                    "source_kind": source.kind,
+                    "source_published_at": source.published_at,
+                    "source_accessed_at": source.accessed_at,
+                    "evidence_summary": source.fact_summary,
+                    "fact_version": source.fact_version,
+                } if source else {}),
             })
         else:
             enriched.append(item)
@@ -175,6 +195,15 @@ def generate_mcqs(
 
 
 def valid_saved_pack(quiz_id: str, run: dict | None = None) -> dict | None:
+    if (
+        not run
+        or run.get("status") not in {"ready", "posting", "posting_failed", "posted"}
+        or run.get("integrity_verified") is not True
+        or int(run.get("checksum_contract_version") or 0) != 2
+        or not run.get("generated_checksum")
+        or run.get("generated_checksum") != run.get("persisted_checksum")
+    ):
+        return None
     pack = quiz_pack_service.get_quiz_pack(quiz_id)
     if not pack or len(pack.get("items") or []) != QUESTION_COUNT:
         return None
@@ -195,7 +224,16 @@ def valid_saved_pack(quiz_id: str, run: dict | None = None) -> dict | None:
             "micro_topic_id": question.get("micro_topic_id"),
             "micro_topic_key": question.get("micro_topic_key"),
             "source_document_id": question.get("source_document_id"),
+            "source_url": question.get("source_url"),
+            "source_title": question.get("source_title"),
+            "source_domain": question.get("source_domain"),
+            "source_kind": question.get("source_kind"),
+            "source_published_at": question.get("source_published_at"),
+            "source_accessed_at": question.get("source_accessed_at"),
+            "evidence_summary": question.get("evidence_summary"),
+            "fact_version": question.get("fact_version"),
             "difficulty": question.get("difficulty"),
+            "language": question.get("language"),
             "verification_status": question.get("verification_status"),
             "verification_score": question.get("verification_score"),
             "verification_notes": question.get("verification_notes"),
@@ -208,7 +246,7 @@ def valid_saved_pack(quiz_id: str, run: dict | None = None) -> dict | None:
     except (QuizValidationError, ValueError):
         return None
     checksum = checksum_for_pack(pack)
-    if not run or not run.get("content_checksum") or run["content_checksum"] != checksum:
+    if run["generated_checksum"] != checksum or run["persisted_checksum"] != checksum:
         return None
     return pack
 
@@ -262,10 +300,13 @@ def validate_runtime_config(*, require_gemini: bool = True) -> ForumRouter:
     require_env("TELEGRAM_CHAT_ID")
     require_env("SUPABASE_URL")
     require_env("SUPABASE_SERVICE_KEY")
+    require_env("EXPECTED_SUPABASE_PROJECT_REF")
     if require_gemini:
         _require_gemini_provider()
     if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
         raise RuntimeError("Supabase is not configured.")
+    if not EXPECTED_SUPABASE_PROJECT_REF or not supabase_project_ref_matches():
+        raise RuntimeError("Supabase project ownership check failed.")
     if not TELEGRAM_BOT_USERNAME or not MINIAPP_SHORT_NAME:
         raise RuntimeError("TELEGRAM_BOT_USERNAME and MINIAPP_SHORT_NAME are required.")
     return forum_router()
@@ -370,7 +411,7 @@ def run_subject_quiz(
             )
             quiz_runs_repo.update_status(
                 quiz_id,
-                "generated",
+                "ready",
                 claimed_by=worker_id,
                 question_count=QUESTION_COUNT,
                 generation_provider=generation["provider"],
@@ -391,17 +432,26 @@ def run_subject_quiz(
             category = getattr(exc, "category", "validation_failed" if isinstance(exc, QuizValidationError) else "generation_error")
             safe_attempts = getattr(exc, "attempts", [])
             try:
-                quiz_runs_repo.update_status(
-                    quiz_id,
-                    "generation_failed",
-                    claimed_by=worker_id,
-                    release_claim=True,
-                    last_error_category=category,
-                    last_error_at=datetime.now(timezone.utc).isoformat(),
-                    providers_attempted=list(dict.fromkeys(row.get("provider") for row in safe_attempts if row.get("provider"))),
-                    generation_attempt_count=len(safe_attempts),
-                    retryable=bool(getattr(exc, "retryable", False)),
-                )
+                failed_run = quiz_runs_repo.get(quiz_id)
+                if failed_run and failed_run.get("status") == "integrity_failed":
+                    LOG.error(
+                        "QUIZ_INTEGRITY_FAILURE_PRESERVED subject=%s quiz_id=%s diagnostic=%s",
+                        subject_key,
+                        quiz_id,
+                        failed_run.get("integrity_diagnostic_code") or "checksum_mismatch",
+                    )
+                else:
+                    quiz_runs_repo.update_status(
+                        quiz_id,
+                        "generation_failed",
+                        claimed_by=worker_id,
+                        release_claim=True,
+                        last_error_category=category,
+                        last_error_at=datetime.now(timezone.utc).isoformat(),
+                        providers_attempted=list(dict.fromkeys(row.get("provider") for row in safe_attempts if row.get("provider"))),
+                        generation_attempt_count=len(safe_attempts),
+                        retryable=bool(getattr(exc, "retryable", False)),
+                    )
             except Exception:
                 LOG.warning("QUIZ_FAILURE_STATUS_UPDATE_SKIPPED subject=%s quiz_id=%s", subject_key, quiz_id)
             send_failure_alert(subject_key, quiz_id, router)
@@ -557,6 +607,13 @@ def preflight() -> dict[str, bool]:
         "failover_enabled": os.environ.get("GEMINI_FAILOVER_ENABLED", "true").lower() == "true",
         "telegram_topics_configured": topics_ok,
         "supabase_configured": bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY")),
+        "supabase_project_expected": bool(
+            os.environ.get("EXPECTED_SUPABASE_PROJECT_REF", "")
+        )
+        and supabase_project_ref_matches(
+            os.environ.get("SUPABASE_URL", ""),
+            os.environ.get("EXPECTED_SUPABASE_PROJECT_REF", ""),
+        ),
     }
     for key, value in values.items():
         print(f"{key}={str(value).lower()}")
@@ -564,28 +621,20 @@ def preflight() -> dict[str, bool]:
 
 
 def validate_database_schema() -> None:
-    """Read-only verification that all required migrations are available."""
-    client = get_client()
-    for table, identifier in (
-        ("quiz_runs", "quiz_id"),
-        ("chapter_history", "id"),
-        ("quiz_submissions", "id,client_attempt_id"),
-        ("quiz_questions", "id,quiz_id,question_order"),
-        ("quiz_attempts", "id,client_attempt_id,attempt_number"),
-        ("quiz_attempt_answers", "id,attempt_id,question_order"),
-        ("quiz_subjects", "subject_key,display_name"),
-        ("quiz_chapters", "id,subject_key,name"),
-        ("quiz_micro_topics", "id,chapter_id,key"),
-        ("source_documents", "id,micro_topic_id,verification_status"),
-        ("question_verifications", "id,question_id,verdict"),
-        ("question_generation_audits", "id,quiz_id,verdict"),
-        ("question_reports", "id,question_id,user_id,status"),
-        ("learning_resources", "id,micro_topic_id,verification_status,is_active"),
-        ("resource_feedback", "id,resource_id,user_id,feedback_type"),
-        ("resource_link_checks", "id,resource_id,outcome,error_category"),
-        ("resource_discovery_queue", "id,micro_topic_id,language,status"),
-    ):
-        client.table(table).select(identifier).limit(1).execute()
+    """Verify the authoritative versioned schema, signatures, grants, and RLS."""
+    contract = schema_contract_repo.get_contract()
+    permission_failures = (
+        contract.get("function_permission_failures") or []
+    ) + (contract.get("table_permission_failures") or [])
+    valid = bool(
+        contract.get("ready")
+        and contract.get("contract_key") == DATABASE_CONTRACT_KEY
+        and contract.get("contract_version") == DATABASE_CONTRACT_VERSION
+        and contract.get("required_migration_version") == REQUIRED_MIGRATION_VERSION
+        and not permission_failures
+    )
+    if not valid:
+        raise RuntimeError("Database contract is not ready.")
 
 
 def build_miniapp_url(quiz_id: str) -> str:
@@ -663,6 +712,7 @@ def main() -> None:
                 not values["primary_key_configured"]
                 or not values["telegram_topics_configured"]
                 or not values["supabase_configured"]
+                or not values["supabase_project_expected"]
                 or not telegram_runtime_configured
             ):
                 raise RuntimeError("Configuration preflight failed.")
@@ -670,7 +720,7 @@ def main() -> None:
                 validate_database_schema()
             except Exception:
                 raise RuntimeError(
-                    "Configuration preflight failed: provenance migration 20260718112044 is unavailable."
+                    "Configuration preflight failed: required database contract is unavailable."
                 ) from None
     except Exception as exc:
         LOG.error("RUN_FAILED category=%s", getattr(exc, "category", type(exc).__name__))

@@ -12,6 +12,7 @@ class User:
     username: Optional[str] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
+    photo_url: Optional[str] = None
     id: Optional[str] = None
     join_date: Optional[str] = None
     last_active: Optional[str] = None
@@ -24,6 +25,11 @@ class User:
             username=telegram_user.get("username"),
             first_name=telegram_user.get("first_name"),
             last_name=telegram_user.get("last_name"),
+            photo_url=(
+                telegram_user.get("photo_url")
+                if str(telegram_user.get("photo_url") or "").startswith("https://")
+                else None
+            ),
         )
 
     @classmethod
@@ -34,6 +40,7 @@ class User:
             username=row.get("username"),
             first_name=row.get("first_name"),
             last_name=row.get("last_name"),
+            photo_url=row.get("photo_url"),
             join_date=row.get("join_date"),
             last_active=row.get("last_active"),
         )

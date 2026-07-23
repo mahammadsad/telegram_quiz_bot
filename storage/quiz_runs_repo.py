@@ -6,19 +6,22 @@ from datetime import datetime, timezone
 
 from config.settings import QUIZ_CLAIM_TIMEOUT_MINUTES
 from database.client import get_client
+from storage.contracts import Row, as_rows, first_row
 
 
-def get(quiz_id: str) -> dict | None:
+def get(quiz_id: str) -> Row | None:
     result = get_client().table("quiz_runs").select("*").eq("quiz_id", quiz_id).limit(1).execute()
-    rows = result.data or []
-    return rows[0] if rows else None
+    return first_row(result.data, "quiz_runs.get")
 
 
-def upsert(payload: dict) -> dict:
+def upsert(payload: Row) -> Row:
     values = dict(payload)
     values["updated_at"] = datetime.now(timezone.utc).isoformat()
     result = get_client().table("quiz_runs").upsert(values, on_conflict="quiz_id").execute()
-    return result.data[0]
+    row = first_row(result.data, "quiz_runs.upsert")
+    if row is None:
+        raise RuntimeError("quiz_runs.upsert returned no row")
+    return row
 
 
 def claim(
@@ -27,7 +30,7 @@ def claim(
     target_status: str,
     *,
     allow_completed: bool = False,
-) -> dict | None:
+) -> Row | None:
     result = get_client().rpc(
         "claim_quiz_run",
         {
@@ -38,8 +41,7 @@ def claim(
             "p_allow_completed": allow_completed,
         },
     ).execute()
-    rows = result.data or []
-    return rows[0] if isinstance(rows, list) and rows else None
+    return first_row(result.data, "quiz_runs.claim")
 
 
 def update_status(
@@ -49,7 +51,7 @@ def update_status(
     claimed_by: str | None = None,
     release_claim: bool = False,
     **fields,
-) -> dict:
+) -> Row:
     payload = {"status": status, "updated_at": datetime.now(timezone.utc).isoformat(), **fields}
     if release_claim:
         payload.update({"worker_id": None, "claimed_at": None, "claim_expires_at": None})
@@ -57,12 +59,12 @@ def update_status(
     if claimed_by:
         query = query.eq("worker_id", claimed_by)
     result = query.execute()
-    rows = result.data or []
+    rows = as_rows(result.data, "quiz_runs.update_status")
     if claimed_by and not rows:
         raise RuntimeError("Quiz run lease was lost before the status update.")
     return rows[0] if rows else {"quiz_id": quiz_id, **payload}
 
 
-def list_for_date(quiz_date: str) -> list[dict]:
+def list_for_date(quiz_date: str) -> list[Row]:
     result = get_client().table("quiz_runs").select("*").eq("quiz_date", quiz_date).execute()
-    return result.data or []
+    return as_rows(result.data, "quiz_runs.list_for_date")

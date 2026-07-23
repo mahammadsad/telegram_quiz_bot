@@ -1,8 +1,19 @@
 # Deployment guide
 
-Deploy in this order: database migrations, approved source import, server environment, FastAPI, bot
-preflight, BotFather named-app URL, then one controlled subject run. Do not
-deploy the new application before the atomic RPCs exist.
+Deploy in this order: local database tests, staging migrations, approved staging
+source import, staging API, bot preflight, private Telegram lifecycle, production
+approval, production migrations, Render, and one controlled production subject.
+Do not deploy the new application before its exact database contract is ready.
+
+The two hosted Supabase projects in scope are:
+
+| Environment | Project | Project ref |
+|---|---|---|
+| Production | `telegram_group_data` | `tizxodkcpglmxgtwepor` |
+| Staging | `telegram-quiz-bot-rollout-staging` | `prdrabmcivgbygzjnmko` |
+
+Never modify `Citizen Affairs`. If staging is paused/inactive, stop the hosted
+rollout until the owner resumes it; do not substitute production for staging.
 
 ## 1. Apply the database migration
 
@@ -23,21 +34,27 @@ supabase/migrations/20260718190639_personal_practice_answers.sql
 supabase/migrations/20260718192154_canonical_subject_learning_projections.sql
 supabase/migrations/20260718192558_canonical_subject_storage_compatibility.sql
 supabase/migrations/20260718194113_resource_quality_operations.sql
+supabase/migrations/20260718203218_dedupe_source_resource_cache.sql
+supabase/migrations/20260718220112_production_integrity_contract_v2.sql
+supabase/migrations/20260718222134_learning_and_leaderboard_contract_v2.sql
+supabase/migrations/20260722120827_revision_reports_and_rankings.sql
 ```
 
-For a new empty project, first apply `database/schema.sql`, then the timestamped
-migrations in order. An existing project applies only its newer unapplied
-migrations. The SQL is additive and rerunnable. The foundation backfills
-historical question mappings and valid ten-position submissions while
-preserving every legacy table/row.
+For a new local/disposable empty database, first apply `database/schema.sql`,
+then the timestamped migrations in order. `database/schema.sql` is bootstrap
+input, not a hosted migration: never run it on staging or production because it
+contains older function definitions. An existing hosted project applies only
+newer unapplied migrations recorded in its Supabase ledger.
 
 Read `docs/MIGRATION_20260718.md` and
 `docs/MIGRATION_20260718_PROVENANCE.md` before applying. Also read
 `docs/MIGRATION_20260718_PERSONALIZED_LEARNING.md` and
 `docs/MIGRATION_20260719_LEARNER_ANALYTICS.md`. Resource operations verification
-and rollback are in `docs/MIGRATION_20260719_RESOURCE_OPERATIONS.md`. Take a database backup or
-project-branch checkpoint, run its preflight SQL, apply the canonical file with
-the Supabase migration workflow or SQL Editor, and run its verification SQL.
+and rollback are in `docs/MIGRATION_20260719_RESOURCE_OPERATIONS.md`. Read
+`docs/MIGRATION_20260722_PRODUCTION_CONTRACT.md` for the current forward
+migrations and recovery plan. Take a database backup or project-branch
+checkpoint, run preflight SQL, apply with the Supabase migration workflow, and
+run verification SQL.
 Then rerun both Supabase advisors. Do not paste a database password or service
 key into a migration file, issue, command transcript, or chat.
 
@@ -63,6 +80,11 @@ approved, unexpired fact bundle. Missing sources fail closed; current affairs
 require recent official/primary dated sources.
 
 ## 2. Configure GitHub Actions
+
+Create a GitHub Environment named `production`. Put the production secrets
+below in that environment, not in a staging environment with the same names.
+The scheduled workflows are bound to `production`, use commit-pinned actions,
+and verify the public production project ref before accessing Supabase.
 
 Required Secrets:
 
@@ -141,6 +163,7 @@ TELEGRAM_CHAT_ID
 TELEGRAM_BOT_USERNAME
 MINIAPP_SHORT_NAME
 TELEGRAM_FORUM_TOPICS_JSON
+EXPECTED_SUPABASE_PROJECT_REF
 ```
 
 The API itself does not call Gemini for public GETs or submissions, but using
@@ -161,14 +184,27 @@ APP_TIMEZONE=Asia/Kolkata
 DEV_ALLOW_UNVERIFIED_TELEGRAM=false
 ```
 
+Set `EXPECTED_SUPABASE_PROJECT_REF=prdrabmcivgbygzjnmko` for manual staging and
+`EXPECTED_SUPABASE_PROJECT_REF=tizxodkcpglmxgtwepor` for production. A mismatch
+makes preflight and readiness fail without logging the URL or key.
+For local Supabase only, set `EXPECTED_SUPABASE_PROJECT_REF=local`; that value
+is accepted only when `SUPABASE_URL` uses `localhost`, `127.0.0.1`, or `::1`.
+
 Keep `DEV_ALLOW_UNVERIFIED_TELEGRAM=false` in every public environment. Set
 `CORS_ALLOWED_ORIGINS` only when the frontend is intentionally hosted on a
 different trusted origin; same-origin deployment needs no CORS list.
 
-Check `GET /api/health`. It should show safe configured booleans,
-`application_version=6.0.0`, `migration_version=20260718194113`,
-`database_connectivity=true`, and `required_schema_ready=true`. Preflight
-remains mandatory because the public health view is deliberately bounded.
+The checked-in `render.yaml` defines the Python 3.12 free web service in
+Singapore, installs `requirements.lock`, starts Uvicorn on `$PORT`, waits for CI
+checks before auto-deploy, and uses `/health/ready`. Before applying the
+Blueprint, run `render blueprints validate`, then fill every `sync: false`
+value in the Render Dashboard. Do not add a Render database; Supabase remains
+the datastore.
+
+Check `GET /health/live`: it should return HTTP 200 even if dependencies are
+down. Check `GET /health/ready`: it must return HTTP 200, application `7.0.0`,
+migration `20260722120827`, contract `2.2.0`, and all checks true. `/api/health`
+is a strict compatibility alias. A 503 is a release blocker, not a warning.
 
 ## 4. Configure forum topics and BotFather
 
@@ -188,12 +224,13 @@ Server logs should show `GET /api/quiz/<quiz-id>` and, after submission,
 `POST /api/quiz/<quiz-id>/submit`. If they are absent, Telegram is opening a
 different named-app deployment.
 
-## 5. Controlled production verification
+## 5. Controlled staging verification
 
 1. Run `python bot.py --mode preflight`.
 2. Run the CI commands locally or wait for the PR check: Ruff, mypy, pytest,
    migration contract, and public-data scan.
-3. Run one due/manual subject: `python bot.py --mode subject-quiz --subject history`.
+3. Confirm the environment project ref is staging, then run one due/manual
+   subject: `python bot.py --mode subject-quiz --subject history`.
 4. Verify the generated questions cite approved source rows, share the selected
    normalized micro-topic, and each have a passing `question_verifications` row.
 5. Verify one `quiz_runs` row owns a non-expired lease while processing and
@@ -209,19 +246,22 @@ different named-app deployment.
    row; retake with a new ID and confirm a second parent attempt.
 10. Verify each answer created/updated one private review schedule and that
     wrong, uncertain/slow, and repeated-correct paths use the documented
-    1/3/7/14/30/60-day intervals. Confirm private revision endpoints reject a
-    missing or invalid `X-Telegram-Init-Data` header.
+    intervals. Confirm private revision endpoints reject a missing or invalid
+    `X-Telegram-Init-Data` header.
 11. Save exam/subject preferences and question/resource bookmarks; verify only
     the same Telegram-authenticated user receives them.
 12. Submit one question report from the authenticated review card. Confirm it is
    bound to that attempt, a duplicate returns conflict, and unrelated users or
    attempts cannot report it. Test the quarantine threshold with test users.
-13. Check quiz/global leaderboard pages and confirm response rows contain no
-    Telegram IDs, first/last names, or non-opted-in usernames.
+13. Check quiz/global leaderboard pages. Confirm the current user has an
+    unmistakable `আপনি` row and private rank card, including outside the top
+    ten, and that rows contain no Telegram IDs or non-opted-in usernames.
 14. Submit a wrong answer in authenticated practice. Confirm no answer key was
     present before POST; after POST, confirm the review/source and next-review
-    date appear. Confirm the same question disappears from wrong practice after
-    a later correct answer.
+    date appear. In explicit revision mode only, confirm wrong plays the enabled
+    sound exactly once, correct is silent, sound-off persists, and a report is
+    bound to that revision attempt. Confirm normal first-attempt quizzes are
+    always silent.
 15. Check every typed leaderboard family and a canonical subject filter such as
     `computer`; confirm bounded SQL pages, opt-out behavior, and documented
     tie-break metadata.
@@ -242,12 +282,30 @@ different named-app deployment.
 22. Trigger the final recovery or `export-static-fallbacks`; confirm all valid
     subject files are staged into one repository commit and contain no answers.
 
+Record the staging quiz ID and pass/fail evidence without recording signed
+Telegram data. Do not activate any chapter during this test.
+
+## 6. Production release
+
+1. Require green CI and completed staging evidence from the previous section.
+2. Pause production schedules and verify the production project name/ref.
+3. Take the approved backup/checkpoint and apply only unapplied forward
+   migrations. Never run the bootstrap schema.
+4. Run the exact contract RPC, Supabase security/performance advisors, bot
+   preflight, and production `/health/ready`.
+5. Apply the merged `render.yaml` Blueprint or deploy the reviewed commit to the
+   existing Render service. Fill production secrets only.
+6. Test one real quiz with an authorized account: answer leakage, idempotent
+   retry, result, current-user rank, personal dashboard, and revision sound.
+7. Resume one controlled subject, verify one Telegram post, then resume the
+   normal schedule. Do not activate unfinished chapters.
+
 For provider failover, use a disposable test environment rather than changing
 production credentials. Confirm a key-specific failure switches providers and
 a successful primary call does not call the secondary. Never log or search by
 printing a real key.
 
-## 6. Recovery and rollback
+## 7. Recovery and rollback
 
 If Telegram posting fails after generation:
 
@@ -266,9 +324,9 @@ For an application rollback, deploy the previous commit but retain the
 additive database objects. Do not drop new attempt tables after they contain
 data. A forward corrective migration is safer than destructive DDL. A full
 database restore is the only complete rollback and loses every write after the
-backup timestamp; see `docs/MIGRATION_20260718.md`.
+backup timestamp; see `docs/MIGRATION_20260722_PRODUCTION_CONTRACT.md`.
 
-## 7. Known deployment limits
+## 8. Known deployment limits
 
 - Static fallback export is batched after final recovery; a failure before that
   checkpoint can leave the latest pack available only through the live API
@@ -277,3 +335,5 @@ backup timestamp; see `docs/MIGRATION_20260718.md`.
   result, and official/article source collection remains an operator import.
 - Post-migration advisor results cannot be known until the migration is
   applied; rerunning security and performance advisors is a deployment gate.
+- A paused hosted staging project cannot be migrated or readiness-tested. Resume
+  it first; never use production as the substitute test target.

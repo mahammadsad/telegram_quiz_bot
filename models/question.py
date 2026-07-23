@@ -43,6 +43,21 @@ class Question:
     verification_checks: Optional[dict[str, Any]] = None
     verified_at: Optional[str] = None
     verification_model: Optional[str] = None
+    stem_hash: Optional[str] = None
+    content_hash: Optional[str] = None
+    content_version: Optional[int] = None
+    supersedes_question_id: Optional[str] = None
+    language: str = "bn"
+    source_url: Optional[str] = None
+    source_title: Optional[str] = None
+    source_domain: Optional[str] = None
+    source_kind: Optional[str] = None
+    source_published_at: Optional[str] = None
+    source_accessed_at: Optional[str] = None
+    evidence_summary: Optional[str] = None
+    fact_version: Optional[str] = None
+    expires_at: Optional[str] = None
+    review_required: bool = False
 
     # scheduler metadata
     last_used_at: Optional[str] = None
@@ -90,6 +105,19 @@ class Question:
             "verification_checks": self.verification_checks or {},
             "verified_at": self.verified_at,
             "verification_model": self.verification_model,
+            "stem_hash": self.stem_hash or self.question_hash,
+            "content_hash": self.content_hash,
+            "language": self.language,
+            "source_url": self.source_url,
+            "source_title": self.source_title,
+            "source_domain": self.source_domain,
+            "source_kind": self.source_kind,
+            "source_published_at": self.source_published_at,
+            "source_accessed_at": self.source_accessed_at,
+            "evidence_summary": self.evidence_summary,
+            "fact_version": self.fact_version,
+            "expires_at": self.expires_at,
+            "review_required": self.review_required,
         }
 
     @classmethod
@@ -123,6 +151,21 @@ class Question:
             verification_checks=row.get("verification_checks") or {},
             verified_at=row.get("verified_at"),
             verification_model=row.get("verification_model"),
+            stem_hash=row.get("stem_hash") or row.get("question_hash"),
+            content_hash=row.get("content_hash"),
+            content_version=row.get("content_version"),
+            supersedes_question_id=row.get("supersedes_question_id"),
+            language=row.get("language") or "bn",
+            source_url=row.get("source_url"),
+            source_title=row.get("source_title"),
+            source_domain=row.get("source_domain"),
+            source_kind=row.get("source_kind"),
+            source_published_at=row.get("source_published_at"),
+            source_accessed_at=row.get("source_accessed_at"),
+            evidence_summary=row.get("evidence_summary"),
+            fact_version=row.get("fact_version"),
+            expires_at=row.get("expires_at"),
+            review_required=bool(row.get("review_required", False)),
             last_used_at=row.get("last_used_at"),
             usage_count=row.get("usage_count", 0),
             next_global_review=row.get("next_global_review"),

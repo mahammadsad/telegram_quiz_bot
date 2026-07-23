@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import uuid
+
 import pytest
 
 from services import quiz_pack_service as service
 
 QUIZ_ID = "20260710-history"
+ATTEMPT_ID = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 
 
 def pack():
@@ -32,7 +35,7 @@ def pack():
 
 
 def setup_common(monkeypatch):
-    monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: pack())
+    monkeypatch.setattr(service, "get_ready_quiz_pack", lambda quiz_id: pack())
     monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
 
 
@@ -50,13 +53,13 @@ def test_submission_delegates_one_atomic_rpc(monkeypatch):
         lambda **kwargs: calls.append(kwargs) or expected,
     )
     result = service.submit_quiz_attempts(
-        QUIZ_ID, {"id": 123}, [0] * 10, attempt_id="attempt-1"
+        QUIZ_ID, {"id": 123}, [0] * 10, attempt_id=ATTEMPT_ID
     )
     assert result == expected
     assert calls == [{
         "quiz_id": QUIZ_ID,
         "user_id": "user-1",
-        "client_attempt_id": "attempt-1",
+        "client_attempt_id": ATTEMPT_ID,
         "answers": [0] * 10,
         "duration_seconds": None,
         "response_times": None,
@@ -72,16 +75,55 @@ def test_http_retry_keeps_same_client_attempt_id(monkeypatch):
         "submit_atomic",
         lambda **kwargs: ids.append(kwargs["client_attempt_id"]) or {"score": 1},
     )
-    service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [0] * 10, "retry-safe-id")
-    service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [0] * 10, "retry-safe-id")
-    assert ids == ["retry-safe-id", "retry-safe-id"]
+    service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [0] * 10, ATTEMPT_ID)
+    service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [0] * 10, ATTEMPT_ID)
+    assert ids == [ATTEMPT_ID, ATTEMPT_ID]
+
+
+def test_result_recovery_delegates_authenticated_ownership(monkeypatch):
+    monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
+    expected = {"score": 8, "review": []}
+    calls = []
+    monkeypatch.setattr(
+        service.quiz_attempts_repo,
+        "get_result_for_client",
+        lambda **kwargs: calls.append(kwargs) or expected,
+    )
+    result = service.get_quiz_attempt_result(
+        quiz_id=QUIZ_ID,
+        telegram_user={"id": 123},
+        client_attempt_id=ATTEMPT_ID,
+    )
+    assert result == expected
+    assert calls == [{
+        "quiz_id": QUIZ_ID,
+        "user_id": "user-1",
+        "client_attempt_id": ATTEMPT_ID,
+    }]
 
 
 @pytest.mark.parametrize("answers", [[0] * 9, [0] * 11, [4] * 10, [True] * 10])
 def test_service_defensively_validates_answers(monkeypatch, answers):
     setup_common(monkeypatch)
     with pytest.raises(ValueError):
-        service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, answers)
+        service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, answers, ATTEMPT_ID)
+
+
+def test_service_rejects_non_uuid_attempt_id(monkeypatch):
+    setup_common(monkeypatch)
+    with pytest.raises(ValueError, match="UUID"):
+        service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [0] * 10, "unsafe-id")
+
+
+def test_submission_rejects_an_uncertified_pack_before_user_write(monkeypatch):
+    monkeypatch.setattr(service, "get_ready_quiz_pack", lambda quiz_id: None)
+    monkeypatch.setattr(
+        service.users_repo,
+        "upsert_user",
+        lambda user: pytest.fail("an uncertified quiz must not create a user or attempt"),
+    )
+    with pytest.raises(ValueError, match="not ready"):
+        service.submit_quiz_attempts(QUIZ_ID, {"id": 123}, [0] * 10, ATTEMPT_ID)
 
 
 def test_public_quiz_payload_declares_submission_capability():
@@ -95,19 +137,29 @@ def test_public_quiz_payload_declares_submission_capability():
 
 def test_pack_save_uses_one_atomic_rpc_and_preserves_exact_reuse(monkeypatch, valid_questions):
     saved_pack = pack()
-    reads = iter([None, saved_pack])
-    monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: next(reads))
+    monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: saved_pack)
     monkeypatch.setattr(
         service.questions_repo,
-        "get_by_hash_any_bot",
+        "get_by_content_hash",
         lambda *args, **kwargs: {
             "id": "existing-question",
             "subject": "history",
             "topic": "আধুনিক ভারত",
         },
     )
+    monkeypatch.setattr(service, "content_checksum", lambda *args, **kwargs: "a" * 64)
     calls = []
-    monkeypatch.setattr(service.quiz_packs_repo, "save_atomic", lambda **kwargs: calls.append(kwargs) or {})
+    monkeypatch.setattr(
+        service.quiz_packs_repo,
+        "save_atomic",
+        lambda **kwargs: calls.append(kwargs)
+        or {
+            "ready": True,
+            "question_count": 10,
+            "generated_checksum": "a" * 64,
+            "persisted_checksum": "a" * 64,
+        },
+    )
     result = service.record_quiz_pack(
         QUIZ_ID,
         valid_questions,
@@ -120,14 +172,41 @@ def test_pack_save_uses_one_atomic_rpc_and_preserves_exact_reuse(monkeypatch, va
 
 
 def test_near_duplicate_is_rejected_instead_of_substituted(monkeypatch, valid_questions):
-    monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: None)
-    monkeypatch.setattr(service.questions_repo, "get_by_hash_any_bot", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service.questions_repo, "get_by_content_hash", lambda *args, **kwargs: None)
+    monkeypatch.setattr(service.questions_repo, "get_latest_by_stem", lambda *args, **kwargs: None)
     monkeypatch.setattr(
         service.questions_repo,
         "find_similar",
         lambda *args, **kwargs: [{"id": "different-question"}],
     )
     with pytest.raises(Exception, match="Near-duplicate"):
+        service.record_quiz_pack(
+            QUIZ_ID,
+            valid_questions,
+            {"subject_key": "history", "chapter": "আধুনিক ভারত"},
+            worker_id="worker-1",
+        )
+
+
+def test_database_checksum_mismatch_blocks_pack_before_readback(monkeypatch, valid_questions):
+    monkeypatch.setattr(service.questions_repo, "get_by_content_hash", lambda *args: None)
+    monkeypatch.setattr(service.questions_repo, "get_latest_by_stem", lambda *args: {"id": "old"})
+    monkeypatch.setattr(
+        service.quiz_packs_repo,
+        "save_atomic",
+        lambda **kwargs: {
+            "ready": False,
+            "question_count": 10,
+            "generated_checksum": kwargs["content_checksum"],
+            "persisted_checksum": "f" * 64,
+        },
+    )
+    monkeypatch.setattr(
+        service,
+        "get_quiz_pack",
+        lambda quiz_id: pytest.fail("mismatched pack must not be read as ready"),
+    )
+    with pytest.raises(Exception, match="posting is blocked"):
         service.record_quiz_pack(
             QUIZ_ID,
             valid_questions,
@@ -148,13 +227,13 @@ def test_question_report_uses_authenticated_user_and_atomic_rpc(monkeypatch):
         question_id="22222222-2222-4222-8222-222222222222",
         quiz_id=QUIZ_ID,
         telegram_user={"id": 123},
-        client_attempt_id="attempt-1",
+        client_attempt_id=ATTEMPT_ID,
         reason="wrong_answer",
         details="Answer key conflicts with the source.",
     )
     assert result == {"status": "accepted"}
     assert calls[0]["user_id"] == "user-1"
-    assert calls[0]["client_attempt_id"] == "attempt-1"
+    assert calls[0]["client_attempt_id"] == str(ATTEMPT_ID)
 
 
 def test_question_report_rejects_unknown_reason(monkeypatch):
@@ -164,7 +243,7 @@ def test_question_report_rejects_unknown_reason(monkeypatch):
             question_id="22222222-2222-4222-8222-222222222222",
             quiz_id=QUIZ_ID,
             telegram_user={"id": 123},
-            client_attempt_id="attempt-1",
+            client_attempt_id=ATTEMPT_ID,
             reason="invented",
             details="",
         )

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 
 import pytest
@@ -173,9 +174,15 @@ def test_private_learning_endpoints_project_authenticated_user(monkeypatch):
 
 def test_practice_answer_requires_auth_and_returns_post_attempt_review(monkeypatch):
     question_id = "22222222-2222-4222-8222-222222222222"
+    attempt_id = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
     assert client.post(
         f"/api/me/practice/{question_id}",
-        json={"selectedIndex": 1, "sourceType": "wrong"},
+        json={
+            "selectedIndex": 1,
+            "sourceType": "wrong",
+            "mode": "revision",
+            "attemptId": attempt_id,
+        },
     ).status_code == 401
     monkeypatch.setattr(api_module, "verify_init_data", lambda *args: {"id": 123})
     captured = {}
@@ -191,6 +198,8 @@ def test_practice_answer_requires_auth_and_returns_post_attempt_review(monkeypat
             "initData": "signed",
             "selectedIndex": 1,
             "sourceType": "due",
+            "mode": "revision",
+            "attemptId": attempt_id,
             "responseTimeSeconds": 12.5,
             "markedForReview": False,
         },
@@ -199,11 +208,52 @@ def test_practice_answer_requires_auth_and_returns_post_attempt_review(monkeypat
     assert response.json()["correctIndex"] == 1
     assert captured == {
         "question_id": question_id,
+        "client_attempt_id": uuid.UUID(attempt_id),
         "selected_option": 1,
         "source_type": "due",
+        "mode": "revision",
         "response_time_seconds": 12.5,
         "marked_for_review": False,
     }
+
+
+def test_revision_question_report_is_bound_to_the_practice_attempt(monkeypatch):
+    question_id = "22222222-2222-4222-8222-222222222222"
+    attempt_id = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    monkeypatch.setattr(api_module, "verify_init_data", lambda *args: {"id": 123})
+    captured = {}
+    monkeypatch.setattr(
+        api_module.personal_learning_service,
+        "report_practice_question",
+        lambda user, **kwargs: captured.update(kwargs) or {"status": "accepted"},
+    )
+    response = client.post(
+        f"/api/me/practice/{question_id}/report",
+        json={
+            "initData": "signed",
+            "attemptId": attempt_id,
+            "reason": "broken_source",
+            "details": "উৎসটি খোলা যাচ্ছে না।",
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()["status"] == "accepted"
+    assert captured == {
+        "question_id": question_id,
+        "client_attempt_id": uuid.UUID(attempt_id),
+        "reason": "broken_source",
+        "details": "উৎসটি খোলা যাচ্ছে না।",
+    }
+
+    invalid = client.post(
+        f"/api/me/practice/{question_id}/report",
+        json={
+            "initData": "signed",
+            "attemptId": attempt_id,
+            "reason": "invented_reason",
+        },
+    )
+    assert invalid.status_code == 422
 
 
 def test_bookmark_and_preference_contracts(monkeypatch):

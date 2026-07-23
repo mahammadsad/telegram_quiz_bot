@@ -27,18 +27,33 @@ concurrency:
 jobs:
   maintain-resources:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
     env:
       SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      EXPECTED_SUPABASE_PROJECT_REF: tizxodkcpglmxgtwepor
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}
       MODE: ${{ inputs.mode || 'both' }}
       LIMIT: ${{ inputs.limit || '20' }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: "3.12"
       - run: pip install -r requirements.lock
+      - name: Sanitized configuration preflight
+        run: |
+          python - <<'PY'
+          from config.settings import SUPABASE_SERVICE_KEY, SUPABASE_URL, supabase_project_ref_matches
+
+          if not SUPABASE_URL or not SUPABASE_SERVICE_KEY:
+              raise SystemExit("Required Supabase configuration is missing.")
+          if not supabase_project_ref_matches():
+              raise SystemExit("Supabase project ownership check failed.")
+          print("supabase_configured=true")
+          print("supabase_project_expected=true")
+          PY
       - name: Check cached resource links
         if: env.MODE == 'both' || env.MODE == 'link-check'
         run: python scripts/check_learning_resources.py --limit "$LIMIT"

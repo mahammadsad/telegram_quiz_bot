@@ -10,9 +10,5 @@ python_version = "3.12"
 check_untyped_defs = true
 ignore_missing_imports = true
 warn_unused_ignores = true
-files = ["app.py", "bot.py", "config", "database", "errors.py", "models", "services", "telegram", "utils"]
+files = ["app.py", "bot.py", "config", "database", "errors.py", "models", "services", "storage", "telegram", "utils"]
 exclude = [".venv", "quizzes"]
-
-[[tool.mypy.overrides]]
-module = ["storage", "storage.*"]
-ignore_errors = true

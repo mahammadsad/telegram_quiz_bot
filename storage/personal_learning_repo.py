@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 from database.client import get_client
@@ -41,8 +42,10 @@ def submit_practice_answer(
     user_id: str,
     *,
     question_id: str,
+    client_attempt_id: uuid.UUID,
     selected_option: int,
     source_type: str,
+    mode: str,
     response_time_seconds: float | None,
     marked_for_review: bool,
 ) -> dict:
@@ -51,8 +54,10 @@ def submit_practice_answer(
         {
             "p_user_id": user_id,
             "p_question_id": question_id,
+            "p_client_attempt_id": str(client_attempt_id),
             "p_selected_option": selected_option,
             "p_source_type": source_type,
+            "p_mode": mode,
             "p_response_time_seconds": response_time_seconds,
             "p_marked_for_review": marked_for_review,
         },
@@ -94,6 +99,8 @@ def save_preferences(user_id: str, payload: dict[str, Any]) -> dict:
             "p_public_display_name": payload["public_display_name"],
             "p_username_visible": payload["username_visible"],
             "p_daily_reminder_enabled": payload["daily_reminder_enabled"],
+            "p_revision_sound_enabled": payload["revision_sound_enabled"],
+            "p_revision_vibration_enabled": payload["revision_vibration_enabled"],
         },
     )
 

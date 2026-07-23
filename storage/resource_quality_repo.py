@@ -6,6 +6,7 @@ from typing import Any
 
 from database.client import get_client
 from errors import DatabaseIntegrityError
+from storage.contracts import Row, as_int, as_row, as_rows
 
 
 def submit_feedback(
@@ -15,7 +16,7 @@ def submit_feedback(
     feedback_type: str,
     rating: int | None,
     details: str | None,
-) -> dict:
+) -> Row:
     return _rpc(
         "submit_resource_feedback",
         {
@@ -28,18 +29,18 @@ def submit_feedback(
     )
 
 
-def operational_status() -> dict:
+def operational_status() -> Row:
     return _rpc("get_operational_status", {})
 
 
-def review_queue(*, limit: int, offset: int) -> dict:
+def review_queue(*, limit: int, offset: int) -> Row:
     return _rpc(
         "get_resource_review_queue",
         {"p_limit": limit, "p_offset": offset},
     )
 
 
-def review_candidate(resource_id: str, *, decision: str, actor: str) -> dict:
+def review_candidate(resource_id: str, *, decision: str, actor: str) -> Row:
     return _rpc(
         "review_resource_candidate",
         {
@@ -50,15 +51,15 @@ def review_candidate(resource_id: str, *, decision: str, actor: str) -> dict:
     )
 
 
-def link_check_batch(*, limit: int) -> list[dict]:
+def link_check_batch(*, limit: int) -> list[Row]:
     result = get_client().rpc(
         "get_resource_link_check_batch",
         {"p_limit": max(1, min(limit, 200))},
     ).execute()
-    return result.data or []
+    return as_rows(result.data, "resource link-check batch")
 
 
-def record_link_check(resource_id: str, payload: dict[str, Any]) -> dict:
+def record_link_check(resource_id: str, payload: dict[str, Any]) -> Row:
     return _rpc(
         "record_resource_link_check",
         {
@@ -76,18 +77,18 @@ def queue_missing_resources(*, limit: int = 200) -> int:
         "queue_missing_resource_discovery",
         {"p_limit": max(1, min(limit, 500))},
     ).execute()
-    return int(result.data or 0)
+    return 0 if result.data is None else as_int(result.data, "resource discovery queue")
 
 
-def discovery_batch(*, limit: int = 5) -> list[dict]:
+def discovery_batch(*, limit: int = 5) -> list[Row]:
     result = get_client().rpc(
         "get_resource_discovery_batch",
         {"p_limit": max(1, min(limit, 20))},
     ).execute()
-    return result.data or []
+    return as_rows(result.data, "resource discovery batch")
 
 
-def save_youtube_candidate(queue_id: str, payload: dict[str, Any]) -> dict:
+def save_youtube_candidate(queue_id: str, payload: dict[str, Any]) -> Row:
     return _rpc(
         "save_youtube_resource_candidate",
         {"p_queue_id": queue_id, **payload},
@@ -99,7 +100,7 @@ def complete_discovery(
     *,
     outcome: str,
     error_category: str | None = None,
-) -> dict:
+) -> Row:
     return _rpc(
         "complete_resource_discovery",
         {
@@ -110,15 +111,15 @@ def complete_discovery(
     )
 
 
-def channel_policies() -> list[dict]:
+def channel_policies() -> list[Row]:
     result = get_client().table("resource_channel_policies").select(
         "channel_id,policy,default_language"
     ).execute()
-    return result.data or []
+    return as_rows(result.data, "resource channel policies")
 
 
-def _rpc(name: str, payload: dict[str, Any]) -> dict:
+def _rpc(name: str, payload: dict[str, Any]) -> Row:
     result = get_client().rpc(name, payload).execute()
     if not isinstance(result.data, dict):
         raise DatabaseIntegrityError(f"{name} returned an invalid response.")
-    return result.data
+    return as_row(result.data, name)

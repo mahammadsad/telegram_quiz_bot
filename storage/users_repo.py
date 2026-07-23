@@ -7,11 +7,12 @@ from datetime import datetime, timezone
 
 from database.client import get_client
 from models.user import User
+from storage.contracts import Row, as_rows, first_row
 
 LOG = logging.getLogger("storage.users")
 
 
-def upsert_user(user: User) -> dict:
+def upsert_user(user: User) -> Row:
     """Insert a new user or refresh username/name/last_active for an
     existing one, keyed on telegram_id (unique constraint in the schema)."""
     client = get_client()
@@ -20,6 +21,7 @@ def upsert_user(user: User) -> dict:
         "username": user.username,
         "first_name": user.first_name,
         "last_name": user.last_name,
+        "photo_url": user.photo_url,
         "last_active": datetime.now(timezone.utc).isoformat(),
     }
     res = (
@@ -27,10 +29,13 @@ def upsert_user(user: User) -> dict:
         .upsert(payload, on_conflict="telegram_id")
         .execute()
     )
-    return res.data[0]
+    rows = as_rows(res.data, "users.upsert")
+    if not rows:
+        raise RuntimeError("users.upsert returned no row")
+    return rows[0]
 
 
-def get_by_telegram_id(telegram_id: int) -> dict | None:
+def get_by_telegram_id(telegram_id: int) -> Row | None:
     client = get_client()
     res = (
         client.table("users")
@@ -39,5 +44,4 @@ def get_by_telegram_id(telegram_id: int) -> dict | None:
         .limit(1)
         .execute()
     )
-    rows = res.data or []
-    return rows[0] if rows else None
+    return first_row(res.data, "users.select")
