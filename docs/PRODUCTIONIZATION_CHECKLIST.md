@@ -100,16 +100,18 @@ staging test has passed. Source-code inspection alone is not sufficient.
 - [x] Local Ruff, mypy (58 source files), JavaScript parse, and whitespace gates
   pass.
 - [ ] Manually exercise every control and error path in Telegram staging.
-- [ ] Hosted staging validation is blocked: the management API reported
-  `telegram-quiz-bot-rollout-staging` as `INACTIVE` on 2026-07-23, and refused
-  restoration because production and the protected unrelated `Citizen Affairs`
-  project occupy both active free-plan slots. Resume staging before applying the
-  remaining forward migrations or checking readiness.
+- [x] Hosted staging is `ACTIVE_HEALTHY`; both missing forward migrations applied
+  successfully, original row counts were preserved, and the service-only
+  contract reports ready.
+- [x] Rollback-only staging database lifecycle passed exact-ten checksum
+  readback, UUID retry/retake, current-user leaderboard, revision scheduling,
+  and revision-report checks without leaving test rows.
 
 - [x] CI passes from a clean checkout: GitHub Actions Tests run #77 completed
   successfully with 218 tests against PostgreSQL 17, plus the public-data and
   migration-security gates.
-- [ ] Staging migration version and database contract are exact.
+- [x] Staging migration version `20260722120827` and contract `2.2.0` are exact;
+  all ten contract failure arrays are empty.
 - [ ] Staging `/health/ready` returns HTTP 200.
 - [ ] Staging end-to-end quiz lifecycle passes without answer leakage.
 - [ ] Screenshots cover small Android widths, dashboard identity, out-of-top-ten

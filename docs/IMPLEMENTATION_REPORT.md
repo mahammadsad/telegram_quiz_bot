@@ -170,24 +170,48 @@ workspace loopback server, so no manual screenshot is claimed.
 
 ## Hosted staging status
 
-The Supabase management API reported
-`telegram-quiz-bot-rollout-staging` (`prdrabmcivgbygzjnmko`) as **INACTIVE** on
-2026-07-23. A restore request was then refused because the two active free-plan
-slots are currently occupied by production and the unrelated `Citizen Affairs`
-project. `Citizen Affairs` was not paused or modified, in accordance with the
-project safety rule. No hosted migration, advisor, readiness, or Telegram
-lifecycle test was attempted after that result. The last recorded rollout state had
-`20260718220112` applied; `20260718222134` and `20260722120827` still require
-staging application and verification once the project is resumed.
+After the unrelated project was removed by its owner, Supabase restored
+`telegram-quiz-bot-rollout-staging` (`prdrabmcivgbygzjnmko`) to
+**ACTIVE_HEALTHY** on 2026-07-23. The restored ledger ended at contract `2.0.0`
+and migration `20260718220112`; the two missing tracked forward migrations were
+then applied in order:
 
-Production `telegram_group_data` and the unrelated `Citizen Affairs` project
-were not accessed or modified.
+1. `20260718222134_learning_and_leaderboard_contract_v2.sql`
+2. `20260722120827_revision_reports_and_rankings.sql`
+
+The restored staging backup contained earlier rollout/reset ledger entries.
+During restoration, an early probe temporarily appeared empty and three legacy
+idempotent setup entries were recorded. Once the backup was fully hydrated, a
+narrow staging repair restored the verified-source similarity helper, the
+hardened quiz status constraint, and invoker-safe server-only views. No table was
+deleted, and before/after application row counts remained 3 users, 39 questions,
+4 quiz runs, 4 legacy submissions, and 7 quiz attempts.
+
+The hosted contract now reports **ready**, contract `2.2.0`, required migration
+`20260722120827`, threshold `0.85`, and empty missing-table, column, index,
+trigger, function, configuration, schema-permission, RLS, and table-permission
+failure arrays. `service_role` can run the contract; `anon` and `authenticated`
+receive PostgreSQL `42501`.
+
+A rollback-only modern lifecycle created ten immutable verified question
+versions, saved and read back an exact checksum, retried one UUID attempt
+idempotently, created a genuine retake, highlighted the current leaderboard
+user, tested a wrong revision and retry, verified intervals
+`1/3/7/14/30/60`, and accepted a revision report. The transaction rolled back
+fully, and the original staging row counts were rechecked unchanged.
+
+Supabase advisors reported no errors. The remaining warnings are the historical
+`pg_trgm` extension location in `public` and one duplicate trigram index in this
+staging ledger. RLS-without-policy notices are expected deny-by-default behavior
+for the server-only architecture; unused-index notices are expected on the
+low-traffic staging project.
+
+Production `telegram_group_data` was not queried or modified.
 
 ## Remaining release gates
 
-- Resume staging and apply only the two recorded unapplied forward migrations.
-- Run security/performance advisors and verify contract `2.2.0`, migration
-  `20260722120827`, ten empty failure arrays, and HTTP 200 readiness.
+- Deploy the application with staging-only credentials and verify
+  `/health/ready` returns HTTP 200.
 - Complete the private Telegram lifecycle, manual controls, retry/refresh,
   ranking, revision-sound, and 320/360/412 px checks.
 - Keep all five Computer Education expansion chapters and every other unverified
@@ -196,8 +220,7 @@ were not accessed or modified.
   deploy only after staging evidence is complete.
 - Verify production project ownership, readiness, one controlled quiz, and one
   Telegram post before restoring schedules.
-- Install/authenticate GitHub CLI in the workspace, then commit, push, and open
-  the feature branch as a draft PR. No commit or PR is claimed in this report.
+- Keep draft pull request #14 unmerged until all hosted application gates pass.
 
 ## Non-programmer verification
 

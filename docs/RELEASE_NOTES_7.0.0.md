@@ -67,6 +67,11 @@ retry-safe submission, and persistent sound controls.
   checkout; database contract `2.2.0` and migration `20260722120827` verified.
 - Fresh disposable PostgreSQL contract suite: `13 passed` after bootstrap and
   every migration, ending at `20260722120827`.
+- Hosted staging restored to `ACTIVE_HEALTHY`; migrations
+  `20260718222134` and `20260722120827` applied, contract `2.2.0` reports ready,
+  and a rollback-only database lifecycle passed checksum, idempotency, retake,
+  current-user ranking, revision interval, and report checks without changing
+  retained row counts.
 - Ruff: passed. Mypy: passed for 58 source files. JavaScript parse and
   `git diff --check`: passed.
 - Manual 320/360/412 px screenshots, private Telegram staging, staging readiness,
