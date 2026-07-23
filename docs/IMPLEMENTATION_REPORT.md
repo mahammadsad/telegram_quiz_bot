@@ -132,7 +132,7 @@ migrations, and never run `database/schema.sql` on an existing hosted project.
 
 ## Test evidence
 
-- Full Python suite: **204 passed, 13 skipped, 1 warning**. The 13 skips are the
+- Full Python suite: **205 passed, 13 skipped, 1 warning**. The 13 skips are the
   expected database-integration cases when `TEST_DATABASE_URL` is absent.
 - Fresh disposable PostgreSQL 17: bootstrap plus every migration applied, exact
   `20260722120827` ledger verified, all ten contract failure arrays empty, and

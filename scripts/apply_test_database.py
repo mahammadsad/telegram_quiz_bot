@@ -9,13 +9,16 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 
 import psycopg
 
-from database.contract import REQUIRED_MIGRATION_VERSION
-
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from database.contract import REQUIRED_MIGRATION_VERSION  # noqa: E402
+
 BOOTSTRAP = ROOT / "database" / "schema.sql"
 DATABASE_MIGRATIONS = ROOT / "database" / "migrations"
 SUPABASE_MIGRATIONS = ROOT / "supabase" / "migrations"

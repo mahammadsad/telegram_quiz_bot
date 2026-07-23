@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import re
+import subprocess
+import sys
 from pathlib import Path
 
 import yaml
@@ -84,3 +86,16 @@ def test_authoritative_migration_version_is_latest_filename() -> None:
     migrations = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
     assert migrations
     assert migrations[-1].name.startswith(f"{REQUIRED_MIGRATION_VERSION}_")
+
+
+def test_disposable_database_builder_can_run_as_a_direct_script() -> None:
+    result = subprocess.run(
+        [sys.executable, "scripts/apply_test_database.py", "--help"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+    assert "Disposable PostgreSQL connection URL" in result.stdout

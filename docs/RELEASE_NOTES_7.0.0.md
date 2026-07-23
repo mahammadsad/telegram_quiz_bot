@@ -61,7 +61,7 @@ retry-safe submission, and persistent sound controls.
 
 ## Local verification recorded for this release
 
-- Application suite: `204 passed, 13 skipped` (the skipped tests require
+- Application suite: `205 passed, 13 skipped` (the skipped tests require
   `TEST_DATABASE_URL`).
 - Fresh disposable PostgreSQL contract suite: `13 passed` after bootstrap and
   every migration, ending at `20260722120827`.
