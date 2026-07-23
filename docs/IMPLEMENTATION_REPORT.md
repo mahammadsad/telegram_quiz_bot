@@ -134,6 +134,9 @@ migrations, and never run `database/schema.sql` on an existing hosted project.
 
 - Full Python suite: **205 passed, 13 skipped, 1 warning**. The 13 skips are the
   expected database-integration cases when `TEST_DATABASE_URL` is absent.
+- GitHub Actions clean checkout (Tests run **#77**): **218 passed, 1 warning**
+  with PostgreSQL 17; the disposable database reported contract `2.2.0` and
+  migration `20260722120827` before the suite ran.
 - Fresh disposable PostgreSQL 17: bootstrap plus every migration applied, exact
   `20260722120827` ledger verified, all ten contract failure arrays empty, and
   **13 database-integration tests passed**.
@@ -142,6 +145,7 @@ migrations, and never run `database/schema.sql` on an existing hosted project.
 - Frontend JavaScript parse (`index.html`, `dashboard.html`, `practice.html`):
   **passed**.
 - Public-data/secret-name and answer-key scan: **passed**.
+- Migration security contract: **6 passed** in the clean CI run.
 - `git diff --check`: **passed**.
 - GitHub issue audit: no open issues and no open pull requests were returned.
 

@@ -63,6 +63,8 @@ retry-safe submission, and persistent sound controls.
 
 - Application suite: `205 passed, 13 skipped` (the skipped tests require
   `TEST_DATABASE_URL`).
+- GitHub Actions Tests run #77: `218 passed` against PostgreSQL 17 from a clean
+  checkout; database contract `2.2.0` and migration `20260722120827` verified.
 - Fresh disposable PostgreSQL contract suite: `13 passed` after bootstrap and
   every migration, ending at `20260722120827`.
 - Ruff: passed. Mypy: passed for 58 source files. JavaScript parse and

@@ -106,7 +106,9 @@ staging test has passed. Source-code inspection alone is not sufficient.
   project occupy both active free-plan slots. Resume staging before applying the
   remaining forward migrations or checking readiness.
 
-- [ ] CI passes from a clean checkout.
+- [x] CI passes from a clean checkout: GitHub Actions Tests run #77 completed
+  successfully with 218 tests against PostgreSQL 17, plus the public-data and
+  migration-security gates.
 - [ ] Staging migration version and database contract are exact.
 - [ ] Staging `/health/ready` returns HTTP 200.
 - [ ] Staging end-to-end quiz lifecycle passes without answer leakage.
