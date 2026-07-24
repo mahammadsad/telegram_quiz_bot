@@ -116,6 +116,9 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert "export-static-fallbacks" not in source
     assert "announce" not in source
     assert "git push" not in source
+    assert "except HTTPError as exc" in source
+    assert 'failures != ["active_quiz_retrieval"]' in source
+    assert "Staging readiness must be HTTP 200 after quiz creation." in source
 
 
 def test_staging_workflow_uses_only_staging_secret_expressions() -> None:
