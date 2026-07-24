@@ -80,11 +80,17 @@ retry-safe submission, and persistent sound controls.
 - Ruff: passed. Mypy: passed for 58 source files. Current-tree plus reachable
   Git-history credential/public-data scan and `git diff --check`: passed.
 
-The new `20260724212939` migration still requires disposable PostgreSQL CI,
-hosted staging application, and production evidence. Private Telegram staging,
-staging readiness, provider backup approval, production migration/deployment,
-and the controlled production lifecycle remain release gates and are not
-claimed by this local run.
+Final branch GitHub Actions run #84 passed 242 PostgreSQL-backed tests and 48
+Playwright tests, and uploaded the 19.3 MB browser evidence artifact. Hosted
+staging then applied the durable-write migration with unchanged application
+counts; contract `2.2.0` now requires `20260724212939` and reports every failure
+array empty. A clean limiter probe rejected the over-limit call and left no test
+row.
+
+The hosted staging application deployment, private Telegram lifecycle, staging
+readiness, provider backup approval, production migration/deployment, and the
+controlled production lifecycle remain release gates and are not claimed by
+this database/CI evidence.
 
 Historical PR #14 evidence remains recorded in
 `IMPLEMENTATION_REPORT.md`; it does not substitute for revalidating the new

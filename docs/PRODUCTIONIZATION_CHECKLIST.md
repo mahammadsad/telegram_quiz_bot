@@ -45,10 +45,10 @@ staging test has passed. Source-code inspection alone is not sufficient.
   quarantine, rankings, and statistics against PostgreSQL.
 - [x] Remove the blanket storage-layer mypy exclusion and type its public API.
 - [x] Use a shorter Telegram authentication window for sensitive writes.
-- [ ] Rate-limit submission, revision, practice, bookmark, report, preference,
-  resource-feedback, and administrative-review writes in PostgreSQL. Source and
-  API regression tests pass; the new limiter still needs the disposable and
-  hosted staging PostgreSQL gates.
+- [x] Rate-limit submission, revision, practice, bookmark, report, preference,
+  resource-feedback, and administrative-review writes in PostgreSQL. The
+  disposable and hosted staging probes both accept through the limit and reject
+  the next event; the staging probe removed its one exact test actor.
 - [x] Add private/no-store cache headers and browser security headers.
 - [x] Pin GitHub Actions, minimize permissions, add timeouts and concurrency
   controls, and validate environment ownership before production jobs.
@@ -109,19 +109,21 @@ staging test has passed. Source-code inspection alone is not sufficient.
   browser JavaScript execution, and whitespace gates pass.
 - [x] Local Playwright suite: 48 passed across all four required Android
   viewports with 44 screenshot attachments and an HTML report.
-- [ ] Final-commit GitHub Actions browser artifact is uploaded and retained.
+- [x] GitHub Actions run #84 uploaded
+  `mobile-browser-evidence-1` (artifact `8610726968`, 19.3 MB), retained through
+  2026-08-23.
 - [ ] Manually exercise every control and error path in Telegram staging.
-- [ ] Hosted staging has the new `20260724212939` migration, preserved row
-  counts, and a ready service-only contract.
+- [x] Hosted staging applied ledger entry `durable_write_rate_limits`; contract
+  `2.2.0` requires `20260724212939`, all failure arrays are empty, and every
+  recorded application-data count is unchanged.
 - [x] Rollback-only staging database lifecycle passed exact-ten checksum
   readback, UUID retry/retake, current-user leaderboard, revision scheduling,
   and revision-report checks without leaving test rows.
 
-- [ ] Final branch CI passes from a clean checkout against PostgreSQL 17,
-  including `20260724212939`, migration security, full-history scanning, and
-  all four browser projects. Historical Tests run #77 covered the preceding
-  migration only.
-- [ ] Staging migration version `20260724212939` and contract `2.2.0` are exact;
+- [x] Final branch CI passes from a clean checkout: GitHub Actions Tests run #84
+  completed 242 PostgreSQL-backed tests, 6 migration-security tests,
+  full-history scanning, and 48 browser tests across four projects.
+- [x] Staging required migration `20260724212939` and contract `2.2.0` are exact;
   all contract failure arrays are empty.
 - [ ] Staging `/health/ready` returns HTTP 200.
 - [ ] Staging end-to-end quiz lifecycle passes without answer leakage.

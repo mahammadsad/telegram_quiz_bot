@@ -48,10 +48,51 @@ Current local evidence:
   passed.
 - `git diff --check`: passed.
 
-The new migration has not yet been applied to staging or production. Hosted CI,
-Render deployment, the certified staging quiz, private Telegram lifecycle,
-production checkpoint, production migration/deployment, and controlled
-production cycle remain release blockers until evidence is recorded below.
+Hosted CI and the staging database gate are now complete. Render deployment,
+the certified staging quiz, private Telegram lifecycle, production checkpoint,
+production migration/deployment, and controlled production cycle remain release
+blockers until evidence is recorded below.
+
+## Final-branch hosted evidence
+
+GitHub Actions Tests run
+[#84](https://github.com/mahammadsad/telegram_quiz_bot/actions/runs/30130005220)
+passed on remote commit `dc05cce9814551b588c1b0510f01557c0fc7c2ea`:
+
+- disposable PostgreSQL 17: contract `2.2.0`, required migration
+  `20260724212939`, **242 passed**, 1 existing warning;
+- migration-security subset: **6 passed**;
+- Ruff, configured mypy for 58 files, complete-history scanner, and expansion
+  source validation: passed;
+- Playwright: **48 passed** across the four required Android projects;
+- artifact `mobile-browser-evidence-1` / `8610726968`: 19,311,981 bytes,
+  retained through 2026-08-23.
+
+The verified staging project `telegram-quiz-bot-rollout-staging`
+(`prdrabmcivgbygzjnmko`) then received only
+`20260724212939_durable_write_rate_limits.sql` through the Supabase migration
+interface. Its ledger recorded name `durable_write_rate_limits`; the contract
+now reports ready, contract `2.2.0`, required migration `20260724212939`,
+threshold `0.85`, and empty failure arrays.
+
+Pre/post staging counts are identical: 3 users, 39 questions, 4 quiz runs,
+4 legacy submissions, 7 quiz attempts, 70 attempt answers, 2 reports,
+169 source documents, 165 learning resources, and 50 review-schedule rows;
+bookmark, preference, practice-answer, and resource-feedback counts remain zero.
+The durable limiter accepted two events, rejected the third, and left zero probe
+rows. Browser roles cannot access its table/function; `service_role` can. The
+five Computer expansion chapters and every other recorded rotation-disabled
+chapter remain disabled.
+
+Post-migration advisors reported no errors. Accepted existing notices are 32
+deny-by-default RLS-without-policy information items, `pg_trgm` in `public`, one
+unindexed `questions.supersedes_question_id` foreign key, 51 unused indexes on
+low-traffic staging, and the historical duplicate normalized-text trigram
+index. None was hidden or weakened for this release. Supabase remediation
+references: [RLS without policy](https://supabase.com/docs/guides/database/database-linter?lint=0008_rls_enabled_no_policy),
+[extension in public](https://supabase.com/docs/guides/database/database-linter?lint=0014_extension_in_public),
+[unindexed foreign key](https://supabase.com/docs/guides/database/database-linter?lint=0001_unindexed_foreign_keys),
+and [duplicate index](https://supabase.com/docs/guides/database/database-linter?lint=0009_duplicate_index).
 
 ## Original problems confirmed
 
