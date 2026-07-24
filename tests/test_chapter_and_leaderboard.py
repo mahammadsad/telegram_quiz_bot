@@ -126,3 +126,40 @@ def test_typed_leaderboard_rejects_unknown_or_subjectless_type():
         stats_repo.typed_leaderboard("volume", subject_key=None)
     with pytest.raises(ValueError, match="requires a subject"):
         stats_repo.typed_leaderboard("subject_accuracy", subject_key=None)
+
+
+def test_current_user_typed_leaderboard_uses_exact_rpc(monkeypatch):
+    calls = []
+
+    class Result:
+        data = {"participants": 101, "rows": [], "currentUser": {"rank": 101}}
+
+    class Client:
+        def rpc(self, name, payload):
+            calls.append((name, payload))
+            return self
+
+        def execute(self):
+            return Result()
+
+    monkeypatch.setattr(stats_repo, "get_client", lambda: Client())
+    board = stats_repo.typed_leaderboard_for_user(
+        "weekly_accuracy",
+        subject_key=None,
+        user_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        limit=10,
+        offset=0,
+    )
+    assert board["currentUser"]["rank"] == 101
+    assert calls == [
+        (
+            "get_leaderboard_for_user",
+            {
+                "p_type": "weekly_accuracy",
+                "p_subject_key": None,
+                "p_user_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "p_limit": 10,
+                "p_offset": 0,
+            },
+        )
+    ]

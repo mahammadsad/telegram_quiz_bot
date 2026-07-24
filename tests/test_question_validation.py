@@ -89,6 +89,41 @@ def test_content_checksum_is_stable_and_content_sensitive(valid_questions):
     assert first != content_checksum("20260710-history", "history", "আধুনিক ভারত", changed)
 
 
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("correct_index", 1),
+        ("options", ["পরিবর্তিত বিকল্প", "বিকল্প 0-1", "বিকল্প 0-2", "বিকল্প 0-3"]),
+        ("source_url", "https://ncert.nic.in/history/corrected-example"),
+        ("explanation", "এটি সংশোধিত ও উৎস-সমর্থিত বাংলা ব্যাখ্যা।"),
+    ],
+)
+def test_same_stem_changed_content_creates_distinct_immutable_hash(
+    valid_questions, field, value
+):
+    original = validate_questions(
+        valid_questions, "history", "আধুনিক ভারত", enforce_composition=False
+    )[0]
+    changed_rows = deepcopy(valid_questions)
+    changed_rows[0][field] = value
+    changed = validate_questions(
+        changed_rows, "history", "আধুনিক ভারত", enforce_composition=False
+    )[0]
+    assert changed["stem_hash"] == original["stem_hash"]
+    assert changed["content_hash"] != original["content_hash"]
+    assert changed["question_id"] != original["question_id"]
+
+
+def test_identical_content_reuses_the_same_hash(valid_questions):
+    first = validate_questions(valid_questions, "history", "আধুনিক ভারত")[0]
+    repeated = validate_questions(
+        deepcopy(valid_questions), "history", "আধুনিক ভারত"
+    )[0]
+    assert repeated["stem_hash"] == first["stem_hash"]
+    assert repeated["content_hash"] == first["content_hash"]
+    assert repeated["question_id"] == first["question_id"]
+
+
 def test_required_difficulty_distribution_is_enforced(valid_questions):
     rows = deepcopy(valid_questions)
     for row in rows:

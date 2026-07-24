@@ -20,17 +20,23 @@ from config.subjects import SUBJECTS
 from errors import DatabaseIntegrityError
 from models.question import Question
 from models.user import User
-from services.question_validation import QUESTION_COUNT, content_checksum, validate_questions
+from services.question_validation import (
+    QUESTION_COUNT,
+    checksum_for_pack,
+    content_checksum,
+    validate_questions,
+)
 from storage import (
     polls_repo,
     question_reports_repo,
     questions_repo,
     quiz_attempts_repo,
     quiz_packs_repo,
+    quiz_runs_repo,
     source_documents_repo,
     users_repo,
 )
-from utils.hashing import normalize_text, question_hash
+from utils.hashing import normalize_text, question_content_hash, question_hash
 from utils.iso_week import iso_week_number
 from utils.quiz_ids import parse_quiz_id
 
@@ -93,6 +99,27 @@ def get_quiz_pack(quiz_id: str) -> dict | None:
     return _pack_from_items(quiz_id, items, session_id=deliveries[0]["session_id"])
 
 
+def get_ready_quiz_pack(quiz_id: str) -> dict | None:
+    """Return only a complete pack whose saved database content is certified."""
+    run = quiz_runs_repo.get(quiz_id)
+    if (
+        not run
+        or run.get("status") not in {"ready", "posting", "posting_failed", "posted"}
+        or run.get("integrity_verified") is not True
+        or int(run.get("checksum_contract_version") or 0) != 2
+        or not run.get("generated_checksum")
+        or run.get("generated_checksum") != run.get("persisted_checksum")
+    ):
+        return None
+    pack = get_quiz_pack(quiz_id)
+    if not pack or len(pack.get("items") or []) != QUESTION_COUNT:
+        return None
+    if checksum_for_pack(pack) != run["persisted_checksum"]:
+        LOG.error("QUIZ_READ_BLOCKED checksum_mismatch quiz_id=%s", quiz_id)
+        return None
+    return pack
+
+
 def _pack_from_items(quiz_id: str, items: list[dict], session_id: str | None = None) -> dict:
     first_question = items[0]["question"]
     try:
@@ -124,27 +151,46 @@ def record_quiz_pack(
     worker_id: str,
     replace: bool = False,
 ) -> dict:
-    existing = get_quiz_pack(quiz_id)
-    if existing and not replace:
-        LOG.info("Quiz pack %s already exists in Supabase; reusing it.", quiz_id)
-        return existing
-
     subject_key = str(meta.get("subject_key") or meta.get("subject") or "").strip()
     chapter = str(meta.get("chapter") or "").strip()
     clean_questions = validate_questions(raw_questions, subject_key, chapter)
     question_rows = [_question_row_for_atomic_save(quiz_id, item, meta) for item in clean_questions]
     checksum = content_checksum(quiz_id, subject_key, chapter, clean_questions)
-    quiz_packs_repo.save_atomic(
+    save_result = quiz_packs_repo.save_atomic(
         quiz_id=quiz_id,
         worker_id=worker_id,
         questions=question_rows,
         content_checksum=checksum,
         replace=replace,
     )
+    if not save_result.get("ready"):
+        raise DatabaseIntegrityError(
+            "Saved quiz checksum did not match generated content; posting is blocked."
+        )
     saved = get_quiz_pack(quiz_id)
     if not saved or len(saved.get("items") or []) != QUESTION_COUNT:
         raise DatabaseIntegrityError("Atomic quiz save did not produce a complete readable pack.")
-    LOG.info("Recorded quiz pack %s atomically with 10 ordered questions.", quiz_id)
+    readback_checksum = content_checksum(
+        quiz_id,
+        subject_key,
+        chapter,
+        [_content_row_from_saved_item(item) for item in saved["items"]],
+    )
+    if (
+        readback_checksum != checksum
+        or readback_checksum != save_result.get("persisted_checksum")
+    ):
+        quiz_packs_repo.record_readback_integrity_failure(
+            quiz_id=quiz_id,
+            worker_id=worker_id,
+            generated_checksum=checksum,
+            persisted_checksum=readback_checksum,
+            question_ids=[str(item["question"]["id"]) for item in saved["items"]],
+        )
+        raise DatabaseIntegrityError(
+            "Quiz read-back checksum did not match generated content; posting is blocked."
+        )
+    LOG.info("Recorded and checksum-verified quiz pack %s with 10 immutable versions.", quiz_id)
     return saved
 
 
@@ -191,29 +237,47 @@ def submit_quiz_attempts(
     quiz_id: str,
     telegram_user: dict,
     answers: list[int | None],
-    attempt_id: str = "",
+    attempt_id: uuid.UUID,
     duration_seconds: int | None = None,
     response_times: list[float | None] | None = None,
     marked_for_review: list[bool] | None = None,
 ) -> dict:
-    pack = get_quiz_pack(quiz_id)
+    pack = get_ready_quiz_pack(quiz_id)
     if not pack:
-        raise ValueError("Quiz pack was not found.")
+        raise ValueError("Quiz pack is not ready for submission.")
 
     items = pack["items"]
     if len(items) != QUESTION_COUNT:
         raise ValueError("Quiz data is incomplete; submission is disabled.")
     _validate_answers(answers)
-    clean_attempt_id = attempt_id.strip()
+    if not isinstance(attempt_id, uuid.UUID):
+        raise ValueError("A valid client-generated UUID attemptId is required.")
     user_row = users_repo.upsert_user(User.from_telegram(telegram_user))
     return quiz_attempts_repo.submit_atomic(
         quiz_id=quiz_id,
         user_id=user_row["id"],
-        client_attempt_id=clean_attempt_id,
+        client_attempt_id=attempt_id,
         answers=answers,
         duration_seconds=duration_seconds,
         response_times=response_times,
         marked_for_review=marked_for_review,
+    )
+
+
+def get_quiz_attempt_result(
+    *,
+    quiz_id: str,
+    telegram_user: dict,
+    client_attempt_id: uuid.UUID,
+) -> dict | None:
+    """Recover one completed result using authenticated user ownership."""
+    if not isinstance(client_attempt_id, uuid.UUID):
+        raise ValueError("A valid client-generated UUID attemptId is required.")
+    user_row = users_repo.upsert_user(User.from_telegram(telegram_user))
+    return quiz_attempts_repo.get_result_for_client(
+        quiz_id=quiz_id,
+        user_id=user_row["id"],
+        client_attempt_id=client_attempt_id,
     )
 
 
@@ -222,16 +286,13 @@ def submit_question_report(
     question_id: str,
     quiz_id: str,
     telegram_user: dict,
-    client_attempt_id: str,
+    client_attempt_id: uuid.UUID,
     reason: str,
     details: str,
 ) -> dict:
     if reason not in REPORT_REASONS:
         raise ValueError("Invalid report reason.")
-    clean_attempt_id = client_attempt_id.strip()
     clean_details = details.strip()
-    if not clean_attempt_id:
-        raise ValueError("A completed attempt identifier is required.")
     if len(clean_details) > 1000:
         raise ValueError("Report details must be 1000 characters or fewer.")
     if reason == "other" and not clean_details:
@@ -241,7 +302,7 @@ def submit_question_report(
         question_id=question_id,
         quiz_id=quiz_id,
         user_id=user_row["id"],
-        client_attempt_id=clean_attempt_id,
+        client_attempt_id=str(client_attempt_id),
         reason=reason,
         details=clean_details,
         threshold=QUESTION_REPORT_THRESHOLD,
@@ -303,6 +364,19 @@ def _build_question(quiz_id: str, item: dict, meta: dict) -> Question:
         verification_checks=item.get("verification_checks") if isinstance(item.get("verification_checks"), dict) else {},
         verified_at=_str(item.get("verified_at")) or None,
         verification_model=_str(item.get("verification_model")) or None,
+        stem_hash=_str(item.get("stem_hash")) or question_hash(question_text),
+        content_hash=_str(item.get("content_hash")) or question_content_hash(item),
+        language=_str(item.get("language")) or ("bn-en" if subject == "english" else "bn"),
+        source_url=_str(item.get("source_url")) or None,
+        source_title=_str(item.get("source_title")) or None,
+        source_domain=_str(item.get("source_domain")) or None,
+        source_kind=_str(item.get("source_kind")) or None,
+        source_published_at=_str(item.get("source_published_at")) or None,
+        source_accessed_at=_str(item.get("source_accessed_at")) or None,
+        evidence_summary=_str(item.get("evidence_summary")) or None,
+        fact_version=_str(item.get("fact_version")) or None,
+        expires_at=_str(item.get("expires_at")) or None,
+        review_required=False,
     )
 
 
@@ -310,11 +384,18 @@ def _question_row_for_atomic_save(quiz_id: str, item: dict, meta: dict) -> dict:
     """Reuse only byte-equivalent content; never substitute an unverified near-duplicate."""
     question = _build_question(quiz_id, item, meta)
     row = question.to_insert_dict()
-    exact = questions_repo.get_by_hash_any_bot(question.question_hash)
+    if not question.content_hash:
+        raise DatabaseIntegrityError(f"Question content hash is missing in {quiz_id}.")
+    exact = questions_repo.get_by_content_hash(question.content_hash)
     if exact:
         if exact.get("subject") != question.subject or exact.get("topic") != question.topic:
             raise DatabaseIntegrityError(f"Exact question classification mismatch in {quiz_id}.")
         row["reuse_question_id"] = exact["id"]
+        return row
+    same_stem = questions_repo.get_latest_by_stem(question.stem_hash or question.question_hash)
+    if same_stem:
+        # A changed answer, choice, explanation, source, or verification record
+        # is a new immutable version, not a fuzzy duplicate.
         return row
     similar = questions_repo.find_similar(
         question.normalized_text,
@@ -327,6 +408,39 @@ def _question_row_for_atomic_save(quiz_id: str, item: dict, meta: dict) -> dict:
     raise DatabaseIntegrityError(
         f"Near-duplicate question detected in {quiz_id}; regenerate instead of substituting content."
     )
+
+
+def _content_row_from_saved_item(item: dict) -> dict:
+    question = item.get("question") or {}
+    return {
+        "question_text": question.get("question_text"),
+        "option_a": question.get("option_a"),
+        "option_b": question.get("option_b"),
+        "option_c": question.get("option_c"),
+        "option_d": question.get("option_d"),
+        "correct_option": question.get("correct_option"),
+        "explanation": question.get("explanation"),
+        "detailed_explanation": question.get("detailed_explanation"),
+        "subject": question.get("subject"),
+        "topic": question.get("topic"),
+        "micro_topic_key": question.get("micro_topic_key"),
+        "difficulty": question.get("difficulty"),
+        "language": question.get("language"),
+        "source_document_id": question.get("source_document_id"),
+        "source_url": question.get("source_url"),
+        "source_title": question.get("source_title"),
+        "source_domain": question.get("source_domain"),
+        "source_kind": question.get("source_kind"),
+        "source_published_at": question.get("source_published_at"),
+        "source_accessed_at": question.get("source_accessed_at"),
+        "evidence_summary": question.get("evidence_summary"),
+        "fact_version": question.get("fact_version"),
+        "verification_status": question.get("verification_status"),
+        "verification_score": question.get("verification_score"),
+        "verification_notes": question.get("verification_notes"),
+        "verified_at": question.get("verified_at"),
+        "verification_model": question.get("verification_model"),
+    }
 
 
 def _date_from_quiz_id(quiz_id: str) -> str:

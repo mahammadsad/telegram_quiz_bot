@@ -4,11 +4,11 @@
 -- Shared by: Daily MCQ Bot (this repo), Mock Test Bot, Website Dashboard,
 --            Android App, AI Recommendation Engine
 --
--- How to apply:
---   Supabase Dashboard -> SQL Editor -> New query -> paste this whole file
---   -> Run. Safe to re-run: every statement is idempotent (IF NOT EXISTS /
---   OR REPLACE), so applying it again after a future migration file will
---   not error out or duplicate anything.
+-- BOOTSTRAP ONLY — EMPTY DATABASES:
+--   Apply this file once only when creating a disposable/local database, then
+--   apply every migration in order. Never run it on staging or production: its
+--   OR REPLACE statements predate hardened functions and can overwrite newer
+--   behavior. Hosted databases must be changed only with new migrations.
 -- ============================================================================
 
 -- --------------------------------------------------------------------------

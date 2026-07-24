@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
 import re
 import uuid
 from collections import Counter
 from typing import Any
+from urllib.parse import urlparse
 
 from config.settings import QUESTION_VERIFICATION_MIN_CONFIDENCE, QUIZ_DIFFICULTY_DISTRIBUTION
-from utils.hashing import normalize_text, question_hash
+from utils.hashing import (
+    normalize_text,
+    question_content_hash,
+    question_hash,
+    quiz_content_checksum,
+)
 
 QUESTION_COUNT = 10
 _BENGALI_RE = re.compile(r"[\u0980-\u09ff]")
@@ -56,6 +60,15 @@ def validate_questions(
         raw_micro_topic_id = _text(raw.get("micro_topic_id"))
         raw_micro_topic_key = _text(raw.get("micro_topic_key"))
         source_document_id = _text(raw.get("source_document_id"))
+        source_url = _text(raw.get("source_url"))
+        source_title = _text(raw.get("source_title"))
+        source_domain = _text(raw.get("source_domain")).lower()
+        source_kind = _text(raw.get("source_kind")).lower()
+        source_published_at = _text(raw.get("source_published_at"))
+        source_accessed_at = _text(raw.get("source_accessed_at"))
+        evidence_summary = _text(raw.get("evidence_summary"))
+        fact_version = _text(raw.get("fact_version"))
+        language = _text(raw.get("language") or ("bn-en" if subject_key == "english" else "bn")).lower()
         correct = raw.get("correct_index", raw.get("a"))
 
         if not text or not _BENGALI_RE.search(text) and subject_key != "english":
@@ -94,6 +107,8 @@ def validate_questions(
             raise QuizValidationError(f"Question {number} cites a source outside the grounding bundle.")
         if difficulty not in _DIFFICULTIES:
             raise QuizValidationError(f"Question {number} has an invalid difficulty.")
+        if language not in {"bn", "en", "bn-en"}:
+            raise QuizValidationError(f"Question {number} has an invalid language.")
 
         verification_status = _text(raw.get("verification_status"))
         verification_notes = _text(raw.get("verification_notes"))
@@ -111,13 +126,28 @@ def validate_questions(
                 raise QuizValidationError(f"Question {number} has an invalid verification score.")
             if not verification_notes or not verified_at:
                 raise QuizValidationError(f"Question {number} is missing verification evidence.")
+            parsed_source = urlparse(source_url)
+            if (
+                parsed_source.scheme != "https"
+                or not parsed_source.hostname
+                or not source_domain
+                or (
+                    parsed_source.hostname.lower() != source_domain
+                    and not parsed_source.hostname.lower().endswith(f".{source_domain}")
+                )
+            ):
+                raise QuizValidationError(f"Question {number} has an invalid verified source URL.")
+            if not source_title or source_kind not in {"official", "primary", "secondary"}:
+                raise QuizValidationError(f"Question {number} is missing verified source metadata.")
+            if not source_accessed_at or not evidence_summary or not fact_version:
+                raise QuizValidationError(f"Question {number} is missing immutable source evidence.")
 
         normalized_question = normalize_text(text)
         if not normalized_question or normalized_question in seen_questions:
             raise QuizValidationError(f"Question {number} is blank or duplicated.")
         seen_questions.add(normalized_question)
 
-        clean.append({
+        clean_row: dict[str, Any] = {
             "question": text,
             "options": options,
             "correct_index": correct,
@@ -128,15 +158,31 @@ def validate_questions(
             "micro_topic_id": raw_micro_topic_id,
             "micro_topic_key": raw_micro_topic_key,
             "source_document_id": source_document_id,
+            "source_url": source_url,
+            "source_title": source_title,
+            "source_domain": source_domain,
+            "source_kind": source_kind,
+            "source_published_at": source_published_at or None,
+            "source_accessed_at": source_accessed_at or None,
+            "evidence_summary": evidence_summary,
+            "fact_version": fact_version,
             "difficulty": difficulty,
-            "question_id": _text(raw.get("question_id")) or question_hash(text),
+            "language": language,
             "verification_status": verification_status or "generated",
             "verification_score": float(verification_score) if isinstance(verification_score, (int, float)) and not isinstance(verification_score, bool) else None,
             "verification_notes": verification_notes,
             "verification_checks": raw.get("verification_checks") if isinstance(raw.get("verification_checks"), dict) else {},
             "verified_at": verified_at or None,
             "verification_model": _text(raw.get("verification_model")) or None,
-        })
+        }
+        try:
+            clean_row["stem_hash"] = question_hash(text)
+            clean_row["question_hash"] = clean_row["stem_hash"]
+            clean_row["content_hash"] = question_content_hash(clean_row)
+        except ValueError as exc:
+            raise QuizValidationError(f"Question {number} has invalid version metadata.") from exc
+        clean_row["question_id"] = _text(raw.get("question_id")) or clean_row["content_hash"]
+        clean.append(clean_row)
     if enforce_composition:
         _validate_quiz_composition(clean)
     return clean
@@ -156,23 +202,7 @@ def _validate_quiz_composition(questions: list[dict]) -> None:
 
 
 def content_checksum(quiz_id: str, subject_key: str, chapter: str, questions: list[dict]) -> str:
-    normalized = {
-        "quiz_id": quiz_id,
-        "subject_key": subject_key,
-        "chapter": normalize_text(chapter),
-        "questions": [
-            {
-                "question": normalize_text(item.get("question", item.get("q", ""))),
-                "options": [normalize_text(value) for value in item.get("options", item.get("o", []))],
-                "correct_index": item.get("correct_index", item.get("a")),
-                "micro_topic_key": _text(item.get("micro_topic_key")),
-                "source_document_id": _text(item.get("source_document_id")),
-            }
-            for item in questions
-        ],
-    }
-    encoded = json.dumps(normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()
+    return quiz_content_checksum(quiz_id, subject_key, chapter, questions)
 
 
 def checksum_for_pack(pack: dict) -> str:
@@ -186,6 +216,25 @@ def checksum_for_pack(pack: dict) -> str:
             "correct_index": "ABCD".find(str(row.get("correct_option") or "")),
             "micro_topic_key": row.get("micro_topic_key"),
             "source_document_id": row.get("source_document_id"),
+            "explanation": row.get("explanation"),
+            "detailed_explanation": row.get("detailed_explanation"),
+            "subject_key": row.get("subject") or meta.get("subject_key"),
+            "chapter": row.get("topic") or meta.get("chapter"),
+            "difficulty": row.get("difficulty"),
+            "language": row.get("language"),
+            "source_url": row.get("source_url"),
+            "source_title": row.get("source_title"),
+            "source_domain": row.get("source_domain"),
+            "source_kind": row.get("source_kind"),
+            "source_published_at": row.get("source_published_at"),
+            "source_accessed_at": row.get("source_accessed_at"),
+            "evidence_summary": row.get("evidence_summary"),
+            "fact_version": row.get("fact_version"),
+            "verification_status": row.get("verification_status"),
+            "verification_score": row.get("verification_score"),
+            "verification_notes": row.get("verification_notes"),
+            "verified_at": row.get("verified_at"),
+            "verification_model": row.get("verification_model"),
         })
     return content_checksum(pack.get("quiz_id") or meta.get("quiz_id") or "", meta.get("subject_key") or meta.get("subject") or "", meta.get("chapter") or "", questions)
 

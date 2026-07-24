@@ -6,16 +6,20 @@ recovery/leaderboard indexes. `003_repeat_quiz_attempts.sql` preserves those
 rows while allowing intentional retakes with idempotent client attempt IDs.
 
 New migrations use the Supabase CLI timestamp convention and live in
-`supabase/migrations/`. The current sequence for every installation is:
+`supabase/migrations/`. The sequence for every installation is:
 
-1. `database/schema.sql` for a brand-new project, or legacy migrations
+1. `database/schema.sql` once for a brand-new disposable/local database, or legacy migrations
    `001` through `003` for an existing project that has not run them.
-2. `supabase/migrations/20260718015054_atomic_quiz_integrity.sql`.
-3. `supabase/migrations/20260718112044_question_provenance_reporting.sql`.
+2. Every `supabase/migrations/*.sql` file in filename/timestamp order. The
+   authoritative current endpoint is
+   `20260722120827_revision_reports_and_rankings.sql`; existing hosted projects
+   apply only ledger entries they have not already applied.
 
-`database/schema.sql` is therefore the legacy bootstrap schema, not the final
-post-migration state. This avoids duplicating the transactional function bodies
-in two files that could drift apart.
+`database/schema.sql` is therefore a bootstrap-only schema, not the final
+post-migration state. Never rerun it on staging or production: historical
+`CREATE OR REPLACE FUNCTION` statements can replace newer hardened behavior.
+Existing hosted databases receive only new timestamped migrations recorded in
+the migration ledger.
 
 Convention for future changes:
 
@@ -25,7 +29,9 @@ Convention for future changes:
    and idempotent, never a destructive rewrite of existing data.
 3. Add migration, backfill, verification, and rollback notes under `docs/`.
 4. Validate syntax locally, then apply the file through the Supabase migration
-   workflow or SQL Editor only after a backup/checkpoint.
+   workflow only after a backup/checkpoint so migration history is recorded.
 
-The application process does not run DDL. Supabase CLI or SQL Editor remains an
+The application process does not run DDL. The Supabase migration workflow is an
 explicit operator step, which keeps web and bot startup safe and predictable.
+Pasting the current migration into SQL Editor alone is insufficient because it
+does not create the required migration-ledger entry and readiness stays closed.

@@ -3,14 +3,15 @@
 from __future__ import annotations
 
 from database.client import get_client
+from storage.contracts import Row, as_rows
 
 
-def list_for_subject(subject_key: str, limit: int = 200) -> list[dict]:
+def list_for_subject(subject_key: str, limit: int = 200) -> list[Row]:
     result = (
         get_client().table("chapter_history").select("*")
         .eq("subject_key", subject_key).order("selected_for", desc=True).limit(limit).execute()
     )
-    return result.data or []
+    return as_rows(result.data, "chapter history")
 
 
 def record(subject_key: str, chapter: str, selected_for: str, quiz_id: str) -> None:

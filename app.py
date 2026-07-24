@@ -4,12 +4,11 @@
 from __future__ import annotations
 
 import json
-import os
 import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException
+from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
@@ -18,27 +17,29 @@ from config.settings import (
     APP_TIMEZONE,
     CORS_ALLOWED_ORIGINS,
     DEV_ALLOW_UNVERIFIED_TELEGRAM,
-    GEMINI_FAILOVER_ENABLED,
     TELEGRAM_BOT_TOKEN,
-    TELEGRAM_FORUM_TOPICS_JSON,
-    TELEGRAM_GENERAL_THREAD_ID,
     TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
+    TELEGRAM_WRITE_INIT_DATA_MAX_AGE_SECONDS,
 )
-from config.subjects import QUIZ_SUBJECTS, SUBJECTS
+from config.subjects import SUBJECTS
+from database.contract import APPLICATION_VERSION, REQUIRED_MIGRATION_VERSION
+from models.user import User
 from services import (
     learning_resources_service,
     personal_learning_service,
     quiz_pack_service,
+    rate_limit,
+    readiness_service,
     resource_quality_service,
 )
-from storage import stats_repo
+from storage import stats_repo, users_repo
 from telegram.auth import TelegramAuthError, verify_init_data
-from telegram.routing import ForumRouter, ForumRoutingError
 from utils.quiz_ids import parse_quiz_id
 
 ROOT = Path(__file__).resolve().parent
-app = FastAPI(title="WB Exam Quiz Pack API", version="6.0.0")
-MIGRATION_VERSION = "20260718194113"
+app = FastAPI(title="WB Exam Quiz Pack API", version=APPLICATION_VERSION)
+# Backward-compatible import for older tests/operators; the value has one source.
+MIGRATION_VERSION = REQUIRED_MIGRATION_VERSION
 
 if CORS_ALLOWED_ORIGINS:
     app.add_middleware(
@@ -50,11 +51,42 @@ if CORS_ALLOWED_ORIGINS:
     )
 
 
+@app.middleware("http")
+async def security_and_privacy_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Permissions-Policy"] = (
+        "camera=(), microphone=(), geolocation=(), payment=()"
+    )
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' 'unsafe-inline' https://telegram.org; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' data: https://fonts.gstatic.com; "
+        "img-src 'self' data: https:; "
+        "connect-src 'self'; "
+        "object-src 'none'; base-uri 'self'; form-action 'self'; "
+        "frame-ancestors https://web.telegram.org https://*.telegram.org"
+    )
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if request.url.scheme == "https" or forwarded_proto == "https":
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    if (
+        request.url.path.startswith("/api/me/")
+        or request.url.path.startswith("/api/admin/")
+        or bool(request.headers.get("x-telegram-init-data"))
+        or request.method not in {"GET", "HEAD", "OPTIONS"}
+    ):
+        response.headers["Cache-Control"] = "no-store, private"
+    return response
+
+
 class SubmitQuizRequest(BaseModel):
     init_data: str = Field(default="", alias="initData")
     answers: list[int | None]
     dev_user: dict | None = Field(default=None, alias="devUser")
-    attempt_id: str = Field(default="", alias="attemptId", max_length=80)
+    attempt_id: uuid.UUID = Field(alias="attemptId")
     duration_seconds: int | None = Field(default=None, alias="durationSeconds", ge=0, le=86400)
     response_times: list[float | None] | None = Field(default=None, alias="responseTimes")
     marked_for_review: list[bool] | None = Field(default=None, alias="markedForReview")
@@ -100,7 +132,7 @@ class SubmitQuizRequest(BaseModel):
 class ReportQuestionRequest(BaseModel):
     init_data: str = Field(default="", alias="initData")
     quiz_id: str = Field(alias="quizId", min_length=1, max_length=80)
-    attempt_id: str = Field(alias="attemptId", min_length=1, max_length=80)
+    attempt_id: uuid.UUID = Field(alias="attemptId")
     reason: str
     details: str = Field(default="", max_length=1000)
     dev_user: dict | None = Field(default=None, alias="devUser")
@@ -138,6 +170,8 @@ class UserPreferencesRequest(BaseModel):
     public_display_name: str | None = Field(default=None, alias="publicDisplayName", max_length=40)
     username_visible: bool = Field(default=False, alias="usernameVisible")
     daily_reminder_enabled: bool = Field(default=False, alias="dailyReminderEnabled")
+    revision_sound_enabled: bool = Field(default=True, alias="revisionSoundEnabled")
+    revision_vibration_enabled: bool = Field(default=False, alias="revisionVibrationEnabled")
     dev_user: dict | None = Field(default=None, alias="devUser")
 
     model_config = {"populate_by_name": True}
@@ -147,6 +181,7 @@ class PracticeAnswerRequest(BaseModel):
     init_data: str = Field(default="", alias="initData")
     selected_option: int = Field(alias="selectedIndex", ge=0, le=3)
     source_type: str = Field(default="wrong", alias="sourceType")
+    mode: str = Field(alias="mode")
     response_time_seconds: float | None = Field(
         default=None,
         alias="responseTimeSeconds",
@@ -154,9 +189,28 @@ class PracticeAnswerRequest(BaseModel):
         le=3600,
     )
     marked_for_review: bool = Field(default=False, alias="markedForReview")
+    attempt_id: uuid.UUID = Field(alias="attemptId")
     dev_user: dict | None = Field(default=None, alias="devUser")
 
     model_config = {"populate_by_name": True}
+
+
+class PracticeQuestionReportRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    attempt_id: uuid.UUID = Field(alias="attemptId")
+    reason: str = Field(min_length=1, max_length=50)
+    details: str = Field(default="", max_length=1000)
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, value: str) -> str:
+        clean = value.strip()
+        if clean not in quiz_pack_service.REPORT_REASONS:
+            raise ValueError("invalid report reason")
+        return clean
 
 
 class ResourceFeedbackRequest(BaseModel):
@@ -205,63 +259,37 @@ def legacy_quiz_file(quiz_file: str) -> JSONResponse:
     return JSONResponse(payload)
 
 
-@app.get("/api/health")
-def health() -> dict:
-    topics_error = None
-    try:
-        ForumRouter.from_values(TELEGRAM_FORUM_TOPICS_JSON, TELEGRAM_GENERAL_THREAD_ID)
-        topics_configured = True
-    except ForumRoutingError as exc:
-        topics_configured = False
-        topics_error = _forum_topics_error_code(exc)
-    operational = {
-        "database_connectivity": False,
-        "required_schema_ready": False,
-        "latest_successful_generation": None,
-        "latest_successful_posting": None,
-        "failed_runs_today": None,
-        "static_resource_health": None,
-    }
-    try:
-        if os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY"):
-            operational = resource_quality_service.public_operational_status()
-    except Exception:
-        pass
-    primary = bool(os.environ.get("GEMINI_API_KEY_PRIMARY") or os.environ.get("GEMINI_API_KEY"))
-    secondary = bool(os.environ.get("GEMINI_API_KEY_SECONDARY"))
-    provider_category = (
-        "primary_and_secondary"
-        if primary and secondary
-        else "primary_only"
-        if primary
-        else "secondary_only"
-        if secondary
-        else "unavailable"
-    )
+@app.get("/health/live")
+def health_live() -> dict:
+    """Process-only liveness probe; it deliberately performs no network I/O."""
     return {
         "ok": True,
-        "application_version": app.version,
-        "migration_version": MIGRATION_VERSION,
+        "status": "live",
+        "applicationVersion": app.version,
         "timezone": APP_TIMEZONE,
-        "supabase_configured": bool(os.environ.get("SUPABASE_URL") and os.environ.get("SUPABASE_SERVICE_KEY")),
-        "gemini_primary_configured": bool(os.environ.get("GEMINI_API_KEY_PRIMARY") or os.environ.get("GEMINI_API_KEY")),
-        "gemini_secondary_configured": bool(os.environ.get("GEMINI_API_KEY_SECONDARY")),
-        "gemini_failover_enabled": GEMINI_FAILOVER_ENABLED,
-        "telegram_configured": bool(TELEGRAM_BOT_TOKEN),
-        "forum_topics_configured": topics_configured,
-        "forum_topics_error": topics_error,
-        "quiz_subject_count": len(QUIZ_SUBJECTS),
-        "gemini_provider_category": provider_category,
-        "static_fallback_available": any((ROOT / "quizzes").glob("????????-*.json")),
-        **operational,
     }
+
+
+@app.get("/health/ready")
+def health_ready() -> JSONResponse:
+    readiness = readiness_service.assess()
+    return JSONResponse(
+        readiness.public_payload(),
+        status_code=200 if readiness.ready else 503,
+    )
+
+
+@app.get("/api/health")
+def health() -> JSONResponse:
+    """Compatibility alias with the same strict semantics as readiness."""
+    return health_ready()
 
 
 @app.get("/api/quiz/{quiz_id}")
 def get_quiz(quiz_id: str) -> dict:
     clean_quiz_id = _clean_quiz_id(quiz_id)
     try:
-        pack = quiz_pack_service.get_quiz_pack(clean_quiz_id)
+        pack = quiz_pack_service.get_ready_quiz_pack(clean_quiz_id)
     except Exception as exc:
         legacy = _load_public_fallback(clean_quiz_id)
         if legacy:
@@ -281,7 +309,7 @@ def get_quiz(quiz_id: str) -> dict:
 def quiz_learning_resources(quiz_id: str) -> dict:
     clean_quiz_id = _clean_quiz_id(quiz_id)
     try:
-        pack = quiz_pack_service.get_quiz_pack(clean_quiz_id)
+        pack = quiz_pack_service.get_ready_quiz_pack(clean_quiz_id)
         if not pack:
             raise HTTPException(status_code=404, detail="Quiz pack not found.")
         return learning_resources_service.public_resources_for_quiz(clean_quiz_id)
@@ -298,12 +326,14 @@ def quiz_learning_resources(quiz_id: str) -> dict:
 def submit_resource_feedback(resource_id: uuid.UUID, payload: ResourceFeedbackRequest) -> dict:
     try:
         return resource_quality_service.submit_feedback(
-            _telegram_user_from_payload(payload),
+            _write_user_from_payload(payload, "resource-feedback", str(resource_id)),
             resource_id=str(resource_id),
             feedback_type=payload.feedback_type,
             rating=payload.rating,
             details=payload.details,
         )
+    except HTTPException:
+        raise
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
@@ -355,10 +385,12 @@ def review_resource(
 ) -> dict:
     try:
         return resource_quality_service.review_candidate(
-            _telegram_user_from_payload(payload),
+            _write_user_from_payload(payload, "resource-review", str(resource_id)),
             resource_id=str(resource_id),
             decision=payload.decision,
         )
+    except HTTPException:
+        raise
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except PermissionError as exc:
@@ -373,7 +405,11 @@ def review_resource(
 def submit_quiz(quiz_id: str, payload: SubmitQuizRequest) -> dict:
     try:
         clean_quiz_id = _clean_quiz_id(quiz_id)
-        telegram_user = _telegram_user_from_payload(payload)
+        telegram_user = _write_user_from_payload(
+            payload,
+            "quiz-submit",
+            f"{clean_quiz_id}:{payload.attempt_id}",
+        )
         return quiz_pack_service.submit_quiz_attempts(
             quiz_id=clean_quiz_id,
             telegram_user=telegram_user,
@@ -383,6 +419,8 @@ def submit_quiz(quiz_id: str, payload: SubmitQuizRequest) -> dict:
             response_times=payload.response_times,
             marked_for_review=payload.marked_for_review,
         )
+    except HTTPException:
+        raise
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
@@ -391,11 +429,43 @@ def submit_quiz(quiz_id: str, payload: SubmitQuizRequest) -> dict:
         raise HTTPException(status_code=503, detail="স্কোর জমা করা যায়নি। একটু পরে আবার চেষ্টা করুন।") from exc
 
 
+@app.get("/api/quiz/{quiz_id}/attempt/{attempt_id}")
+def get_quiz_attempt_result(
+    quiz_id: str,
+    attempt_id: uuid.UUID,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        result = quiz_pack_service.get_quiz_attempt_result(
+            quiz_id=_clean_quiz_id(quiz_id),
+            telegram_user=_telegram_user_from_init_data(init_data),
+            client_attempt_id=attempt_id,
+        )
+        if result is None:
+            raise HTTPException(status_code=404, detail="এই চেষ্টার ফল পাওয়া যায়নি।")
+        return result
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="ফলাফল এখন খোলা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।",
+        ) from exc
+
+
 @app.post("/api/questions/{question_id}/report")
 def report_question(question_id: uuid.UUID, payload: ReportQuestionRequest) -> dict:
     try:
         clean_quiz_id = _clean_quiz_id(payload.quiz_id)
-        telegram_user = _telegram_user_from_payload(payload)
+        telegram_user = _write_user_from_payload(
+            payload,
+            "question-report",
+            f"{clean_quiz_id}:{payload.attempt_id}",
+        )
         return quiz_pack_service.submit_question_report(
             question_id=str(question_id),
             quiz_id=clean_quiz_id,
@@ -404,6 +474,8 @@ def report_question(question_id: uuid.UUID, payload: ReportQuestionRequest) -> d
             reason=payload.reason,
             details=payload.details,
         )
+    except HTTPException:
+        raise
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
@@ -470,19 +542,59 @@ def my_wrong_questions(
 def submit_my_practice_answer(question_id: uuid.UUID, payload: PracticeAnswerRequest) -> dict:
     try:
         return personal_learning_service.submit_practice_answer(
-            _telegram_user_from_payload(payload),
+            _write_user_from_payload(
+                payload,
+                "practice-answer",
+                str(payload.attempt_id),
+            ),
             question_id=str(question_id),
+            client_attempt_id=payload.attempt_id,
             selected_option=payload.selected_option,
             source_type=payload.source_type,
+            mode=payload.mode,
             response_time_seconds=payload.response_time_seconds,
             marked_for_review=payload.marked_for_review,
         )
+    except HTTPException:
+        raise
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="অনুশীলনের উত্তর সংরক্ষণ করা যায়নি।") from exc
+
+
+@app.post("/api/me/practice/{question_id}/report")
+def report_my_practice_question(
+    question_id: uuid.UUID,
+    payload: PracticeQuestionReportRequest,
+) -> dict:
+    try:
+        return personal_learning_service.report_practice_question(
+            _write_user_from_payload(
+                payload,
+                "question-report",
+                str(payload.attempt_id),
+            ),
+            question_id=str(question_id),
+            client_attempt_id=payload.attempt_id,
+            reason=payload.reason,
+            details=payload.details,
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        message = str(exc)
+        status = 409 if "already reported" in message else 429 if "rate limit" in message else 400
+        raise HTTPException(status_code=status, detail=message) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="রিপোর্ট জমা করা যায়নি। একটু পরে আবার চেষ্টা করুন।",
+        ) from exc
 
 
 @app.get("/api/me/bookmarks")
@@ -501,11 +613,17 @@ def my_bookmarks(
 def set_my_bookmark(payload: BookmarkRequest) -> dict:
     try:
         return personal_learning_service.set_bookmark(
-            _telegram_user_from_payload(payload),
+            _write_user_from_payload(
+                payload,
+                "bookmark",
+                f"{payload.item_type}:{payload.item_id}",
+            ),
             item_type=payload.item_type,
             item_id=str(payload.item_id),
             active=payload.active,
         )
+    except HTTPException:
+        raise
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
@@ -530,9 +648,11 @@ def my_preferences(
 def save_my_preferences(payload: UserPreferencesRequest) -> dict:
     try:
         return personal_learning_service.save_preferences(
-            _telegram_user_from_payload(payload),
+            _write_user_from_payload(payload, "preferences"),
             payload.model_dump(exclude={"init_data", "dev_user"}),
         )
+    except HTTPException:
+        raise
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
@@ -542,14 +662,27 @@ def save_my_preferences(payload: UserPreferencesRequest) -> dict:
 
 
 @app.get("/api/quiz/{quiz_id}/leaderboard")
-def quiz_leaderboard(quiz_id: str, limit: int = 20, offset: int = 0) -> dict:
+def quiz_leaderboard(
+    quiz_id: str,
+    limit: int = 10,
+    offset: int = 0,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
     clean_quiz_id = _clean_quiz_id(quiz_id)
     try:
-        return stats_repo.quiz_leaderboard(
+        user_id = None
+        if init_data:
+            telegram_user = _telegram_user_from_init_data(init_data)
+            user_id = str(users_repo.upsert_user(User.from_telegram(telegram_user))["id"])
+        result = stats_repo.quiz_leaderboard_for_user(
             clean_quiz_id,
-            limit=max(1, min(limit, 100)),
-            offset=max(0, offset),
+            user_id=user_id,
+            limit=max(1, min(limit, 50)),
         )
+        result["requestedOffset"] = max(0, offset)
+        return result
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Leaderboard সাময়িকভাবে পাওয়া যাচ্ছে না।") from exc
 
@@ -558,14 +691,20 @@ def quiz_leaderboard(quiz_id: str, limit: int = 20, offset: int = 0) -> dict:
 def leaderboard(limit: int = 20, offset: int = 0) -> dict:
     try:
         return {
-            **stats_repo.leaderboard(
+            **stats_repo.typed_leaderboard_for_user(
+                "overall_rank",
+                subject_key=None,
+                user_id=None,
                 limit=max(1, min(limit, 100)),
                 offset=max(0, offset),
             ),
             "unavailable": False,
         }
-    except Exception:
-        return {"rows": [], "unavailable": True}
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="সামগ্রিক র‍্যাঙ্কিং সাময়িকভাবে পাওয়া যাচ্ছে না।",
+        ) from exc
 
 
 @app.get("/api/leaderboards/{board_type}")
@@ -574,42 +713,88 @@ def typed_leaderboard(
     subject: str | None = None,
     limit: int = 20,
     offset: int = 0,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
 ) -> dict:
     try:
         if subject and subject not in SUBJECTS:
             raise ValueError("Unknown subject key.")
+        user_id = None
+        if init_data:
+            telegram_user = _telegram_user_from_init_data(init_data)
+            user_id = str(users_repo.upsert_user(User.from_telegram(telegram_user))["id"])
         return {
-            **stats_repo.typed_leaderboard(
+            **stats_repo.typed_leaderboard_for_user(
                 board_type,
                 subject_key=subject,
+                user_id=user_id,
                 limit=max(1, min(limit, 100)),
                 offset=max(0, offset),
             ),
             "unavailable": False,
         }
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Leaderboard সাময়িকভাবে পাওয়া যাচ্ছে না।") from exc
 
 
-def _telegram_user_from_payload(
+def _write_user_from_payload(
     payload: (
         SubmitQuizRequest
         | ReportQuestionRequest
         | BookmarkRequest
         | UserPreferencesRequest
         | PracticeAnswerRequest
+        | PracticeQuestionReportRequest
         | ResourceFeedbackRequest
         | ResourceReviewRequest
     ),
+    scope: str,
+    suffix: str = "",
 ) -> dict:
-    return _telegram_user_from_init_data(payload.init_data, payload.dev_user)
+    user = _telegram_user_from_init_data(
+        payload.init_data,
+        payload.dev_user,
+        max_age_seconds=TELEGRAM_WRITE_INIT_DATA_MAX_AGE_SECONDS,
+    )
+    user_key = str(user.get("id") or "unknown")
+    limits = {
+        "quiz-submit": (30, 3600),
+        "practice-answer": (120, 3600),
+        "bookmark": (60, 3600),
+        "question-report": (10, 3600),
+        "preferences": (20, 3600),
+        "resource-feedback": (20, 3600),
+        "resource-review": (60, 3600),
+    }
+    limit, window = limits.get(scope, (30, 3600))
+    try:
+        rate_limit.check(f"{scope}:{user_key}", limit=limit, window_seconds=window)
+        if suffix:
+            rate_limit.check(
+                f"{scope}:{user_key}:{suffix}",
+                limit=5,
+                window_seconds=60,
+            )
+    except rate_limit.RateLimitExceeded as exc:
+        raise HTTPException(
+            status_code=429,
+            detail=str(exc),
+            headers={"Retry-After": str(exc.retry_after_seconds)},
+        ) from exc
+    return user
 
 
-def _telegram_user_from_init_data(init_data: str, dev_user: dict | None = None) -> dict:
+def _telegram_user_from_init_data(
+    init_data: str,
+    dev_user: dict | None = None,
+    *,
+    max_age_seconds: int = TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
+) -> dict:
     if init_data:
-        return verify_init_data(init_data, TELEGRAM_BOT_TOKEN, TELEGRAM_INIT_DATA_MAX_AGE_SECONDS)
+        return verify_init_data(init_data, TELEGRAM_BOT_TOKEN, max_age_seconds)
     if DEV_ALLOW_UNVERIFIED_TELEGRAM:
         return dev_user or {
             "id": 999999001,
@@ -648,21 +833,3 @@ def _load_public_fallback(quiz_id: str) -> dict | None:
         "legacy": len(quiz_id) == 8,
         "qs": [{"q": item.get("q") or item.get("question"), "o": item.get("o") or item.get("options")} for item in questions],
     }
-
-
-def _forum_topics_error_code(exc: ForumRoutingError) -> str:
-    """Convert routing errors to safe health codes without exposing IDs."""
-    if not TELEGRAM_FORUM_TOPICS_JSON:
-        return "missing"
-    message = str(exc).lower()
-    if "documentation-only" in message:
-        return "placeholder_mapping"
-    if "missing forum" in message:
-        return "missing_keys"
-    if "unknown subject" in message:
-        return "unknown_keys"
-    if "must be unique" in message:
-        return "duplicate_ids"
-    if "positive integer" in message:
-        return "invalid_id"
-    return "invalid_json"

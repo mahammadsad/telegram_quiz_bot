@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import logging
 import os
+from urllib.parse import urlparse
 
 from errors import ConfigurationError
 
@@ -35,6 +36,25 @@ def require_env(name: str) -> str:
 # public website/app.
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "")
 SUPABASE_SERVICE_KEY = os.environ.get("SUPABASE_SERVICE_KEY", "")
+EXPECTED_SUPABASE_PROJECT_REF = os.environ.get(
+    "EXPECTED_SUPABASE_PROJECT_REF", ""
+).strip()
+
+
+def supabase_project_ref_matches(
+    url: str = SUPABASE_URL,
+    expected_ref: str = EXPECTED_SUPABASE_PROJECT_REF,
+) -> bool:
+    """Fail safely when an environment points at the wrong hosted project."""
+    if not expected_ref:
+        return False
+    try:
+        hostname = (urlparse(url).hostname or "").lower()
+    except ValueError:
+        return False
+    if expected_ref.lower() == "local":
+        return hostname in {"localhost", "127.0.0.1", "::1"}
+    return hostname == f"{expected_ref.lower()}.supabase.co"
 
 # --------------------------------------------------------------------------
 # Gemini
@@ -113,6 +133,10 @@ TELEGRAM_ADMIN_USER_IDS = os.environ.get("TELEGRAM_ADMIN_USER_IDS", "").strip()
 # The API validates Telegram Mini App initData before accepting answers.
 # Set DEV_ALLOW_UNVERIFIED_TELEGRAM=true only for local browser testing.
 TELEGRAM_INIT_DATA_MAX_AGE_SECONDS = int(os.environ.get("TELEGRAM_INIT_DATA_MAX_AGE_SECONDS", "86400"))
+TELEGRAM_WRITE_INIT_DATA_MAX_AGE_SECONDS = min(
+    TELEGRAM_INIT_DATA_MAX_AGE_SECONDS,
+    max(60, int(os.environ.get("TELEGRAM_WRITE_INIT_DATA_MAX_AGE_SECONDS", "3600"))),
+)
 DEV_ALLOW_UNVERIFIED_TELEGRAM = os.environ.get("DEV_ALLOW_UNVERIFIED_TELEGRAM", "false").strip().lower() == "true"
 
 # Comma-separated list for deployments that serve index.html from a different
@@ -187,3 +211,13 @@ SIMILARITY_THRESHOLD = float(os.environ.get("SIMILARITY_THRESHOLD", "0.82"))
 # --------------------------------------------------------------------------
 SYLLABUS_STATE_KEY = "mock_test_syllabus_state"
 QUIZ_PACK_SOURCE_PREFIX = "quiz_pack:"
+
+
+def gemini_provider_configuration() -> tuple[bool, bool]:
+    """Return key availability without ever returning or logging key values."""
+    primary = bool(
+        os.environ.get("GEMINI_API_KEY_PRIMARY")
+        or os.environ.get("GEMINI_API_KEY")
+    )
+    secondary = bool(os.environ.get("GEMINI_API_KEY_SECONDARY"))
+    return primary, secondary

@@ -7,6 +7,8 @@ Supabase functions, and returns private review data and privacy-safe
 leaderboards. Every newly generated question cites an operator-verified fact
 bundle, belongs to a normalized micro-topic, and passes a separate source-only
 verification request before the atomic save can activate it.
+Question rows are immutable versions: matching text can safely coexist with a
+corrected answer, option, explanation, classification, language, or source.
 
 The syllabus-v2 foundation preserves the 13 Telegram subjects while expanding
 the curriculum to 162 subject-specific chapters and 648 curated micro-topics.
@@ -59,8 +61,10 @@ use the service role against RLS-protected tables and explicitly granted RPCs.
 6. A separate source-only verifier checks the answer, options, explanation,
    ambiguity, currency, micro-topic, and difficulty. Any failed check or score
    below the threshold rejects the whole pack.
-7. One RPC revalidates source/taxonomy ownership and saves all question rows,
-   verification evidence, and ten ordered mappings transactionally.
+7. One RPC revalidates source/taxonomy ownership and saves all question
+   versions, verification evidence, and ten ordered mappings transactionally.
+   It reads the saved rows back and independently recalculates the checksum;
+   only an exact generated/persisted match changes the run to `ready`.
    The public fallback is exported without answers or explanations.
 8. Telegram is called only by the lease owner. Only a successful API response
    marks the run posted. An ambiguous network outcome becomes
@@ -123,6 +127,13 @@ Required server/GitHub secrets:
   `TELEGRAM_FORUM_TOPICS_JSON`
 - `GEMINI_API_KEY_PRIMARY`
 
+Required deployment guard (public project identifier, not a secret):
+
+- production: `EXPECTED_SUPABASE_PROJECT_REF=tizxodkcpglmxgtwepor`
+- staging: `EXPECTED_SUPABASE_PROJECT_REF=prdrabmcivgbygzjnmko`
+- local Supabase: `EXPECTED_SUPABASE_PROJECT_REF=local` (accepted only for a
+  loopback Supabase URL)
+
 Recommended second-provider secret:
 
 - `GEMINI_API_KEY_SECONDARY`
@@ -145,6 +156,8 @@ Optional server settings:
 - `YOUTUBE_API_KEY` for optional, quota-bounded YouTube candidate discovery;
   discovered rows always require administrator review
 - `CORS_ALLOWED_ORIGINS`, `WRITE_STATIC_QUIZ_JSON`
+- `TELEGRAM_INIT_DATA_MAX_AGE_SECONDS` (read default 24 hours) and
+  `TELEGRAM_WRITE_INIT_DATA_MAX_AGE_SECONDS` (sensitive-write default 1 hour)
 
 Development-only:
 
@@ -156,11 +169,12 @@ still checks cached links and queues missing coverage but skips discovery.
 
 ## Supabase setup
 
-For a new project, apply `database/schema.sql`, then every file in
-`supabase/migrations/` in timestamp order. Existing projects apply only the
-newer unapplied files. The current stack ends with
-`20260718203218_dedupe_source_resource_cache.sql`. The application
-never applies DDL during startup.
+`database/schema.sql` is bootstrap-only and may be used only for a new local or
+disposable empty database. Never run it on staging or production. Hosted
+projects advance only through unapplied files in `supabase/migrations/`, in
+timestamp order. The authoritative required version is
+`20260722120827_revision_reports_and_rankings.sql`, database contract `2.2.0`.
+The application never applies DDL during startup.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,
 and locks tables, legacy views, and private functions to the service role. Full
@@ -174,6 +188,8 @@ submission, and canonical subject compatibility are covered by
 Resource feedback, link health, discovery moderation, security verification,
 and rollback are covered by
 `docs/MIGRATION_20260719_RESOURCE_OPERATIONS.md`.
+The current immutable-integrity, revision-report, ranking, staging, and recovery
+runbook is `docs/MIGRATION_20260722_PRODUCTION_CONTRACT.md`.
 
 Before enabling scheduled generation, import approved source facts for every
 due chapter:
@@ -222,6 +238,27 @@ pytest -q
 python scripts/check_public_data.py
 ```
 
+CI uses a real disposable PostgreSQL 17 service. To reproduce that locally with
+Docker, use a database whose name begins with `telegram_quiz_test`:
+
+```bash
+docker run --rm --name telegram-quiz-postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=telegram_quiz_test \
+  -p 54329:5432 postgres:17
+```
+
+In a second terminal:
+
+```bash
+export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:54329/telegram_quiz_test
+python scripts/apply_test_database.py
+pytest -q tests/integration/test_database_contract.py
+```
+
+The rebuild script refuses destructive schema reset unless the database name
+starts with `telegram_quiz_test`.
+
 Start the local API:
 
 ```bash
@@ -230,11 +267,14 @@ DEV_ALLOW_UNVERIFIED_TELEGRAM=true uvicorn app:app --reload
 
 Useful endpoints:
 
+- `GET /health/live` — process-only, no dependency calls
+- `GET /health/ready` — exact fail-closed production readiness
 - `GET /api/health`
 - `GET /api/quiz/{quiz_id}`
 - `GET /api/quiz/{quiz_id}/resources`
 - `POST /api/resources/{resource_id}/feedback`
 - `POST /api/quiz/{quiz_id}/submit`
+- `GET /api/quiz/{quiz_id}/attempt/{attempt_id}`
 - `POST /api/questions/{question_id}/report`
 - `GET /api/me/dashboard`
 - `GET /api/me/reviews/due?limit=20&offset=0`
@@ -279,10 +319,12 @@ explicitly replaces the pack; the flags are mutually exclusive. Recovery skips
 posted/future runs, takes over only expired leases, and reuses valid saved
 content before generating.
 
-The health endpoint returns safe booleans, schema readiness, bounded operational
-counts, provider category, and application/migration versions. It never returns
-secret values. Structured logs contain provider labels, categories, quiz IDs,
-and safe status codes, not credentials or raw Gemini responses.
+Liveness only confirms that the process is running. Readiness checks critical
+configuration, production/staging project ownership, Telegram routing, Gemini,
+Supabase connectivity, exact schema/RPC/grant/RLS contract, verification
+threshold, and retrieval of a ten-question checksum-certified active quiz. It
+returns HTTP 503 on any essential failure and never exposes secret values or raw
+database errors.
 
 Deployment and production drills are in `DEPLOYMENT_GUIDE.md`.
 
@@ -310,9 +352,11 @@ Deployment and production drills are in `DEPLOYMENT_GUIDE.md`.
 - Submission returns 401: open through Telegram and check bot token/init-data
   age; never enable the development bypass in production.
 
-## Next platform phases
+## Release gates and operator guides
 
-The learner, resource-quality, and operations foundations are complete. Source
-coverage now expands one reviewed subject bundle at a time. Deterministic
-math/reasoning solvers and a richer visual moderation console remain separate
-work; the authenticated review API is already available for a future console.
+Use `docs/PRODUCTIONIZATION_CHECKLIST.md` as the evidence gate, not this README.
+Calculation rules are in `docs/STATISTICS_AND_RANKING_RULES.md`; a non-programmer
+walkthrough is in `docs/NON_PROGRAMMER_VERIFICATION.md`; release changes are in
+`docs/RELEASE_NOTES_7.0.0.md`. No inactive chapter is enabled by this release,
+and production is not considered fixed until staging and production readiness
+plus the documented Telegram flows have been observed.

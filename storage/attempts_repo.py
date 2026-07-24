@@ -6,11 +6,12 @@ import logging
 
 from database.client import get_client
 from models.attempt import Attempt
+from storage.contracts import Row, as_rows, first_row
 
 LOG = logging.getLogger("storage.attempts")
 
 
-def insert_attempt(attempt: Attempt) -> dict | None:
+def insert_attempt(attempt: Attempt) -> Row | None:
     """Record one raw answer event.
 
     Uses ignore_duplicates on (user_id, poll_id) because Telegram quiz
@@ -31,12 +32,12 @@ def insert_attempt(attempt: Attempt) -> dict | None:
     if res.data:
         LOG.info("Recorded attempt: user=%s question=%s correct=%s",
                   attempt.user_id, attempt.question_id, attempt.is_correct)
-        return res.data[0]
+        return first_row(res.data, "user_attempts.insert")
     LOG.info("Attempt already recorded for user=%s poll=%s, skipped.", attempt.user_id, attempt.poll_id)
     return None
 
 
-def get_for_user_by_poll_ids(user_id: str, poll_ids: list[str]) -> list[dict]:
+def get_for_user_by_poll_ids(user_id: str, poll_ids: list[str]) -> list[Row]:
     if not poll_ids:
         return []
     client = get_client()
@@ -47,4 +48,4 @@ def get_for_user_by_poll_ids(user_id: str, poll_ids: list[str]) -> list[dict]:
         .in_("poll_id", poll_ids)
         .execute()
     )
-    return res.data or []
+    return as_rows(res.data, "user attempts by poll")

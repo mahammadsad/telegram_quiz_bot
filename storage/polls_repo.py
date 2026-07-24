@@ -3,23 +3,25 @@
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from database.client import get_client
 from models.poll import Poll
+from storage.contracts import Row, as_rows, first_row
 
 LOG = logging.getLogger("storage.polls")
 
 
-def insert_poll(poll: Poll) -> dict:
+def insert_poll(poll: Poll) -> Row:
     client = get_client()
     res = client.table("polls").insert(poll.to_insert_dict()).execute()
-    row = res.data[0]
+    row = first_row(res.data, "polls.insert")
+    if row is None:
+        raise RuntimeError("polls.insert returned no row")
     LOG.info("Recorded poll %s (telegram_poll_id=%s)", row["id"], row["telegram_poll_id"])
     return row
 
 
-def upsert_poll(poll: Poll) -> dict:
+def upsert_poll(poll: Poll) -> Row:
     """Insert or refresh a delivery record keyed by telegram_poll_id.
 
     repo_2's Mini App quizzes are not Telegram native polls, but they still
@@ -32,12 +34,14 @@ def upsert_poll(poll: Poll) -> dict:
         .upsert(poll.to_insert_dict(), on_conflict="telegram_poll_id")
         .execute()
     )
-    row = res.data[0]
+    row = first_row(res.data, "polls.upsert")
+    if row is None:
+        raise RuntimeError("polls.upsert returned no row")
     LOG.info("Upserted poll delivery %s (telegram_poll_id=%s)", row["id"], row["telegram_poll_id"])
     return row
 
 
-def get_by_telegram_poll_id(telegram_poll_id: str) -> Optional[dict]:
+def get_by_telegram_poll_id(telegram_poll_id: str) -> Row | None:
     client = get_client()
     res = (
         client.table("polls")
@@ -46,11 +50,10 @@ def get_by_telegram_poll_id(telegram_poll_id: str) -> Optional[dict]:
         .limit(1)
         .execute()
     )
-    rows = res.data or []
-    return rows[0] if rows else None
+    return first_row(res.data, "polls.by_telegram_id")
 
 
-def get_by_run_slot(run_slot: str, bot_type: str) -> list[dict]:
+def get_by_run_slot(run_slot: str, bot_type: str) -> list[Row]:
     """Return all delivery rows for a quiz/session, ordered by question index."""
     client = get_client()
     res = (
@@ -61,7 +64,7 @@ def get_by_run_slot(run_slot: str, bot_type: str) -> list[dict]:
         .order("telegram_message_id")
         .execute()
     )
-    return res.data or []
+    return as_rows(res.data, "polls.by_run_slot")
 
 
 def delete_by_run_slot(run_slot: str, bot_type: str) -> None:

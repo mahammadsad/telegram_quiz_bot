@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
+from config.settings import QUESTION_REPORT_THRESHOLD
 from config.subjects import SUBJECTS
 from models.user import User
-from storage import personal_learning_repo, users_repo
+from services.quiz_pack_service import REPORT_REASONS
+from storage import personal_learning_repo, question_reports_repo, users_repo
 
 EXAM_KEYS = {
     "WBCS",
@@ -29,7 +32,9 @@ PRACTICE_SOURCES = {"wrong", "due", "bookmark", "weak_topic"}
 
 
 def dashboard(telegram_user: dict) -> dict:
-    return _safe(personal_learning_repo.dashboard(_user_id(telegram_user)))
+    payload = _safe(personal_learning_repo.dashboard(_user_id(telegram_user)))
+    payload["identity"] = _identity(telegram_user)
+    return payload
 
 
 def due_reviews(telegram_user: dict, *, limit: int, offset: int) -> dict:
@@ -66,8 +71,10 @@ def submit_practice_answer(
     telegram_user: dict,
     *,
     question_id: str,
+    client_attempt_id: uuid.UUID,
     selected_option: int,
     source_type: str,
+    mode: str,
     response_time_seconds: float | None,
     marked_for_review: bool,
 ) -> dict:
@@ -75,16 +82,48 @@ def submit_practice_answer(
         raise ValueError("Selected option must be between 0 and 3.")
     if source_type not in PRACTICE_SOURCES:
         raise ValueError("Invalid practice source.")
+    expected_mode = "practice" if source_type == "bookmark" else "revision"
+    if mode != expected_mode:
+        raise ValueError("Practice mode does not match the server-provided queue mode.")
     if response_time_seconds is not None and not 0 <= response_time_seconds <= 3600:
         raise ValueError("Invalid response time.")
     return _safe(
         personal_learning_repo.submit_practice_answer(
             _user_id(telegram_user),
             question_id=question_id,
+            client_attempt_id=client_attempt_id,
             selected_option=selected_option,
             source_type=source_type,
+            mode=mode,
             response_time_seconds=response_time_seconds,
             marked_for_review=marked_for_review,
+        )
+    )
+
+
+def report_practice_question(
+    telegram_user: dict,
+    *,
+    question_id: str,
+    client_attempt_id: uuid.UUID,
+    reason: str,
+    details: str,
+) -> dict:
+    if reason not in REPORT_REASONS:
+        raise ValueError("Invalid report reason.")
+    clean_details = details.strip()
+    if len(clean_details) > 1000:
+        raise ValueError("Report details must be 1000 characters or fewer.")
+    if reason == "other" and not clean_details:
+        raise ValueError("Other reports require details.")
+    return _safe(
+        question_reports_repo.submit_practice(
+            question_id=question_id,
+            user_id=_user_id(telegram_user),
+            client_attempt_id=str(client_attempt_id),
+            reason=reason,
+            details=clean_details,
+            threshold=QUESTION_REPORT_THRESHOLD,
         )
     )
 
@@ -149,6 +188,8 @@ def save_preferences(telegram_user: dict, payload: dict[str, Any]) -> dict:
         "public_display_name": display_name,
         "username_visible": bool(payload.get("username_visible")),
         "daily_reminder_enabled": bool(payload.get("daily_reminder_enabled")),
+        "revision_sound_enabled": bool(payload.get("revision_sound_enabled", True)),
+        "revision_vibration_enabled": bool(payload.get("revision_vibration_enabled", False)),
     }
     return _safe(personal_learning_repo.save_preferences(_user_id(telegram_user), clean))
 
@@ -179,3 +220,24 @@ def _safe(payload: dict) -> dict:
         if private_field in text:
             raise ValueError("Personalized-learning projection contained a private field.")
     return payload
+
+
+def _identity(telegram_user: dict) -> dict:
+    first = str(telegram_user.get("first_name") or "").strip()
+    last = str(telegram_user.get("last_name") or "").strip()
+    username = str(telegram_user.get("username") or "").strip()
+    display_name = " ".join(value for value in (first, last) if value)
+    if not display_name:
+        display_name = f"@{username}" if username else "শিক্ষার্থী"
+    initials = "".join(value[:1] for value in (first, last) if value)[:2]
+    if not initials:
+        initials = display_name[:1]
+    photo_url = str(telegram_user.get("photo_url") or "").strip()
+    return {
+        "displayName": display_name,
+        "username": f"@{username}" if username else None,
+        "profilePhotoUrl": photo_url if photo_url.startswith("https://") else None,
+        "initials": initials.upper(),
+        "isCurrentUser": True,
+        "label": "এটি আপনার ড্যাশবোর্ড",
+    }

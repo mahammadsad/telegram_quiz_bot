@@ -34,6 +34,15 @@ def pack_from_questions(questions, subject_key="history", chapter="আধুন�
                 "micro_topic_id": row["micro_topic_id"],
                 "micro_topic_key": row["micro_topic_key"],
                 "source_document_id": row["source_document_id"],
+                "source_url": row["source_url"],
+                "source_title": row["source_title"],
+                "source_domain": row["source_domain"],
+                "source_kind": row["source_kind"],
+                "source_published_at": row["source_published_at"],
+                "source_accessed_at": row["source_accessed_at"],
+                "evidence_summary": row["evidence_summary"],
+                "fact_version": row["fact_version"],
+                "language": row["language"],
                 "verification_status": row["verification_status"],
                 "verification_score": row["verification_score"],
                 "verification_notes": row["verification_notes"],
@@ -104,12 +113,12 @@ def setup_run(monkeypatch, valid_questions, existing_run=None):
     return events, generated_pack
 
 
-def test_save_export_and_generated_state_precede_telegram(monkeypatch, valid_questions):
+def test_save_export_and_ready_state_precede_telegram(monkeypatch, valid_questions):
     events, _ = setup_run(monkeypatch, valid_questions)
     result = bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
     labels = [event[0] if event[0] != "status" else event[1] for event in events]
     assert result == "generated_and_posted"
-    assert labels.index("save_pack") < labels.index("generated") < labels.index("export") < labels.index("telegram") < labels.index("posted")
+    assert labels.index("save_pack") < labels.index("ready") < labels.index("export") < labels.index("telegram") < labels.index("posted")
     telegram_payload = next(event[1] for event in events if event[0] == "telegram")
     assert isinstance(telegram_payload["message_thread_id"], int)
     assert telegram_payload["message_thread_id"] == router().for_subject("history")
@@ -173,6 +182,30 @@ def test_both_providers_failing_never_posts_quiz(monkeypatch, valid_questions):
     assert not any(event[0] == "telegram" for event in events)
     assert ("status", "generation_failed") in events
     assert ("alert", None) in events
+
+
+def test_checksum_failure_status_is_preserved_and_never_posted(monkeypatch, valid_questions):
+    events, _ = setup_run(monkeypatch, valid_questions)
+    monkeypatch.setattr(
+        bot.quiz_pack_service,
+        "record_quiz_pack",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            RuntimeError("checksum mismatch")
+        ),
+    )
+    monkeypatch.setattr(
+        bot.quiz_runs_repo,
+        "get",
+        lambda quiz_id: {
+            "status": "integrity_failed",
+            "integrity_diagnostic_code": "saved_pack_checksum_mismatch",
+        },
+    )
+    monkeypatch.setattr(bot, "send_failure_alert", lambda *args: events.append(("alert", None)))
+    with pytest.raises(RuntimeError, match="checksum mismatch"):
+        bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
+    assert ("status", "generation_failed") not in events
+    assert not any(event[0] == "telegram" for event in events)
 
 
 def test_public_static_export_contains_no_answer_key(monkeypatch, tmp_path, valid_questions):
@@ -269,40 +302,57 @@ def test_recovery_reports_active_or_unknown_post_as_unresolved(monkeypatch):
     assert unresolved
 
 
-def test_database_preflight_checks_all_migration_tables(monkeypatch):
-    checked = []
-
-    class Query:
-        def select(self, identifier):
-            checked.append((self.table, identifier))
-            return self
-        def limit(self, _value): return self
-        def execute(self): return object()
-
-    class Client:
-        def table(self, table):
-            query = Query()
-            query.table = table
-            return query
-
-    monkeypatch.setattr(bot, "get_client", lambda: Client())
+def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_contract",
+        lambda: {
+            "ready": True,
+            "contract_key": bot.DATABASE_CONTRACT_KEY,
+            "contract_version": bot.DATABASE_CONTRACT_VERSION,
+            "required_migration_version": bot.REQUIRED_MIGRATION_VERSION,
+            "function_permission_failures": [],
+            "table_permission_failures": [],
+        },
+    )
     bot.validate_database_schema()
-    assert checked == [
-        ("quiz_runs", "quiz_id"),
-        ("chapter_history", "id"),
-        ("quiz_submissions", "id,client_attempt_id"),
-        ("quiz_questions", "id,quiz_id,question_order"),
-        ("quiz_attempts", "id,client_attempt_id,attempt_number"),
-        ("quiz_attempt_answers", "id,attempt_id,question_order"),
-        ("quiz_subjects", "subject_key,display_name"),
-        ("quiz_chapters", "id,subject_key,name"),
-        ("quiz_micro_topics", "id,chapter_id,key"),
-        ("source_documents", "id,micro_topic_id,verification_status"),
-        ("question_verifications", "id,question_id,verdict"),
-        ("question_generation_audits", "id,quiz_id,verdict"),
-        ("question_reports", "id,question_id,user_id,status"),
-        ("learning_resources", "id,micro_topic_id,verification_status,is_active"),
-        ("resource_feedback", "id,resource_id,user_id,feedback_type"),
-        ("resource_link_checks", "id,resource_id,outcome,error_category"),
-        ("resource_discovery_queue", "id,micro_topic_id,language,status"),
-    ]
+
+
+def test_database_preflight_fails_closed_on_old_or_misgranted_contract(monkeypatch):
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_contract",
+        lambda: {
+            "ready": True,
+            "contract_key": bot.DATABASE_CONTRACT_KEY,
+            "contract_version": bot.DATABASE_CONTRACT_VERSION,
+            "required_migration_version": "20260718194113",
+            "function_permission_failures": ["anon:service_only_rpc"],
+            "table_permission_failures": [],
+        },
+    )
+    with pytest.raises(RuntimeError, match="Database contract is not ready"):
+        bot.validate_database_schema()
+
+
+def test_supabase_project_ref_guard_accepts_only_the_expected_host():
+    from config.settings import supabase_project_ref_matches
+
+    assert supabase_project_ref_matches(
+        "https://tizxodkcpglmxgtwepor.supabase.co",
+        "tizxodkcpglmxgtwepor",
+    )
+    assert not supabase_project_ref_matches(
+        "https://prdrabmcivgbygzjnmko.supabase.co",
+        "tizxodkcpglmxgtwepor",
+    )
+    assert not supabase_project_ref_matches(
+        "https://tizxodkcpglmxgtwepor.supabase.co",
+        "",
+    )
+    assert supabase_project_ref_matches("http://127.0.0.1:54321", "local")
+    assert not supabase_project_ref_matches(
+        "https://tizxodkcpglmxgtwepor.supabase.co",
+        "local",
+    )
+    assert not supabase_project_ref_matches("not a url", "tizxodkcpglmxgtwepor")

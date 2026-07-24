@@ -115,6 +115,10 @@ pygments==2.20.0
     # via pytest
 pyjwt==2.13.0
     # via supabase-auth
+psycopg==3.2.9
+    # via psycopg[binary]
+psycopg-binary==3.2.9
+    # via psycopg
 pytest==9.1.1
     # via -r requirements-dev.txt
 python-dotenv==1.2.2

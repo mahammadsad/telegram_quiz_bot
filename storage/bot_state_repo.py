@@ -9,13 +9,19 @@ table or going back to a committed JSON file.
 from __future__ import annotations
 
 from database.client import get_client
+from storage.contracts import first_row
 
 
 def get_value(key: str) -> str | None:
     client = get_client()
     res = client.table("bot_state").select("value").eq("key", key).limit(1).execute()
-    rows = res.data or []
-    return rows[0]["value"] if rows else None
+    row = first_row(res.data, "bot state")
+    if row is None or row.get("value") is None:
+        return None
+    value = row["value"]
+    if not isinstance(value, str):
+        raise RuntimeError("bot state value is not text")
+    return value
 
 
 def set_value(key: str, value: str) -> None:
