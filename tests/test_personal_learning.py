@@ -300,6 +300,24 @@ def test_bookmark_and_preference_contracts(monkeypatch):
     assert captured["leaderboard_visible"] is False
 
 
+def test_bookmark_queue_is_explicitly_practice_only(monkeypatch):
+    monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
+    monkeypatch.setattr(
+        service.personal_learning_repo,
+        "bookmarks",
+        lambda user_id: {"questions": [], "resources": []},
+    )
+
+    payload = service.bookmarks({"id": 123})
+
+    assert payload == {
+        "questions": [],
+        "resources": [],
+        "mode": "practice",
+        "sourceType": "bookmark",
+    }
+
+
 def test_service_validates_preferences_and_never_exposes_private_fields(monkeypatch):
     monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
     saved = {}

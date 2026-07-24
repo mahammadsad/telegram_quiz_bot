@@ -38,6 +38,7 @@ supabase/migrations/20260718203218_dedupe_source_resource_cache.sql
 supabase/migrations/20260718220112_production_integrity_contract_v2.sql
 supabase/migrations/20260718222134_learning_and_leaderboard_contract_v2.sql
 supabase/migrations/20260722120827_revision_reports_and_rankings.sql
+supabase/migrations/20260724212939_durable_write_rate_limits.sql
 ```
 
 For a new local/disposable empty database, first apply `database/schema.sql`,
@@ -51,10 +52,11 @@ Read `docs/MIGRATION_20260718.md` and
 `docs/MIGRATION_20260718_PERSONALIZED_LEARNING.md` and
 `docs/MIGRATION_20260719_LEARNER_ANALYTICS.md`. Resource operations verification
 and rollback are in `docs/MIGRATION_20260719_RESOURCE_OPERATIONS.md`. Read
-`docs/MIGRATION_20260722_PRODUCTION_CONTRACT.md` for the current forward
-migrations and recovery plan. Take a database backup or project-branch
-checkpoint, run preflight SQL, apply with the Supabase migration workflow, and
-run verification SQL.
+`docs/MIGRATION_20260722_PRODUCTION_CONTRACT.md` for the integrity migration
+family and `docs/MIGRATION_20260724_DURABLE_RATE_LIMITS.md` for the current
+durable-write migration. Take a database backup or project-branch checkpoint,
+run preflight SQL, apply with the Supabase migration workflow, and run
+verification SQL.
 Then rerun both Supabase advisors. Do not paste a database password or service
 key into a migration file, issue, command transcript, or chat.
 
@@ -81,8 +83,18 @@ require recent official/primary dated sources.
 
 ## 2. Configure GitHub Actions
 
-Create a GitHub Environment named `production`. Put the production secrets
-below in that environment, not in a staging environment with the same names.
+Create separate GitHub Environments named `staging` and `production`. Put each
+environment's secrets only in its matching environment. Never copy a production
+credential into `staging` merely to make a smoke run pass.
+
+The dedicated `.github/workflows/staging-smoke.yml` workflow is
+`workflow_dispatch` only, has read-only repository access, and accepts only
+`preflight` or one explicitly selected subject quiz. It hard-fails unless the
+Supabase host resolves to `prdrabmcivgbygzjnmko`, static JSON writes and the
+Telegram development bypass are disabled, and every required staging value is
+present. Force posting or regeneration is off by default and requires the exact
+staging acknowledgement documented by the workflow input.
+
 The scheduled workflows are bound to `production`, use commit-pinned actions,
 and verify the public production project ref before accessing Supabase.
 
@@ -203,7 +215,7 @@ the datastore.
 
 Check `GET /health/live`: it should return HTTP 200 even if dependencies are
 down. Check `GET /health/ready`: it must return HTTP 200, application `7.0.0`,
-migration `20260722120827`, contract `2.2.0`, and all checks true. `/api/health`
+migration `20260724212939`, contract `2.2.0`, and all checks true. `/api/health`
 is a strict compatibility alias. A 503 is a release blocker, not a warning.
 
 ## 4. Configure forum topics and BotFather
@@ -226,11 +238,13 @@ different named-app deployment.
 
 ## 5. Controlled staging verification
 
-1. Run `python bot.py --mode preflight`.
+1. Dispatch **Staging Quiz Smoke** with `operation=preflight`. Do not transfer
+   staging secrets into a local shell or production workflow.
 2. Run the CI commands locally or wait for the PR check: Ruff, mypy, pytest,
    migration contract, and public-data scan.
-3. Confirm the environment project ref is staging, then run one due/manual
-   subject: `python bot.py --mode subject-quiz --subject history`.
+3. Confirm the environment project ref is staging, then dispatch
+   `operation=subject-quiz` with one already-enabled, source-covered subject.
+   Leave both force inputs false.
 4. Verify the generated questions cite approved source rows, share the selected
    normalized micro-topic, and each have a passing `question_verifications` row.
 5. Verify one `quiz_runs` row owns a non-expired lease while processing and
@@ -267,7 +281,7 @@ different named-app deployment.
     tie-break metadata.
 16. Stop the API temporarily and open an existing static pack. Confirm the UI
     labels read-only fallback and cannot submit or claim a score.
-17. Run `python scripts/check_public_data.py`; it must pass.
+17. Run `python scripts/check_public_data.py --history`; it must pass.
 18. Trigger two manual runs for the same date/subject close together. One may
     proceed; the other must report that another worker owns the active lease.
 19. Run Supabase advisors again and investigate every error/warning. Expected
@@ -279,17 +293,19 @@ different named-app deployment.
 21. If `YOUTUBE_API_KEY` is configured, trigger discovery with a small limit.
     Confirm new videos are inactive `pending_review` rows, then test approve and
     reject through the authenticated administrator API.
-22. Trigger the final recovery or `export-static-fallbacks`; confirm all valid
-    subject files are staged into one repository commit and contain no answers.
+22. Do not run recovery, announcement, bulk generation, or static fallback
+    export from the staging workflow. Those modes are intentionally absent.
 
 Record the staging quiz ID and pass/fail evidence without recording signed
-Telegram data. Do not activate any chapter during this test.
+Telegram data. Do not activate any chapter during this test. Use
+`docs/STAGING_GUIDE.md` and `docs/TELEGRAM_SMOKE_TEST.md` as the evidence forms.
 
 ## 6. Production release
 
 1. Require green CI and completed staging evidence from the previous section.
 2. Pause production schedules and verify the production project name/ref.
-3. Take the approved backup/checkpoint and apply only unapplied forward
+3. Follow `docs/PRODUCTION_ROLLBACK.md`: record the ledger and preservation
+   counts, take the approved backup/checkpoint, and apply only unapplied forward
    migrations. Never run the bootstrap schema.
 4. Run the exact contract RPC, Supabase security/performance advisors, bot
    preflight, and production `/health/ready`.
@@ -324,7 +340,7 @@ For an application rollback, deploy the previous commit but retain the
 additive database objects. Do not drop new attempt tables after they contain
 data. A forward corrective migration is safer than destructive DDL. A full
 database restore is the only complete rollback and loses every write after the
-backup timestamp; see `docs/MIGRATION_20260722_PRODUCTION_CONTRACT.md`.
+backup timestamp; see `docs/PRODUCTION_ROLLBACK.md`.
 
 ## 8. Known deployment limits
 

@@ -1,15 +1,57 @@
 # Productionization implementation report
 
-Status date: 2026-07-23
+Status date: 2026-07-25
 
-Feature branch: `agent/productionize-quiz-platform`
+Feature branch: `agent/final-release-readiness`
 
-Required database migration: `20260722120827`
+Required database migration: `20260724212939`
 
 Application/database contract: `2.2.0`
 
-This report records implemented and tested local work. It does **not** certify
-hosted staging or production. Production was not queried or modified.
+This report separates historical PR #14 evidence from the current final-release
+follow-up. Production has been inspected read-only but has not been migrated or
+deployed by this follow-up. A hosted gate is complete only when the checklist
+links it to an actual workflow, SQL result, health response, or screenshot
+artifact.
+
+## Final-release follow-up
+
+Implemented on `agent/final-release-readiness`:
+
+- a manual-only, staging-environment workflow restricted to preflight or one
+  selected enabled subject, with exact staging-ref validation and explicit
+  force-operation acknowledgement;
+- full current-tree and Git-history credential scanning for modern
+  Google/Gemini, Google API, Telegram, JWT-like, and Supabase key forms plus
+  non-empty server-secret assignments;
+- recursive answer-field scanning across public quiz JSON and all three
+  frontends;
+- a forward durability migration for bookmark, preference, resource-feedback,
+  and administrative-review rate limits, completing database-backed protection
+  for all critical write families;
+- real Chromium interaction tests at 320×568, 360×800, 390×844, and 412×915,
+  with screenshot attachments and CI artifact upload;
+- a bookmark-queue contract repair found by the browser suite and 44 px minimum
+  touch-target repairs in quiz navigation and practice bottom navigation;
+- staging, Telegram, screenshot, migration, backup, rollback, and
+  migration-failure runbooks.
+
+Current local evidence:
+
+- Python: **227 passed, 15 skipped, 1 warning**. The skipped cases require a
+  configured PostgreSQL integration database.
+- Playwright: **48 passed across four Android viewports** with **44 screenshot
+  attachments** and a complete HTML report.
+- Ruff: passed.
+- Configured mypy: passed for 58 source files.
+- Current tree plus complete reachable Git history credential/public-data scan:
+  passed.
+- `git diff --check`: passed.
+
+The new migration has not yet been applied to staging or production. Hosted CI,
+Render deployment, the certified staging quiz, private Telegram lifecycle,
+production checkpoint, production migration/deployment, and controlled
+production cycle remain release blockers until evidence is recorded below.
 
 ## Original problems confirmed
 
@@ -126,11 +168,12 @@ Documentation:
 1. `20260718220112_production_integrity_contract_v2.sql`
 2. `20260718222134_learning_and_leaderboard_contract_v2.sql`
 3. `20260722120827_revision_reports_and_rankings.sql`
+4. `20260724212939_durable_write_rate_limits.sql`
 
 These are additive/corrective migrations. Do not edit already applied historical
 migrations, and never run `database/schema.sql` on an existing hosted project.
 
-## Test evidence
+## Historical PR #14 test evidence
 
 - Full Python suite: **205 passed, 13 skipped, 1 warning**. The 13 skips are the
   expected database-integration cases when `TEST_DATABASE_URL` is absent.
@@ -164,11 +207,11 @@ question at a time, freezes a submitted answer, shows wrong/correct choices,
 explanation and verified source, plays restrained mistake feedback only for an
 incorrect revision, and shows retry errors inline.
 
-Screenshots at 320, 360, and 412 px are still required against the private
-staging URL. The available cloud-browser runner could not reach the local
-workspace loopback server, so no manual screenshot is claimed.
+The final-readiness follow-up added real Chromium coverage and screenshots at
+all four required viewports. A separate real Telegram staging-device observation
+is still required; mocked browser evidence does not replace it.
 
-## Hosted staging status
+## Historical staging evidence before the final durability migration
 
 After the unrelated project was removed by its owner, Supabase restored
 `telegram-quiz-bot-rollout-staging` (`prdrabmcivgbygzjnmko`) to
@@ -187,7 +230,7 @@ hardened quiz status constraint, and invoker-safe server-only views. No table wa
 deleted, and before/after application row counts remained 3 users, 39 questions,
 4 quiz runs, 4 legacy submissions, and 7 quiz attempts.
 
-The hosted contract now reports **ready**, contract `2.2.0`, required migration
+At that checkpoint the hosted contract reported **ready**, contract `2.2.0`, required migration
 `20260722120827`, threshold `0.85`, and empty missing-table, column, index,
 trigger, function, configuration, schema-permission, RLS, and table-permission
 failure arrays. `service_role` can run the contract; `anon` and `authenticated`
@@ -206,21 +249,24 @@ staging ledger. RLS-without-policy notices are expected deny-by-default behavior
 for the server-only architecture; unused-index notices are expected on the
 low-traffic staging project.
 
-Production `telegram_group_data` was not queried or modified.
+The final-release audit later inspected production read-only and confirmed it
+still ended before the 2.2.0 contract migrations. No production SQL or
+deployment change has been made.
 
 ## Remaining release gates
 
 - Deploy the application with staging-only credentials and verify
   `/health/ready` returns HTTP 200.
-- Complete the private Telegram lifecycle, manual controls, retry/refresh,
-  ranking, revision-sound, and 320/360/412 px checks.
+- Complete the private Telegram lifecycle and real Telegram-device confirmation;
+  deterministic Chromium coverage at all four required widths is already green.
 - Keep all five Computer Education expansion chapters and every other unverified
   chapter inactive.
 - Review the forward recovery plan, take the approved production backup, and
   deploy only after staging evidence is complete.
 - Verify production project ownership, readiness, one controlled quiz, and one
   Telegram post before restoring schedules.
-- Keep draft pull request #14 unmerged until all hosted application gates pass.
+- Keep the final-release pull request unmerged until all hosted application
+  gates pass.
 
 ## Non-programmer verification
 

@@ -9,10 +9,27 @@ Row: TypeAlias = dict[str, Any]
 JsonValue: TypeAlias = (
     None | bool | int | float | str | list["JsonValue"] | dict[str, "JsonValue"]
 )
+SAFE_RATE_LIMIT_MESSAGES = (
+    "bookmark rate limit exceeded",
+    "practice answer rate limit exceeded",
+    "preferences rate limit exceeded",
+    "quiz submission rate limit exceeded",
+    "report rate limit exceeded",
+    "resource feedback rate limit exceeded",
+    "resource review rate limit exceeded",
+)
 
 
 class StorageContractError(RuntimeError):
     """The database returned a shape that violates a repository contract."""
+
+
+def raise_safe_rate_limit(exc: Exception) -> None:
+    """Translate only known database limiter messages without leaking RPC details."""
+    message = str(exc).casefold()
+    for safe_message in SAFE_RATE_LIMIT_MESSAGES:
+        if safe_message in message:
+            raise ValueError(safe_message) from exc
 
 
 def as_row(value: object, context: str) -> Row:

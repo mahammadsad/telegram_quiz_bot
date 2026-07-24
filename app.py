@@ -231,6 +231,10 @@ class ResourceReviewRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+def _value_error_status(exc: ValueError) -> int:
+    return 429 if "rate limit" in str(exc).casefold() else 400
+
+
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(ROOT / "index.html")
@@ -337,7 +341,7 @@ def submit_resource_feedback(resource_id: uuid.UUID, payload: ResourceFeedbackRe
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="রিসোর্স মতামত সংরক্ষণ করা যায়নি।") from exc
 
@@ -396,7 +400,7 @@ def review_resource(
     except PermissionError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Resource review could not be saved.") from exc
 
@@ -424,7 +428,7 @@ def submit_quiz(quiz_id: str, payload: SubmitQuizRequest) -> dict:
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="স্কোর জমা করা যায়নি। একটু পরে আবার চেষ্টা করুন।") from exc
 
@@ -449,7 +453,7 @@ def get_quiz_attempt_result(
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=503,
@@ -533,7 +537,7 @@ def my_wrong_questions(
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="ভুল প্রশ্ন এখন লোড করা যাচ্ছে না।") from exc
 
@@ -560,7 +564,7 @@ def submit_my_practice_answer(question_id: uuid.UUID, payload: PracticeAnswerReq
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="অনুশীলনের উত্তর সংরক্ষণ করা যায়নি।") from exc
 
@@ -627,7 +631,7 @@ def set_my_bookmark(payload: BookmarkRequest) -> dict:
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="বুকমার্ক সংরক্ষণ করা যায়নি।") from exc
 
@@ -656,7 +660,7 @@ def save_my_preferences(payload: UserPreferencesRequest) -> dict:
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="পছন্দের সেটিং সংরক্ষণ করা যায়নি।") from exc
 
