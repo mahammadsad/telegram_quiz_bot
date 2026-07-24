@@ -188,23 +188,75 @@ jobs:
           python - <<'PY'
           import json
           import os
+          from urllib.error import HTTPError
           from urllib.request import urlopen
 
           base = os.environ["RENDER_STAGING_URL"].rstrip("/")
+          operation = os.environ["INPUT_OPERATION"]
           for path in ("/health/live", "/health/ready"):
-              with urlopen(base + path, timeout=30) as response:
+              try:
+                  response = urlopen(base + path, timeout=30)
+              except HTTPError as exc:
+                  response = exc
+              with response:
                   body = json.load(response)
-                  print(
-                      json.dumps(
-                          {
-                              "path": path,
-                              "status": response.status,
-                              "applicationVersion": body.get("applicationVersion"),
-                              "databaseContractVersion": body.get("databaseContractVersion"),
-                              "requiredMigrationVersion": body.get("requiredMigrationVersion"),
-                              "ready": body.get("ready"),
-                          },
-                          sort_keys=True,
+              status = response.getcode()
+              safe = {
+                  "path": path,
+                  "status": status,
+                  "applicationVersion": body.get("applicationVersion"),
+                  "databaseContractVersion": body.get("databaseContractVersion"),
+                  "requiredMigrationVersion": body.get("requiredMigrationVersion"),
+                  "ready": body.get("status") == "ready",
+                  "checks": body.get("checks"),
+                  "failureCategories": body.get("failureCategories"),
+              }
+              print(json.dumps(safe, sort_keys=True))
+
+              if body.get("applicationVersion") != "7.0.0":
+                  raise SystemExit("Staging application version is not the release candidate.")
+              if path == "/health/live":
+                  if status != 200:
+                      raise SystemExit("Staging liveness is not HTTP 200.")
+                  continue
+
+              if body.get("databaseContractVersion") != "2.2.0":
+                  raise SystemExit("Staging database contract version mismatch.")
+              if body.get("requiredMigrationVersion") != "20260724212939":
+                  raise SystemExit("Staging migration version mismatch.")
+              if operation == "subject-quiz":
+                  if status != 200 or body.get("status") != "ready":
+                      raise SystemExit(
+                          "Staging readiness must be HTTP 200 after quiz creation."
                       )
+              elif status == 503:
+                  failures = body.get("failureCategories") or []
+                  checks = body.get("checks") or {}
+                  expected_checks = {
+                      "criticalEnvironment",
+                      "environmentOwnership",
+                      "telegramConfiguration",
+                      "aiConfiguration",
+                      "supabaseConnectivity",
+                      "databaseContract",
+                      "databasePermissions",
+                      "activeQuizRetrieval",
+                  }
+                  if (
+                      failures != ["active_quiz_retrieval"]
+                      or set(checks) != expected_checks
+                      or checks.get("activeQuizRetrieval") is not False
+                      or any(
+                          not value
+                          for name, value in checks.items()
+                          if name != "activeQuizRetrieval"
+                      )
+                  ):
+                      raise SystemExit(
+                          "Pre-quiz readiness has an unexpected failure category."
+                      )
+              elif status != 200 or body.get("status") != "ready":
+                  raise SystemExit(
+                      "Preflight readiness must be ready or fail only the active quiz probe."
                   )
           PY
