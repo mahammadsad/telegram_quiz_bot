@@ -129,7 +129,12 @@ def report_practice_question(
 
 
 def bookmarks(telegram_user: dict) -> dict:
-    return _safe(personal_learning_repo.bookmarks(_user_id(telegram_user)))
+    payload = _safe(personal_learning_repo.bookmarks(_user_id(telegram_user)))
+    return {
+        **payload,
+        "mode": "practice",
+        "sourceType": "bookmark",
+    }
 
 
 def set_bookmark(

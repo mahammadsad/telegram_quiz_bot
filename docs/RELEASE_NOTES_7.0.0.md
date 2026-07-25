@@ -18,6 +18,8 @@ database readiness, revision learning, and the Bengali Mini App experience.
 - Readiness is fail-closed and checks the exact migration, contract, RPC
   signatures, grants, RLS, provider configuration, database access, and an
   active checksum-certified quiz.
+- Database-client project ownership enforcement rejects a mismatched Supabase
+  URL before any network request, including readiness probes.
 - The quiz leaderboard shows a private “আপনার র‍্যাঙ্ক” summary and an unmistakable
   “আপনি” row, including outside the top ten. Typed rankings exclude practice and
   retakes from competitive accuracy.
@@ -38,6 +40,18 @@ database readiness, revision learning, and the Bengali Mini App experience.
 - GitHub Actions are commit-pinned, time-bounded, least-privilege, and protected
   by a production Supabase project-ref check. Render uses a checked-in Blueprint
   and strict `/health/ready` probe.
+- A separate manual staging workflow is bound to the `staging` GitHub
+  Environment, fails closed on the exact staging project ref, and permits only
+  sanitized preflight or one selected subject quiz.
+- PostgreSQL now durably limits bookmarks, preferences, resource feedback, and
+  administrator resource review in addition to the existing submission,
+  report, and practice/revision limits.
+- The credential scanner covers modern Google/Gemini, Telegram, JWT-like, and
+  Supabase key forms, non-empty secret assignments, complete reachable Git
+  history, all frontends, and recursive public JSON answer fields.
+- Playwright exercises 48 real Chromium scenarios across 320×568, 360×800,
+  390×844, and 412×915 and uploads its HTML report, screenshots, traces, and
+  videos as a pull-request artifact.
 - The readiness contract now checks ten failure categories, including schema
   `USAGE`, and the service role can execute required RPCs without granting those
   functions to `anon` or `authenticated`.
@@ -59,20 +73,27 @@ revision page has a single-question focus, large answer options, clear
 wrong/correct colors, restrained feedback, verified-source access, inline
 retry-safe submission, and persistent sound controls.
 
-## Local verification recorded for this release
+## Final-readiness local verification
 
-- Application suite: `205 passed, 13 skipped` (the skipped tests require
+- Application suite: `227 passed, 15 skipped` (the skipped tests require
   `TEST_DATABASE_URL`).
-- GitHub Actions Tests run #77: `218 passed` against PostgreSQL 17 from a clean
-  checkout; database contract `2.2.0` and migration `20260722120827` verified.
-- Fresh disposable PostgreSQL contract suite: `13 passed` after bootstrap and
-  every migration, ending at `20260722120827`.
-- Hosted staging restored to `ACTIVE_HEALTHY`; migrations
-  `20260718222134` and `20260722120827` applied, contract `2.2.0` reports ready,
-  and a rollback-only database lifecycle passed checksum, idempotency, retake,
-  current-user ranking, revision interval, and report checks without changing
-  retained row counts.
-- Ruff: passed. Mypy: passed for 58 source files. JavaScript parse and
-  `git diff --check`: passed.
-- Manual 320/360/412 px screenshots, private Telegram staging, staging readiness,
-  and production readiness remain release gates.
+- Real Chromium: `48 passed` in four Android viewport projects with 44
+  screenshot attachments and a generated HTML report.
+- Ruff: passed. Mypy: passed for 58 source files. Current-tree plus reachable
+  Git-history credential/public-data scan and `git diff --check`: passed.
+
+Final branch GitHub Actions run #84 passed 242 PostgreSQL-backed tests and 48
+Playwright tests, and uploaded the 19.3 MB browser evidence artifact. Hosted
+staging then applied the durable-write migration with unchanged application
+counts; contract `2.2.0` now requires `20260724212939` and reports every failure
+array empty. A clean limiter probe rejected the over-limit call and left no test
+row.
+
+The hosted staging application deployment, private Telegram lifecycle, staging
+readiness, provider backup approval, production migration/deployment, and the
+controlled production lifecycle remain release gates and are not claimed by
+this database/CI evidence.
+
+Historical PR #14 evidence remains recorded in
+`IMPLEMENTATION_REPORT.md`; it does not substitute for revalidating the new
+forward migration and exact final commit.

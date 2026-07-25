@@ -7,6 +7,7 @@ from typing import Any
 
 from database.client import get_client
 from errors import DatabaseIntegrityError
+from storage.contracts import raise_safe_rate_limit
 
 
 def dashboard(user_id: str) -> dict:
@@ -106,7 +107,11 @@ def save_preferences(user_id: str, payload: dict[str, Any]) -> dict:
 
 
 def _rpc(name: str, payload: dict[str, Any]) -> dict:
-    result = get_client().rpc(name, payload).execute()
+    try:
+        result = get_client().rpc(name, payload).execute()
+    except Exception as exc:
+        raise_safe_rate_limit(exc)
+        raise
     if not isinstance(result.data, dict):
         raise DatabaseIntegrityError(f"{name} returned an invalid response.")
     return result.data
