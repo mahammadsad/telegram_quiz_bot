@@ -31,6 +31,12 @@ The required safe settings are the staging project ref,
 `DEV_ALLOW_UNVERIFIED_TELEGRAM` false, `WRITE_STATIC_QUIZ_JSON` false, and
 `APP_TIMEZONE` set to `Asia/Kolkata`.
 
+`SUPABASE_URL` must have the exact host
+`prdrabmcivgbygzjnmko.supabase.co`, and `SUPABASE_SERVICE_KEY` must come from
+that same staging project. Render and GitHub environment values are independent;
+setting one does not configure the other. The shared database client rejects a
+URL/project-ref mismatch before issuing a request.
+
 ## Order of operations
 
 1. Require green PR CI, including PostgreSQL 17 migrations, security scans, and
@@ -40,6 +46,8 @@ The required safe settings are the staging project ref,
    `20260724212939`; the contract remains `2.2.0`.
 4. Deploy the exact CI-tested commit to the existing staging Render service.
    Keep its health probe on `/health/live` until a certified active quiz exists.
+   A legacy `/api/health` probe is readiness, not liveness, and will time out
+   before the certified quiz exists.
 5. Check `/health/live` and the sanitized `/health/ready` body. Before quiz
    creation, only `activeQuizRetrieval` may fail.
 6. Dispatch **Staging Quiz Smoke** with `operation=preflight`.

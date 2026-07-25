@@ -294,6 +294,15 @@ The final-release audit later inspected production read-only and confirmed it
 still ended before the 2.2.0 contract migrations. No production SQL or
 deployment change has been made.
 
+A failed staging Render deployment on 2026-07-24 exposed two configuration
+faults: the service still used `/api/health` as its deployment probe and its
+Supabase URL pointed to production. Production API evidence showed only repeated
+failed, read-only contract RPC requests (HTTP 404); no write endpoint was called
+and no production migration or row changed. The database client now validates
+the URL against `EXPECTED_SUPABASE_PROJECT_REF` before constructing a Supabase
+client, and readiness skips database access when ownership validation fails.
+Staging must remain on `/health/live` until its certified active quiz exists.
+
 ## Remaining release gates
 
 - Deploy the application with staging-only credentials and verify

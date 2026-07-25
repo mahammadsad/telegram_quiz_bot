@@ -113,7 +113,11 @@ def assess(*, use_cache: bool = True) -> Readiness:
     if not checks["aiConfiguration"]:
         failures.append("ai_configuration")
 
-    if SUPABASE_URL and SUPABASE_SERVICE_KEY:
+    if (
+        checks["environmentOwnership"]
+        and SUPABASE_URL
+        and SUPABASE_SERVICE_KEY
+    ):
         try:
             contract = schema_contract_repo.get_contract()
             checks["supabaseConnectivity"] = True

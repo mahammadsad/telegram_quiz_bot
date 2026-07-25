@@ -18,6 +18,8 @@ database readiness, revision learning, and the Bengali Mini App experience.
 - Readiness is fail-closed and checks the exact migration, contract, RPC
   signatures, grants, RLS, provider configuration, database access, and an
   active checksum-certified quiz.
+- Database-client project ownership enforcement rejects a mismatched Supabase
+  URL before any network request, including readiness probes.
 - The quiz leaderboard shows a private “আপনার র‍্যাঙ্ক” summary and an unmistakable
   “আপনি” row, including outside the top ten. Typed rankings exclude practice and
   retakes from competitive accuracy.
