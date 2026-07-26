@@ -14,7 +14,7 @@ on:
       subject:
         description: One enabled, source-covered subject
         required: true
-        default: history
+        default: computer
         type: choice
         options:
           - computer

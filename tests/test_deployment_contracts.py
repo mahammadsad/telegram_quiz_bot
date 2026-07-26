@@ -94,6 +94,8 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     }
     inputs = workflow_trigger["workflow_dispatch"]["inputs"]
     assert inputs["operation"]["options"] == ["preflight", "subject-quiz"]
+    assert inputs["subject"]["default"] == "computer"
+    assert inputs["subject"]["options"][0] == "computer"
     assert inputs["force_post"]["default"] is False
     assert inputs["force_regenerate"]["default"] is False
 
