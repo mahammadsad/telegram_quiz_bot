@@ -22,7 +22,17 @@ _DIFFICULTIES = {"easy", "medium", "hard"}
 
 
 class QuizValidationError(ValueError):
-    pass
+    def __init__(
+        self,
+        message: str,
+        *,
+        attempts: list[dict[str, Any]] | None = None,
+        retryable: bool = False,
+    ) -> None:
+        super().__init__(message)
+        self.category = "validation_failed"
+        self.attempts = attempts or []
+        self.retryable = retryable
 
 
 def validate_questions(

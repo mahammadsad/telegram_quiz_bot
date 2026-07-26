@@ -278,6 +278,88 @@ def test_invalid_repaired_json_is_never_accepted():
     assert pool.calls == 2
 
 
+def test_semantically_invalid_json_gets_one_full_repair(valid_questions, caplog):
+    invalid = [dict(row, difficulty="medium") for row in valid_questions]
+
+    class Pool:
+        def __init__(self):
+            self.calls = []
+
+        def generate_subject_quiz(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                return json.dumps(invalid, ensure_ascii=False), {
+                    "provider": "primary",
+                    "model": "generator",
+                    "attempts": 1,
+                    "providers_attempted": ["primary"],
+                }
+            if len(self.calls) == 2:
+                return json.dumps(valid_questions, ensure_ascii=False), {
+                    "provider": "primary",
+                    "model": "generator",
+                    "attempts": 1,
+                    "providers_attempted": ["primary"],
+                }
+            return json.dumps(verifier_rows()), {
+                "provider": "secondary",
+                "model": "verifier",
+                "attempts": 1,
+                "providers_attempted": ["secondary"],
+            }
+
+    pool = Pool()
+    clean, metadata = bot.generate_mcqs(
+        "history",
+        "আধুনিক ভারত",
+        pool=pool,
+        grounding_bundle=grounding_bundle(),
+    )
+
+    assert len(clean) == 10
+    assert len(pool.calls) == 3
+    assert "difficulty_distribution" in pool.calls[1]["prompt"]
+    assert invalid[0]["question"] not in pool.calls[1]["prompt"]
+    assert "difficulty_distribution" in caplog.text
+    assert invalid[0]["question"] not in caplog.text
+    assert metadata["attempts"] == 2
+    assert metadata["semantic_repair_attempted"] is True
+
+
+def test_semantically_invalid_json_twice_fails_closed(valid_questions):
+    invalid = [dict(row, difficulty="medium") for row in valid_questions]
+
+    class Pool:
+        def __init__(self):
+            self.calls = 0
+
+        def generate_subject_quiz(self, **kwargs):
+            self.calls += 1
+            return json.dumps(invalid, ensure_ascii=False), {
+                "provider": "primary",
+                "model": "generator",
+                "attempts": 1,
+                "providers_attempted": ["primary"],
+            }
+
+    pool = Pool()
+    with pytest.raises(
+        bot.QuizValidationError,
+        match="after one repair attempt.*difficulty_distribution",
+    ) as caught:
+        bot.generate_mcqs(
+            "history",
+            "আধুনিক ভারত",
+            pool=pool,
+            grounding_bundle=grounding_bundle(),
+            quiz_id="20260710-history",
+        )
+
+    assert pool.calls == 2
+    assert len(caught.value.attempts) == 2
+    assert caught.value.retryable is False
+
+
 def test_recovery_only_processes_due_and_skips_posted(monkeypatch):
     now = datetime(2026, 7, 10, 10, 30, tzinfo=ZoneInfo("Asia/Kolkata"))
     posted_id = build_quiz_id(now.date(), "bengali")

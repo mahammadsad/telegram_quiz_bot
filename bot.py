@@ -74,6 +74,30 @@ MCQ_JSON_SCHEMA = {
     },
 }
 
+_GENERATION_VALIDATION_REPAIR_LIMIT = 1
+_VALIDATION_REASON_CODES = (
+    ("exactly 10 questions", "question_count"),
+    ("must be an object", "question_object"),
+    ("four options", "option_count"),
+    ("readable bengali", "bengali_text"),
+    ("appears truncated", "truncated_text"),
+    ("four non-empty options", "option_count"),
+    ("duplicate options", "duplicate_options"),
+    ("correct index", "correct_index"),
+    ("reveals its correct answer", "answer_revealing_stem"),
+    ("bengali explanations", "bengali_explanation"),
+    ("another subject", "subject_mismatch"),
+    ("another chapter", "chapter_mismatch"),
+    ("micro-topic", "micro_topic"),
+    ("verified source document", "source_document"),
+    ("outside the grounding bundle", "source_document"),
+    ("invalid difficulty", "difficulty"),
+    ("invalid language", "language"),
+    ("blank or duplicated", "duplicate_question"),
+    ("difficulty distribution", "difficulty_distribution"),
+    ("balanced across all four option positions", "answer_position_balance"),
+)
+
 
 def build_mcq_prompt(
     subject_key: str,
@@ -107,38 +131,69 @@ Rules:
 """
 
 
-def generate_mcqs(
+def _validation_reason_code(exc: QuizValidationError) -> str:
+    message = str(exc).casefold()
+    for marker, code in _VALIDATION_REASON_CODES:
+        if marker in message:
+            return code
+    return "semantic_contract"
+
+
+def _repair_generation_prompt(prompt: str, reason_code: str) -> str:
+    return (
+        prompt
+        + "\nThe previous response failed deterministic validation with code "
+        + reason_code
+        + ". Generate one complete replacement array from the verified facts. "
+        + "Re-check every numbered rule before returning it. Do not return a partial "
+        + "patch, commentary, or the previous response."
+    )
+
+
+def _aggregate_generation_metadata(history: list[dict]) -> dict:
+    if not history:
+        return {}
+    merged = dict(history[-1])
+    providers: list[str] = []
+    attempt_rows: list[dict[str, str]] = []
+    attempt_count = 0
+    for row in history:
+        try:
+            calls = max(0, int(row.get("attempts") or 0))
+        except (TypeError, ValueError):
+            calls = 0
+        attempt_count += calls
+        row_providers = row.get("providers_attempted")
+        if not isinstance(row_providers, list):
+            row_providers = [row.get("provider")]
+        clean_providers = [
+            str(provider)
+            for provider in row_providers
+            if isinstance(provider, str) and provider
+        ]
+        for provider in clean_providers:
+            if provider not in providers:
+                providers.append(provider)
+        provider = str(row.get("provider") or (clean_providers[-1] if clean_providers else ""))
+        model = str(row.get("model") or "")
+        attempt_rows.extend(
+            {"provider": provider, "model": model}
+            for _ in range(calls)
+            if provider
+        )
+    merged["attempts"] = attempt_count or len(history)
+    merged["providers_attempted"] = providers
+    merged["attempt_trace"] = attempt_rows
+    merged["semantic_repair_attempted"] = len(history) > 1
+    return merged
+
+
+def _enrich_generated_questions(
+    raw: list,
     subject_key: str,
     chapter: str,
-    *,
-    pool: GeminiProviderPool | None = None,
-    target_date: date | None = None,
-    grounding_bundle: source_grounding.GroundingBundle | None = None,
-    quiz_id: str | None = None,
-) -> tuple[list[dict], dict]:
-    pool = pool or GeminiProviderPool()
-    grounding_bundle = grounding_bundle or source_grounding.load_grounding_bundle(
-        subject_key,
-        chapter,
-        target_date or local_today(),
-    )
-    prompt = build_mcq_prompt(subject_key, chapter, grounding_bundle)
-    raw_text, generation = pool.generate_subject_quiz(prompt=prompt, response_schema=MCQ_JSON_SCHEMA)
-    try:
-        raw = json.loads(raw_text)
-    except (TypeError, json.JSONDecodeError):
-        repair_prompt = (
-            prompt
-            + "\nThe prior output was malformed JSON. Repair it once. Return only a valid JSON array; "
-            + "do not add, remove, or partially return questions."
-        )
-        repaired_text, generation = pool.generate_subject_quiz(prompt=repair_prompt, response_schema=MCQ_JSON_SCHEMA)
-        try:
-            raw = json.loads(repaired_text)
-        except (TypeError, json.JSONDecodeError) as exc:
-            raise QuizValidationError("Gemini returned malformed JSON after one repair request.") from exc
-    if not isinstance(raw, list):
-        raise QuizValidationError("Gemini response must be a JSON array.")
+    grounding_bundle: source_grounding.GroundingBundle,
+) -> list:
     enriched = []
     source_by_id = {document.id: document for document in grounding_bundle.documents}
     for item in raw:
@@ -164,15 +219,98 @@ def generate_mcqs(
             })
         else:
             enriched.append(item)
-    generated = validate_questions(
-        enriched,
+    return enriched
+
+
+def generate_mcqs(
+    subject_key: str,
+    chapter: str,
+    *,
+    pool: GeminiProviderPool | None = None,
+    target_date: date | None = None,
+    grounding_bundle: source_grounding.GroundingBundle | None = None,
+    quiz_id: str | None = None,
+) -> tuple[list[dict], dict]:
+    pool = pool or GeminiProviderPool()
+    grounding_bundle = grounding_bundle or source_grounding.load_grounding_bundle(
         subject_key,
         chapter,
-        micro_topic_id=grounding_bundle.micro_topic_id,
-        micro_topic_key=grounding_bundle.micro_topic_key,
-        allowed_source_ids=grounding_bundle.source_ids,
-        require_verification=False,
+        target_date or local_today(),
     )
+    prompt = build_mcq_prompt(subject_key, chapter, grounding_bundle)
+    generation_history: list[dict] = []
+    active_prompt = prompt
+    generated: list[dict] | None = None
+    for repair_number in range(_GENERATION_VALIDATION_REPAIR_LIMIT + 1):
+        raw_text, call_metadata = pool.generate_subject_quiz(
+            prompt=active_prompt,
+            response_schema=MCQ_JSON_SCHEMA,
+        )
+        generation_history.append(call_metadata)
+        validation_error: QuizValidationError | None = None
+        try:
+            raw = json.loads(raw_text)
+        except (TypeError, json.JSONDecodeError):
+            raw = None
+            validation_error = QuizValidationError("Gemini response was malformed JSON.")
+        if raw is not None and not isinstance(raw, list):
+            validation_error = QuizValidationError("Gemini response must be a JSON array.")
+        if isinstance(raw, list):
+            enriched = _enrich_generated_questions(
+                raw,
+                subject_key,
+                chapter,
+                grounding_bundle,
+            )
+            try:
+                generated = validate_questions(
+                    enriched,
+                    subject_key,
+                    chapter,
+                    micro_topic_id=grounding_bundle.micro_topic_id,
+                    micro_topic_key=grounding_bundle.micro_topic_key,
+                    allowed_source_ids=grounding_bundle.source_ids,
+                    require_verification=False,
+                )
+            except QuizValidationError as exc:
+                validation_error = exc
+
+        if validation_error is None and generated is not None:
+            break
+        reason_code = (
+            "malformed_json"
+            if raw is None
+            else _validation_reason_code(
+                validation_error or QuizValidationError("semantic contract")
+            )
+        )
+        if repair_number < _GENERATION_VALIDATION_REPAIR_LIMIT:
+            LOG.warning(
+                "GEMINI_GENERATION_REPAIR subject=%s quiz_id=%s reason=%s",
+                subject_key,
+                quiz_id or "unassigned",
+                reason_code,
+            )
+            active_prompt = _repair_generation_prompt(prompt, reason_code)
+            generated = None
+            continue
+
+        LOG.error(
+            "GEMINI_GENERATION_VALIDATION_FAILED subject=%s quiz_id=%s reason=%s",
+            subject_key,
+            quiz_id or "unassigned",
+            reason_code,
+        )
+        metadata = _aggregate_generation_metadata(generation_history)
+        final_error = QuizValidationError(
+            "Gemini quiz failed deterministic validation after one repair attempt "
+            f"({reason_code}).",
+            attempts=metadata.get("attempt_trace") or [],
+        )
+        raise final_error from validation_error
+    if generated is None:
+        raise RuntimeError("Quiz generation completed without validated questions.")
+    generation = _aggregate_generation_metadata(generation_history)
     verified, verification = question_verification.verify_questions(
         generated,
         grounding_bundle,
