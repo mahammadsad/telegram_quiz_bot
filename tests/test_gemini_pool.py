@@ -103,7 +103,7 @@ def test_model_fallback_same_provider_before_secondary():
     _, metadata = generate(pool)
     assert metadata["provider"] == "primary"
     assert metadata["model"] == "gemini-2.5-flash"
-    assert [call["model"] for call in clients["primary-secret"].models.calls] == ["gemini-2.5-flash-lite", "gemini-2.5-flash"]
+    assert [call["model"] for call in clients["primary-secret"].models.calls] == ["gemini-3.1-flash-lite", "gemini-2.5-flash"]
 
 
 def test_cooling_provider_is_skipped_on_next_generation():

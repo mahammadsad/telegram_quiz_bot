@@ -184,7 +184,7 @@ the same environment as the scheduled bot also includes:
 ```text
 GEMINI_API_KEY_PRIMARY
 GEMINI_API_KEY_SECONDARY
-GEMINI_MODEL_PRIMARY=gemini-2.5-flash-lite
+GEMINI_MODEL_PRIMARY=gemini-3.1-flash-lite
 GEMINI_MODEL_FALLBACK=gemini-2.5-flash
 GEMINI_FAILOVER_ENABLED=true
 GEMINI_FACTUAL_TEMPERATURE=0.3

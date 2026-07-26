@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from config.settings import CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS
 from services.question_validation import QuizValidationError
 from storage import source_documents_repo
+from utils.source_validation import is_placeholder_source
 
 
 @dataclass(frozen=True, slots=True)
@@ -97,6 +98,8 @@ def _validated_document(row: dict, subject_key: str, target_date: date) -> Sourc
     parsed = urlparse(url)
     if parsed.scheme != "https" or not parsed.hostname:
         raise QuizValidationError(f"Source {source_id} must use an HTTPS URL.")
+    if is_placeholder_source(url, title):
+        raise QuizValidationError(f"Source {source_id} uses placeholder source metadata.")
     hostname = parsed.hostname.lower()
     if hostname != domain and not hostname.endswith(f".{domain}"):
         raise QuizValidationError(f"Source {source_id} URL does not match its verified domain.")

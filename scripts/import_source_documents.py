@@ -14,6 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from config.subjects import get_subject  # noqa: E402
+from utils.source_validation import is_placeholder_source  # noqa: E402
 
 
 def main() -> int:
@@ -125,6 +126,9 @@ def validate_source_row(raw: object, row_number: int) -> dict:
     hostname = parsed.hostname.lower()
     if hostname != source_domain and not hostname.endswith(f".{source_domain}"):
         raise ValueError(f"Source row {row_number} domain does not match its URL.")
+    source_title = _required(raw, "source_title", row_number)
+    if is_placeholder_source(source_url, source_title):
+        raise ValueError(f"Source row {row_number} uses placeholder source metadata.")
     source_kind = str(raw.get("source_kind") or "official").strip().lower()
     if source_kind not in {"official", "primary", "secondary"}:
         raise ValueError(f"Source row {row_number} has an invalid source_kind.")
@@ -147,7 +151,7 @@ def validate_source_row(raw: object, row_number: int) -> dict:
         "micro_topic_name": micro_topic_name,
         "micro_topic_key": str(raw.get("micro_topic_key") or "").strip().lower(),
         "source_url": source_url,
-        "source_title": _required(raw, "source_title", row_number),
+        "source_title": source_title,
         "source_domain": source_domain,
         "source_kind": source_kind,
         "source_published_at": published_at,
