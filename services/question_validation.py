@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 import uuid
 from collections import Counter
+from random import Random, SystemRandom
 from typing import Any
 from urllib.parse import urlparse
 
@@ -19,6 +20,12 @@ from utils.hashing import (
 QUESTION_COUNT = 10
 _BENGALI_RE = re.compile(r"[\u0980-\u09ff]")
 _DIFFICULTIES = {"easy", "medium", "hard"}
+_DERIVED_VERSION_FIELDS = {
+    "content_hash",
+    "question_hash",
+    "question_id",
+    "stem_hash",
+}
 
 
 class QuizValidationError(ValueError):
@@ -33,6 +40,63 @@ class QuizValidationError(ValueError):
         self.category = "validation_failed"
         self.attempts = attempts or []
         self.retryable = retryable
+
+
+def randomize_balanced_answer_positions(
+    questions: list[dict],
+    *,
+    rng: Random | None = None,
+) -> list[dict]:
+    """Move each correct option to a securely randomized balanced position.
+
+    The correct option text is preserved, inputs are not mutated, and derived
+    version fields are removed so callers must revalidate and rehash the
+    transformed content. Production callers use operating-system entropy;
+    tests may inject a seeded Random instance.
+    """
+    if not isinstance(questions, list) or len(questions) != QUESTION_COUNT:
+        count = len(questions) if isinstance(questions, list) else 0
+        raise QuizValidationError(f"A quiz must contain exactly 10 questions; received {count}.")
+
+    randomizer = rng or SystemRandom()
+    position_order = list(range(4))
+    randomizer.shuffle(position_order)
+    extra_positions = set(position_order[:2])
+    target_positions = [
+        position
+        for position in range(4)
+        for _ in range(2 + int(position in extra_positions))
+    ]
+    randomizer.shuffle(target_positions)
+
+    balanced: list[dict] = []
+    for number, (raw, target) in enumerate(
+        zip(questions, target_positions, strict=True),
+        start=1,
+    ):
+        if not isinstance(raw, dict):
+            raise QuizValidationError(f"Question {number} must be an object.")
+        options = raw.get("options")
+        correct = raw.get("correct_index")
+        if not isinstance(options, list) or len(options) != 4:
+            raise QuizValidationError(f"Question {number} must contain four options.")
+        if isinstance(correct, bool) or not isinstance(correct, int) or correct not in range(4):
+            raise QuizValidationError(f"Question {number} has an invalid correct index.")
+
+        moved_options = list(options)
+        moved_options[correct], moved_options[target] = (
+            moved_options[target],
+            moved_options[correct],
+        )
+        moved = {
+            key: value
+            for key, value in raw.items()
+            if key not in _DERIVED_VERSION_FIELDS
+        }
+        moved["options"] = moved_options
+        moved["correct_index"] = target
+        balanced.append(moved)
+    return balanced
 
 
 def validate_questions(

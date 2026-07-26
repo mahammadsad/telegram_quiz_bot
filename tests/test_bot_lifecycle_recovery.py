@@ -326,6 +326,61 @@ def test_semantically_invalid_json_gets_one_full_repair(valid_questions, caplog)
     assert metadata["semantic_repair_attempted"] is True
 
 
+def test_unbalanced_answer_positions_are_randomized_without_model_repair(
+    valid_questions,
+):
+    unbalanced = []
+    original_answers = []
+    for row in valid_questions:
+        moved = dict(row)
+        options = list(row["options"])
+        correct = row["correct_index"]
+        original_answers.append(options[correct])
+        options[0], options[correct] = options[correct], options[0]
+        moved["options"] = options
+        moved["correct_index"] = 0
+        unbalanced.append(moved)
+
+    class Pool:
+        def __init__(self):
+            self.calls = []
+
+        def generate_subject_quiz(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                return json.dumps(unbalanced, ensure_ascii=False), {
+                    "provider": "primary",
+                    "model": "generator",
+                    "attempts": 1,
+                    "providers_attempted": ["primary"],
+                }
+            return json.dumps(verifier_rows()), {
+                "provider": "secondary",
+                "model": "verifier",
+                "attempts": 1,
+                "providers_attempted": ["secondary"],
+            }
+
+    pool = Pool()
+    clean, metadata = bot.generate_mcqs(
+        "history",
+        "আধুনিক ভারত",
+        pool=pool,
+        grounding_bundle=grounding_bundle(),
+    )
+
+    assert len(pool.calls) == 2
+    assert metadata["semantic_repair_attempted"] is False
+    assert sorted(
+        sum(row["correct_index"] == position for row in clean)
+        for position in range(4)
+    ) == [2, 2, 3, 3]
+    assert [
+        row["options"][row["correct_index"]]
+        for row in clean
+    ] == original_answers
+
+
 def test_semantically_invalid_json_twice_fails_closed(valid_questions):
     invalid = [dict(row, difficulty="medium") for row in valid_questions]
 

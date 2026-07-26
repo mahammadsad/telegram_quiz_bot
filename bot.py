@@ -43,6 +43,7 @@ from services.question_validation import (
     QUESTION_COUNT,
     QuizValidationError,
     checksum_for_pack,
+    randomize_balanced_answer_positions,
     validate_questions,
 )
 from storage import chapter_history_repo, quiz_runs_repo, schema_contract_repo
@@ -263,14 +264,29 @@ def generate_mcqs(
                 grounding_bundle,
             )
             try:
-                generated = validate_questions(
+                structurally_valid = validate_questions(
                     enriched,
+                    subject_key,
+                    chapter,
+                    enforce_composition=False,
+                    micro_topic_id=grounding_bundle.micro_topic_id,
+                    micro_topic_key=grounding_bundle.micro_topic_key,
+                    allowed_source_ids=grounding_bundle.source_ids,
+                    require_verification=False,
+                )
+                generated = validate_questions(
+                    randomize_balanced_answer_positions(structurally_valid),
                     subject_key,
                     chapter,
                     micro_topic_id=grounding_bundle.micro_topic_id,
                     micro_topic_key=grounding_bundle.micro_topic_key,
                     allowed_source_ids=grounding_bundle.source_ids,
                     require_verification=False,
+                )
+                LOG.info(
+                    "ANSWER_POSITIONS_BALANCED subject=%s quiz_id=%s",
+                    subject_key,
+                    quiz_id or "unassigned",
                 )
             except QuizValidationError as exc:
                 validation_error = exc
