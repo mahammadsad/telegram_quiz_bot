@@ -1,7 +1,7 @@
 from datetime import date, timedelta
 
 from services.chapter_selector import select_chapter
-from storage import stats_repo
+from storage import chapter_history_repo, stats_repo
 
 
 def test_chapter_selector_prefers_unseen_chapters():
@@ -43,6 +43,116 @@ def test_chapter_selector_keeps_latest_date_for_duplicate_history_rows():
 def test_chapter_selector_never_crosses_subject_catalogues():
     assert select_chapter("science", date(2026, 7, 10), []) == "পদার্থবিদ্যা"
     assert select_chapter("science", date(2026, 7, 10), []) != "প্রাচীন ভারত"
+
+
+def test_chapter_history_record_updates_legacy_table_without_unique_constraint(
+    monkeypatch,
+):
+    calls = []
+
+    class Result:
+        def __init__(self, data):
+            self.data = data
+
+    class Query:
+        def __init__(self, existing):
+            self.existing = existing
+            self.action = ""
+            self.payload = None
+            self.filters = []
+
+        def select(self, fields):
+            self.action = "select"
+            return self
+
+        def update(self, payload):
+            self.action = "update"
+            self.payload = payload
+            return self
+
+        def insert(self, payload):
+            self.action = "insert"
+            self.payload = payload
+            return self
+
+        def eq(self, field, value):
+            self.filters.append((field, value))
+            return self
+
+        def limit(self, value):
+            return self
+
+        def execute(self):
+            calls.append((self.action, self.payload, self.filters))
+            return Result([{"id": "existing"}] if self.action == "select" and self.existing else [])
+
+    class Client:
+        def __init__(self, existing):
+            self.existing = existing
+
+        def table(self, name):
+            assert name == "chapter_history"
+            return Query(self.existing)
+
+    monkeypatch.setattr(chapter_history_repo, "get_client", lambda: Client(True))
+    chapter_history_repo.record(
+        "computer",
+        "কম্পিউটার মৌলিক ধারণা",
+        "2026-07-27",
+        "20260727-computer",
+    )
+
+    assert [call[0] for call in calls] == ["select", "update"]
+    assert ("subject_key", "computer") in calls[1][2]
+    assert ("selected_for", "2026-07-27") in calls[1][2]
+
+
+def test_chapter_history_record_inserts_when_date_is_new(monkeypatch):
+    calls = []
+
+    class Result:
+        def __init__(self, data):
+            self.data = data
+
+    class Query:
+        def __init__(self):
+            self.action = ""
+            self.payload = None
+
+        def select(self, fields):
+            self.action = "select"
+            return self
+
+        def insert(self, payload):
+            self.action = "insert"
+            self.payload = payload
+            return self
+
+        def eq(self, field, value):
+            return self
+
+        def limit(self, value):
+            return self
+
+        def execute(self):
+            calls.append((self.action, self.payload))
+            return Result([])
+
+    class Client:
+        def table(self, name):
+            assert name == "chapter_history"
+            return Query()
+
+    monkeypatch.setattr(chapter_history_repo, "get_client", Client)
+    chapter_history_repo.record(
+        "computer",
+        "কম্পিউটার মৌলিক ধারণা",
+        "2026-07-27",
+        "20260727-computer",
+    )
+
+    assert [call[0] for call in calls] == ["select", "insert"]
+    assert calls[1][1]["quiz_id"] == "20260727-computer"
 
 
 def test_quiz_leaderboard_uses_paginated_database_rpc(monkeypatch):

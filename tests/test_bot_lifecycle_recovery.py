@@ -133,6 +133,85 @@ def test_force_post_reuses_saved_pack_without_gemini(monkeypatch, valid_question
     assert any(event[0] == "telegram" for event in events)
 
 
+def test_certified_generation_failure_reuses_pack_and_restores_ready(
+    monkeypatch,
+    valid_questions,
+):
+    existing = {
+        "status": "generation_failed",
+        "question_count": 10,
+        "ready_at": "2026-07-27T00:16:06+00:00",
+        "integrity_verified": True,
+        "checksum_contract_version": 2,
+        "generated_checksum": "checksum",
+        "persisted_checksum": "checksum",
+    }
+    events, saved = setup_run(monkeypatch, valid_questions, existing_run=existing)
+    monkeypatch.setattr(bot, "valid_saved_pack", lambda quiz_id, run: saved)
+    monkeypatch.setattr(
+        bot,
+        "generate_mcqs",
+        lambda *args, **kwargs: pytest.fail("Gemini was called"),
+    )
+
+    result = bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
+
+    assert result == "posted_from_saved_quiz"
+    assert ("status", "ready") in events
+    assert not any(event[0] == "save_pack" for event in events)
+    assert any(event[0] == "telegram" for event in events)
+
+
+def test_valid_saved_pack_accepts_only_certified_generation_failure(
+    monkeypatch,
+    valid_questions,
+):
+    saved = pack_from_questions(valid_questions)
+    monkeypatch.setattr(bot.quiz_pack_service, "get_quiz_pack", lambda quiz_id: saved)
+    monkeypatch.setattr(bot, "checksum_for_pack", lambda pack: "checksum")
+    certified = {
+        "status": "generation_failed",
+        "question_count": 10,
+        "ready_at": "2026-07-27T00:16:06+00:00",
+        "integrity_verified": True,
+        "checksum_contract_version": 2,
+        "generated_checksum": "checksum",
+        "persisted_checksum": "checksum",
+    }
+
+    assert bot.valid_saved_pack("20260710-history", certified) is saved
+
+    for field, value in (
+        ("question_count", 9),
+        ("ready_at", None),
+        ("integrity_verified", False),
+        ("checksum_contract_version", 1),
+        ("persisted_checksum", "different"),
+    ):
+        invalid = {**certified, field: value}
+        assert bot.valid_saved_pack("20260710-history", invalid) is None
+
+
+def test_chapter_history_failure_never_blocks_certified_quiz_post(
+    monkeypatch,
+    valid_questions,
+    caplog,
+):
+    events, _ = setup_run(monkeypatch, valid_questions)
+    monkeypatch.setattr(
+        bot.chapter_history_repo,
+        "record",
+        lambda *args: (_ for _ in ()).throw(RuntimeError("history unavailable")),
+    )
+
+    result = bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
+
+    assert result == "generated_and_posted"
+    assert ("status", "generation_failed") not in events
+    assert any(event[0] == "telegram" for event in events)
+    assert "CHAPTER_HISTORY_UPDATE_FAILED" in caplog.text
+
+
 def test_force_regenerate_uses_explicit_replacement_path(monkeypatch, valid_questions):
     existing = {"status": "generated", "content_checksum": "old"}
     events, _ = setup_run(monkeypatch, valid_questions, existing_run=existing)

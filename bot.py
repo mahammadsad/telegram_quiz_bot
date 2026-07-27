@@ -349,9 +349,19 @@ def generate_mcqs(
 
 
 def valid_saved_pack(quiz_id: str, run: dict | None = None) -> dict | None:
+    status = run.get("status") if run else None
+    recoverable_certified_failure = bool(
+        run
+        and status == "generation_failed"
+        and run.get("question_count") == QUESTION_COUNT
+        and run.get("ready_at")
+    )
     if (
         not run
-        or run.get("status") not in {"ready", "posting", "posting_failed", "posted"}
+        or (
+            status not in {"ready", "posting", "posting_failed", "posted"}
+            and not recoverable_certified_failure
+        )
         or run.get("integrity_verified") is not True
         or int(run.get("checksum_contract_version") or 0) != 2
         or not run.get("generated_checksum")
@@ -576,8 +586,6 @@ def run_subject_quiz(
                 generated_at=datetime.now(timezone.utc).isoformat(),
                 last_error_category=None,
             )
-            chapter_history_repo.record(subject_key, chapter, target_date.isoformat(), quiz_id)
-            export_static_quiz_json(pack)
             LOG.info(
                 "GEMINI_GENERATION_SUCCESS subject=%s quiz_id=%s provider=%s model=%s attempts=%s question_count=10",
                 subject_key, quiz_id, generation["provider"], generation["model"], generation["attempts"],
@@ -611,7 +619,26 @@ def run_subject_quiz(
             send_failure_alert(subject_key, quiz_id, router)
             raise
 
+    if used_saved_pack and run and run.get("status") == "generation_failed":
+        quiz_runs_repo.update_status(
+            quiz_id,
+            "ready",
+            release_claim=True,
+            question_count=QUESTION_COUNT,
+            last_error_category=None,
+            last_error_at=None,
+        )
+        LOG.info("CERTIFIED_QUIZ_READY_STATE_RECOVERED subject=%s quiz_id=%s", subject_key, quiz_id)
+
     chapter = (pack.get("meta") or {}).get("chapter") or (run or {}).get("chapter") or ""
+    try:
+        chapter_history_repo.record(subject_key, chapter, target_date.isoformat(), quiz_id)
+    except Exception:
+        LOG.warning("CHAPTER_HISTORY_UPDATE_FAILED subject=%s quiz_id=%s", subject_key, quiz_id)
+    try:
+        export_static_quiz_json(pack)
+    except Exception:
+        LOG.warning("STATIC_QUIZ_EXPORT_FAILED subject=%s quiz_id=%s", subject_key, quiz_id)
     if not quiz_runs_repo.claim(
         quiz_id,
         worker_id,
