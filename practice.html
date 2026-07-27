@@ -67,7 +67,7 @@
   </header>
   <section class="card" aria-live="polite">
     <div id="loading" class="state"><div class="loader"></div>প্রশ্ন লোড হচ্ছে...</div>
-    <div id="empty" class="state hidden"><p id="empty-message">এই তালিকায় এখন কোনো প্রশ্ন নেই। নতুন কুইজ শেষ করলে এখানে প্রশ্ন যোগ হবে।</p><div class="actions"><a class="btn primary" href="dashboard.html">ড্যাশবোর্ডে ফিরুন</a><a class="btn" href="index.html">কুইজ খুলুন</a></div></div>
+    <div id="empty" class="state hidden"><p id="empty-message">এই তালিকায় এখন কোনো প্রশ্ন নেই। নতুন কুইজ শেষ করলে এখানে প্রশ্ন যোগ হবে।</p><div class="actions"><a class="btn primary" href="dashboard.html">ড্যাশবোর্ডে ফিরুন</a><a class="btn" id="empty-quiz-link" href="/">কুইজ খুলুন</a></div></div>
     <div id="error" class="state hidden">অনুশীলন খুলতে Telegram-এর কুইজ বাটন ব্যবহার করুন, অথবা পরে আবার চেষ্টা করুন।<div class="actions"><button class="btn" id="retry" type="button">আবার চেষ্টা করুন</button></div></div>
     <div id="practice" class="hidden">
       <div class="progress" aria-hidden="true"><span id="bar"></span></div>
@@ -82,7 +82,7 @@
   </section>
 </main>
 <nav class="bottom" aria-label="প্রধান নেভিগেশন">
-  <a href="dashboard.html">হোম</a><a class="active" href="practice.html?source=wrong">অনুশীলন</a><a href="practice.html?source=due">পুনরাবৃত্তি</a><a href="dashboard.html#analytics">পরিসংখ্যান</a>
+  <a href="dashboard.html">হোম</a><a id="nav-practice" href="practice.html?source=wrong">অনুশীলন</a><a id="nav-revision" href="practice.html?source=due">পুনরাবৃত্তি</a><a href="dashboard.html#analytics">পরিসংখ্যান</a>
 </nav>
 <script>
 (function(){
@@ -95,6 +95,8 @@
   var requestedSource=params.get("source")||"wrong";
   var subject=params.get("subject")||"";
   if(["wrong","due","bookmark","weak_topic"].indexOf(requestedSource)<0)requestedSource="wrong";
+  var launchQuizId=(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.start_param)||"";
+  var quizHomeUrl=launchQuizId?"/?quiz="+encodeURIComponent(launchQuizId):"/";
   var rows=[],index=0,selected=null,started=0,submitting=false,answerFrozen=false;
   var queueMode="",queueSource="",attemptId="",audioContext=null;
   var feedbackPlayed=Object.create(null);
@@ -129,6 +131,9 @@
   }
 
   el("title").textContent=labels[requestedSource][0];el("subtitle").textContent=labels[requestedSource][1];
+  el("empty-quiz-link").href=quizHomeUrl;
+  el("nav-practice").classList.toggle("active",requestedSource!=="due");
+  el("nav-revision").classList.toggle("active",requestedSource==="due");
   el("submit").addEventListener("click",submit);el("next").addEventListener("click",next);el("retry").addEventListener("click",load);
   document.addEventListener("keydown",function(event){if(answerFrozen||submitting)return;if(["1","2","3","4"].indexOf(event.key)>=0){selected=+event.key-1;savePending(false);renderOptions()}else if(event.key==="Enter"&&selected!==null)submit()});
   load();

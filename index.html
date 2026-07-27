@@ -470,7 +470,7 @@
   </section>
 </main>
 <div class="modal hidden" id="submit-modal" role="dialog" aria-modal="true" aria-labelledby="submit-title"><div class="modal-card"><h2 id="submit-title">উত্তরপত্র সাবমিট করবেন?</h2><p id="submit-summary"></p><div class="actions"><button class="btn btn-secondary" id="btn-submit-back" type="button">ফিরে যান</button><button class="btn btn-primary" id="btn-submit-confirm" type="button">তবুও সাবমিট করুন</button></div></div></div>
-<nav class="bottom-nav" aria-label="প্রধান নেভিগেশন"><a class="active" href="index.html">কুইজ</a><a href="practice.html?source=wrong">অনুশীলন</a><a href="practice.html?source=due">পুনরাবৃত্তি</a><a href="dashboard.html">পরিসংখ্যান</a></nav>
+<nav class="bottom-nav" aria-label="প্রধান নেভিগেশন"><a class="active" id="nav-quiz" href="/">কুইজ</a><a href="practice.html?source=wrong">অনুশীলন</a><a href="practice.html?source=due">পুনরাবৃত্তি</a><a href="dashboard.html">পরিসংখ্যান</a></nav>
 
 <script>
 (function(){
@@ -536,7 +536,7 @@
   byId("btn-dashboard").addEventListener("click", openDashboard);
   byId("btn-personal-dashboard").addEventListener("click", function(){window.location.href="dashboard.html";});
   byId("btn-wrong-practice").addEventListener("click", openWrongPractice);
-  byId("btn-revise").addEventListener("click", loadResources);
+  byId("btn-revise").addEventListener("click", openRevisionPractice);
   byId("btn-mark").addEventListener("click", toggleMarked);
   byId("btn-resume").addEventListener("click", resumeDraft);
   byId("btn-new-attempt").addEventListener("click", function(){ discardDraft(); startQuiz(); });
@@ -572,6 +572,7 @@
     showError("কুইজ আইডি পাওয়া যায়নি। Telegram পোস্টের কুইজ বাটন থেকে খুলুন।");
   } else {
     byId("quiz-id-pill").textContent = "#" + quizId;
+    byId("nav-quiz").href = quizHomeUrl();
     loadQuizPreferences();
     loadQuiz();
   }
@@ -580,6 +581,7 @@
   function bn(value){ return String(value).replace(/[0-9]/g, function(d){ return BN[+d]; }); }
   function pad2(n){ return n < 10 ? "0" + n : "" + n; }
   function api(path){ return API_BASE + path; }
+  function quizHomeUrl(){ return "/?quiz=" + encodeURIComponent(quizId); }
   function jsonOrThrow(resp, label){
     if (resp.ok) return resp.json();
     return resp.json().catch(function(){ return {}; }).then(function(body){
@@ -1160,6 +1162,10 @@
   function openWrongPractice(){
     var subject = quiz && quiz.meta ? (quiz.meta.subject_key || quiz.meta.subjectKey || "") : "";
     window.location.href = "practice.html?source=wrong" + (subject ? "&subject=" + encodeURIComponent(subject) : "");
+  }
+
+  function openRevisionPractice(){
+    window.location.href = "practice.html?source=due";
   }
 
   function newAttemptId(){

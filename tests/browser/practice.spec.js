@@ -24,6 +24,8 @@ test("revision queue reveals checked answers, reports issues, and plays one mist
 }, testInfo) => {
   const api = await openPractice(page, "due");
   await expect(page.locator("#practice")).toBeVisible();
+  await expect(page.locator("#nav-revision")).toHaveClass(/active/);
+  await expect(page.locator("#nav-practice")).not.toHaveClass(/active/);
   await expect(page.locator(".option")).toHaveCount(4);
   await expect(page.locator("#feedback")).toBeHidden();
   await expect(page.getByText("সঠিক উত্তর:", { exact: false })).toHaveCount(0);
@@ -65,6 +67,8 @@ test("bookmark practice never plays the revision-only mistake sound", async ({
 }) => {
   const api = await openPractice(page, "bookmark");
   await expect(page.locator("#practice")).toBeVisible();
+  await expect(page.locator("#nav-practice")).toHaveClass(/active/);
+  await expect(page.locator("#nav-revision")).not.toHaveClass(/active/);
   await expect(page.locator("#title")).toContainText("বুকমার্ক অনুশীলন");
 
   await page.locator(".option").first().click();
@@ -102,6 +106,8 @@ test("practice queue has a clear empty state", async ({ page }, testInfo) => {
   await expect(page.locator("#empty")).toBeVisible();
   await expect(page.locator("#empty-message")).toContainText("কোনো প্রশ্ন নেই");
   await capture(page, testInfo, "practice-empty-state");
+  await page.locator("#empty-quiz-link").click();
+  await expect(page.locator("#screen-intro")).toBeVisible();
   await assertNoHorizontalOverflow(page);
   await assertVisibleTouchTargets(page);
 });

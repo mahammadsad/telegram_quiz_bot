@@ -207,3 +207,20 @@ test("Telegram MainButton and BackButton follow the current quiz screen", async 
   state = await page.evaluate(() => window.__mobileQa);
   expect(state.backVisible).toBe(false);
 });
+
+test("result revision action opens the due queue and activates revision navigation", async ({
+  page,
+}) => {
+  const api = await openIntro(page);
+  await startWithTelegramMainButton(page);
+  await openSubmissionConfirmation(page);
+  await page.locator("#btn-submit-confirm").click();
+  await expect(page.locator("#screen-result")).toBeVisible();
+
+  await page.locator("#btn-revise").click();
+  await expect(page).toHaveURL(new RegExp(`/practice\\.html\\?source=due$`));
+  await expect(page.locator("#title")).toContainText("আজকের পুনরাবৃত্তি");
+  await expect(page.locator("#nav-revision")).toHaveClass(/active/);
+  await expect(page.locator("#nav-practice")).not.toHaveClass(/active/);
+  expect(api.practiceSubmissions).toHaveLength(0);
+});

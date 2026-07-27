@@ -236,6 +236,7 @@ def _value_error_status(exc: ValueError) -> int:
 
 
 @app.get("/")
+@app.get("/index.html")
 def index() -> FileResponse:
     return FileResponse(ROOT / "index.html")
 

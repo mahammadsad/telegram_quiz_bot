@@ -99,3 +99,19 @@ test("dashboard renders explicit empty states without broken controls", async ({
   await capture(page, testInfo, "dashboard-empty-states");
   await assertNoHorizontalOverflow(page);
 });
+
+test("personal dashboard quiz link returns to the live quiz instead of a raw 404", async ({
+  page,
+}) => {
+  await installTelegramMock(page);
+  await installApiMocks(page);
+  await page.goto("/dashboard.html");
+  await expect(page.locator("#identity-card")).toBeVisible();
+
+  await page.locator("#page-link").click();
+  await expect
+    .poll(() => page.evaluate(() => location.pathname + location.search))
+    .toBe(`/?quiz=${QUIZ_ID}`);
+  await expect(page.locator("#screen-intro")).toBeVisible();
+  await expect(page.locator("#quiz-id-pill")).toContainText(QUIZ_ID);
+});

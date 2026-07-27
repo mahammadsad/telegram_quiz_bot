@@ -34,6 +34,13 @@ def test_quiz_result_links_the_complete_learning_cycle():
     assert "bookmark-submit" in INDEX
     assert "result-average" in INDEX
     assert "result-unanswered" in INDEX
+    assert 'byId("btn-revise").addEventListener("click",openRevisionPractice)' in INDEX.replace(
+        " ", ""
+    )
+    assert 'window.location.href="practice.html?source=due"' in INDEX.replace(" ", "")
+    assert 'byId("btn-revise").addEventListener("click",loadResources)' not in INDEX.replace(
+        " ", ""
+    )
 
 
 def test_quiz_result_survives_refresh_and_retake_gets_a_new_identity():
@@ -124,6 +131,18 @@ def test_practice_errors_are_inline_retryable_and_empty_states_have_actions():
     assert "এতে নকল চেষ্টা তৈরি হবে না" in PRACTICE
     assert 'el("submit").disabled=error.status===409' in PRACTICE
     assert 'el("empty-message").textContent=' in PRACTICE
+
+
+def test_mini_app_navigation_uses_live_routes_and_marks_revision_active():
+    assert 'href="index.html"' not in INDEX
+    assert 'href="index.html"' not in DASHBOARD
+    assert 'href="index.html"' not in PRACTICE
+    assert 'id="nav-quiz" href="/"' in INDEX
+    assert 'id="empty-quiz-link" href="/"' in PRACTICE
+    assert 'el("page-link").href=quizHomeUrl' in DASHBOARD
+    assert 'link.href=quizHomeUrl' in DASHBOARD
+    assert 'el("nav-practice").classList.toggle("active",requestedSource!=="due")' in PRACTICE
+    assert 'el("nav-revision").classList.toggle("active",requestedSource==="due")' in PRACTICE
 
 
 def test_dashboard_filters_and_leaderboard_pagination_are_wired():
