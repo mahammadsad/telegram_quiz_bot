@@ -21,7 +21,7 @@ test("personal dashboard keeps bookmark questions in Practice and omits a bookma
   await expect(page.locator("#identity-name")).toHaveText("মোবাইল পরীক্ষার্থী");
   await expect(page.locator("#identity-label")).toContainText("আপনার ড্যাশবোর্ড");
   await expect(page.locator("#x-reports")).toHaveText("২");
-  await expect(page.locator("#x-bookmarks")).toHaveText("২");
+  await expect(page.locator("#x-bookmarks")).toHaveText("১");
   await expect(page.locator("#bookmarks-card")).toHaveCount(0);
   await expect(page.locator(".bookmark-item")).toHaveCount(0);
   await expect(page.locator("#bookmark-practice")).toBeVisible();

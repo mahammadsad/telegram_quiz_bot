@@ -149,28 +149,6 @@ function dashboardPayload() {
   };
 }
 
-function bookmarksPayload({ empty = false } = {}) {
-  if (empty) return { questions: [], resources: [] };
-  return {
-    questions: [
-      {
-        id: questionId(0),
-        q: "বুকমার্ক করা ইতিহাস প্রশ্ন",
-        subjectKey: "history",
-        chapter: "আধুনিক ভারত",
-      },
-    ],
-    resources: [
-      {
-        id: "30000000-0000-4000-8000-000000000001",
-        title: "যাচাইকৃত ইতিহাস পাঠ",
-        source: "NCERT",
-        url: "https://ncert.nic.in/example",
-      },
-    ],
-  };
-}
-
 function quizLeaderboardPayload() {
   const rows = Array.from({ length: 10 }, (_, index) => ({
     rank: index + 1,
@@ -496,18 +474,15 @@ async function installApiMocks(page, options = {}) {
       return json(body);
     }
     if (path === "/api/me/bookmarks" && method === "GET") {
-      if (source === "bookmark") {
-        const queue = practiceQueue("bookmark", {
-          empty: Boolean(options.emptyPractice),
-        });
-        return json({
-          mode: queue.mode,
-          sourceType: queue.sourceType,
-          questions: queue.questions,
-          resources: [],
-        });
-      }
-      return json(bookmarksPayload({ empty: Boolean(options.emptyBookmarks) }));
+      const queue = practiceQueue("bookmark", {
+        empty: Boolean(options.emptyPractice),
+      });
+      return json({
+        mode: queue.mode,
+        sourceType: queue.sourceType,
+        questions: queue.questions,
+        resources: [],
+      });
     }
     if (path === "/api/me/bookmarks" && method === "POST") {
       const body = request.postDataJSON();
