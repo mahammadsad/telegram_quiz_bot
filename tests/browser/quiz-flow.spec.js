@@ -242,10 +242,19 @@ test("cross-page navigation preserves Telegram authentication and personal dashb
 
   await page.locator(".bottom").getByRole("link", { name: "হোম" }).click();
   await expect(page.locator("#identity-card")).toBeVisible();
-  await expect(page.locator("#bookmarks-card")).toBeVisible();
-  await expect(page.locator(".bookmark-item")).toHaveCount(2);
+  await expect(page.locator("#bookmarks-card")).toHaveCount(0);
+  await expect(page.locator("#bookmark-practice")).toBeVisible();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe(launchHash);
 
+  await page.locator("#bookmark-practice").click();
+  await expect(page.locator("#practice")).toBeVisible();
+  await expect(page.locator("#title")).toContainText("বুকমার্ক অনুশীলন");
+  await expect(page.locator("#nav-practice")).toHaveClass(/active/);
+  await expect(page.locator("#nav-revision")).not.toHaveClass(/active/);
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(launchHash);
+
+  await page.locator(".bottom").getByRole("link", { name: "হোম" }).click();
+  await expect(page.locator("#identity-card")).toBeVisible();
   await page.locator(".bottom").getByRole("link", { name: "পরিসংখ্যান" }).click();
   await expect
     .poll(() => page.evaluate(() => new URLSearchParams(location.search).get("section")))

@@ -10,7 +10,7 @@ const {
   installTelegramMock,
 } = require("./fixtures");
 
-test("personal dashboard shows identity, bookmarks, reports, preferences, and sound control", async ({
+test("personal dashboard keeps bookmark questions in Practice and omits a bookmark list", async ({
   page,
 }, testInfo) => {
   await installTelegramMock(page);
@@ -21,12 +21,19 @@ test("personal dashboard shows identity, bookmarks, reports, preferences, and so
   await expect(page.locator("#identity-name")).toHaveText("মোবাইল পরীক্ষার্থী");
   await expect(page.locator("#identity-label")).toContainText("আপনার ড্যাশবোর্ড");
   await expect(page.locator("#x-reports")).toHaveText("২");
-  await expect(page.locator(".bookmark-item")).toHaveCount(2);
-
-  await page.locator(".bookmark-item").first().getByRole("button", { name: "সরান" }).click();
-  await expect(page.locator(".bookmark-item")).toHaveCount(1);
-  expect(api.bookmarks).toHaveLength(1);
-  expect(api.bookmarks[0].active).toBe(false);
+  await expect(page.locator("#x-bookmarks")).toHaveText("২");
+  await expect(page.locator("#bookmarks-card")).toHaveCount(0);
+  await expect(page.locator(".bookmark-item")).toHaveCount(0);
+  await expect(page.locator("#bookmark-practice")).toBeVisible();
+  await expect(page.locator("#bookmark-practice")).toHaveAttribute(
+    "href",
+    "practice.html?source=bookmark",
+  );
+  await expect(page.locator("#mastery-card a[href*='source=bookmark']")).toHaveCount(0);
+  await expect(page.locator("#due-revision")).toHaveAttribute(
+    "href",
+    "practice.html?source=due",
+  );
 
   await page.locator("#settings-card summary").click();
   await expect(page.locator("#revision-sound")).toBeChecked();
@@ -87,13 +94,13 @@ test("dashboard renders explicit empty states without broken controls", async ({
   await installTelegramMock(page);
   await installApiMocks(page, {
     emptyDashboard: true,
-    emptyBookmarks: true,
     emptyLeaderboard: true,
   });
   await page.goto("/dashboard.html");
 
   await expect(page.locator("#identity-card")).toBeVisible();
-  await expect(page.locator("#bookmarks")).toContainText("এখনও কোনো বুকমার্ক নেই");
+  await expect(page.locator("#bookmarks-card")).toHaveCount(0);
+  await expect(page.locator("#bookmark-practice")).toBeVisible();
   await expect(page.locator("#recent-quizzes")).toContainText("এখনও কোনো সম্পন্ন কুইজ নেই");
   await expect(page.locator("#board-state")).toContainText("এখনও পর্যাপ্ত ফলাফল নেই");
   await capture(page, testInfo, "dashboard-empty-states");

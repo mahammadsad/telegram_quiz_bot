@@ -108,11 +108,15 @@ def test_current_user_and_revision_preferences_are_visible_and_persisted():
     assert 'source=weak_topic&subject=' in DASHBOARD
     assert 'el("page-title").textContent="কুইজ ড্যাশবোর্ড"' in DASHBOARD
     assert 'el("page-link").textContent="আমার ড্যাশবোর্ড"' in DASHBOARD
-    assert 'id="bookmarks-card"' in DASHBOARD
+    assert 'id="bookmark-practice"' in DASHBOARD
+    assert 'id="bookmarks-card"' not in DASHBOARD
+    assert 'fetch(api("/api/me/bookmarks")' not in DASHBOARD
     assert 'id="r-overdue"' in DASHBOARD
     assert 'id="revision-subjects"' in DASHBOARD
-    assert "function removeBookmark" in DASHBOARD
-    assert "active:false" in DASHBOARD
+    assert 'id="due-revision"' in DASHBOARD
+    assert 'id="mastery-card"' in DASHBOARD
+    assert 'id="mastery-card" class="card half hidden"' in DASHBOARD
+    assert "function removeBookmark" not in DASHBOARD
 
 
 def test_revision_review_has_attempt_owned_question_reporting():
