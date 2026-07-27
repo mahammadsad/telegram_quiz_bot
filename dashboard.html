@@ -60,12 +60,17 @@
   "use strict";
   var tg=window.Telegram&&window.Telegram.WebApp?window.Telegram.WebApp:null;
   var initData=tg&&tg.initData?tg.initData:"";
+  var telegramLaunchHash=/(?:^|&)tgWebAppData=/.test(window.location.hash.slice(1))
+    ?window.location.hash:"";
+  installTelegramNavigation();
   if(tg){try{tg.ready();tg.expand()}catch(e){}}
   var API_BASE=(window.QUIZ_API_BASE||document.querySelector('meta[name="quiz-api-base"]').content||"").replace(/\/$/,"");
   var BN=["০","১","২","৩","৪","৫","৬","৭","৮","৯"];
-  var quizId=new URLSearchParams(location.search).get("quiz")||"";
+  var queryParams=new URLSearchParams(location.search);
+  var quizId=queryParams.get("quiz")||"";
+  var requestedSection=queryParams.get("section")||"";
   var launchQuizId=quizId||(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.start_param)||"";
-  var quizHomeUrl=launchQuizId?"/?quiz="+encodeURIComponent(launchQuizId):"/";
+  var quizHomeUrl=telegramUrl(launchQuizId?"/?quiz="+encodeURIComponent(launchQuizId):"/");
   var boardLoading=false,boardOffset=0,boardLimit=20,boardParticipants=0,dashboardData=null;
   var subjects={"history":"ইতিহাস","geography":"ভূগোল","polity":"সংবিধান","economics":"অর্থনীতি","science":"বিজ্ঞান","mathematics":"গণিত","reasoning":"রিজনিং","english":"ইংরেজি","bengali":"বাংলা","computer":"কম্পিউটার","current-affairs":"কারেন্ট অ্যাফেয়ার্স","environment":"পরিবেশ","miscellaneous":"বিবিধ সাধারণ জ্ঞান"};
   var exams={WBCS:"WBCS",WBPSC_CLERKSHIP:"WBPSC Clerkship",WBPSC_MISC:"WBPSC Misc",WBP_CONSTABLE:"WBP Constable",WBP_SI:"WBP SI",KOLKATA_POLICE:"Kolkata Police",PRIMARY_TET:"Primary TET",UPPER_PRIMARY_TET:"Upper Primary TET",SSC:"SSC",RAILWAY:"Railway",BANKING:"Banking"};
@@ -73,6 +78,31 @@
   function el(id){return document.getElementById(id)}
   function bn(value){return String(value).replace(/[0-9]/g,function(digit){return BN[+digit]})}
   function api(path){return API_BASE+path}
+  function telegramUrl(path){
+    var url=new URL(path,window.location.href);
+    if(url.origin!==window.location.origin)return url.href;
+    if(telegramLaunchHash){
+      if(url.hash&&url.hash!==telegramLaunchHash){
+        var section=url.hash.slice(1);
+        if(/^[A-Za-z0-9_-]+$/.test(section))url.searchParams.set("section",section);
+      }
+      url.hash=telegramLaunchHash;
+    }
+    return url.pathname+url.search+url.hash;
+  }
+  function navigateTelegram(path){window.location.href=telegramUrl(path)}
+  function installTelegramNavigation(){
+    if(!telegramLaunchHash)return;
+    document.addEventListener("click",function(event){
+      if(event.defaultPrevented||(event.button!==undefined&&event.button!==0)||
+          event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+      var link=event.target.closest?event.target.closest("a[href]"):null;
+      if(!link||link.target==="_blank"||link.hasAttribute("download"))return;
+      var url=new URL(link.getAttribute("href"),window.location.href);
+      if(url.origin!==window.location.origin)return;
+      event.preventDefault();navigateTelegram(link.getAttribute("href"));
+    });
+  }
   function authHeaders(){return initData?{"X-Telegram-Init-Data":initData}:{}}
   function check(response){return response.ok?response.json():response.json().catch(function(){return{}}).then(function(body){var error=new Error(body.detail||String(response.status));error.status=response.status;throw error})}
   function localPreference(name,value){try{localStorage.setItem("telegram-quiz-pref:"+name,String(!!value))}catch(e){}}
@@ -97,7 +127,12 @@
   else if(initData)loadPersonal();
   else{showContent();showPersonalState("নিজের অগ্রগতি দেখতে Telegram-এর কুইজ বাটন থেকে Mini App খুলুন।",false)}
 
-  function showContent(){el("loading").classList.add("hidden");el("content").classList.remove("hidden")}
+  function showContent(){
+    el("loading").classList.add("hidden");el("content").classList.remove("hidden");
+    if(requestedSection==="analytics"){
+      window.requestAnimationFrame(function(){el("analytics").scrollIntoView({block:"start"})});
+    }
+  }
 
   function showPersonalState(message,retry){el("personal-state-copy").textContent=message;el("personal-state").classList.remove("hidden");el("personal-retry").classList.toggle("hidden",!retry)}
 

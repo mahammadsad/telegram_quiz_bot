@@ -89,6 +89,9 @@
   "use strict";
   var tg=window.Telegram&&window.Telegram.WebApp?window.Telegram.WebApp:null;
   var initData=tg&&tg.initData?tg.initData:"";
+  var telegramLaunchHash=/(?:^|&)tgWebAppData=/.test(window.location.hash.slice(1))
+    ?window.location.hash:"";
+  installTelegramNavigation();
   if(tg){try{tg.ready();tg.expand();}catch(e){}}
   var API_BASE=(window.QUIZ_API_BASE||document.querySelector('meta[name="quiz-api-base"]').content||"").replace(/\/$/,"");
   var params=new URLSearchParams(location.search);
@@ -96,7 +99,7 @@
   var subject=params.get("subject")||"";
   if(["wrong","due","bookmark","weak_topic"].indexOf(requestedSource)<0)requestedSource="wrong";
   var launchQuizId=(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.start_param)||"";
-  var quizHomeUrl=launchQuizId?"/?quiz="+encodeURIComponent(launchQuizId):"/";
+  var quizHomeUrl=telegramUrl(launchQuizId?"/?quiz="+encodeURIComponent(launchQuizId):"/");
   var rows=[],index=0,selected=null,started=0,submitting=false,answerFrozen=false;
   var queueMode="",queueSource="",attemptId="",audioContext=null;
   var feedbackPlayed=Object.create(null);
@@ -107,6 +110,31 @@
   function el(id){return document.getElementById(id)}
   function bn(v){return String(v).replace(/[0-9]/g,function(d){return BN[+d]})}
   function api(p){return API_BASE+p}
+  function telegramUrl(path){
+    var url=new URL(path,window.location.href);
+    if(url.origin!==window.location.origin)return url.href;
+    if(telegramLaunchHash){
+      if(url.hash&&url.hash!==telegramLaunchHash){
+        var section=url.hash.slice(1);
+        if(/^[A-Za-z0-9_-]+$/.test(section))url.searchParams.set("section",section);
+      }
+      url.hash=telegramLaunchHash;
+    }
+    return url.pathname+url.search+url.hash;
+  }
+  function navigateTelegram(path){window.location.href=telegramUrl(path)}
+  function installTelegramNavigation(){
+    if(!telegramLaunchHash)return;
+    document.addEventListener("click",function(event){
+      if(event.defaultPrevented||(event.button!==undefined&&event.button!==0)||
+          event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+      var link=event.target.closest?event.target.closest("a[href]"):null;
+      if(!link||link.target==="_blank"||link.hasAttribute("download"))return;
+      var url=new URL(link.getAttribute("href"),window.location.href);
+      if(url.origin!==window.location.origin)return;
+      event.preventDefault();navigateTelegram(link.getAttribute("href"));
+    });
+  }
   function state(name){["loading","empty","error","practice"].forEach(function(k){el(k).classList.toggle("hidden",k!==name)})}
   function check(response){return response.ok?response.json():response.json().catch(function(){return{}}).then(function(body){var error=new Error(body.detail||String(response.status));error.status=response.status;throw error})}
   function readLocalPreference(name,fallback){try{var value=localStorage.getItem("telegram-quiz-pref:"+name);return value===null?fallback:value==="true"}catch(e){return fallback}}

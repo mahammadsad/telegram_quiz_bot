@@ -260,8 +260,11 @@ function practiceQueue(source = "due", { empty = false } = {}) {
   };
 }
 
-async function installTelegramMock(page, { startParam = QUIZ_ID } = {}) {
-  await page.addInitScript(({ injectedStartParam }) => {
+async function installTelegramMock(
+  page,
+  { startParam = QUIZ_ID, requireLaunchHash = false } = {},
+) {
+  await page.addInitScript(({ injectedStartParam, requireHash }) => {
     const state = {
       ready: 0,
       expand: 0,
@@ -329,10 +332,12 @@ async function installTelegramMock(page, { startParam = QUIZ_ID } = {}) {
         return true;
       },
     });
+    const hasLaunchHash = /(?:^|&)tgWebAppData=/.test(window.location.hash.slice(1));
+    const authenticated = !requireHash || hasLaunchHash;
     window.Telegram = {
       WebApp: {
-        initData: "deterministic-browser-test",
-        initDataUnsafe: { start_param: injectedStartParam },
+        initData: authenticated ? "deterministic-browser-test" : "",
+        initDataUnsafe: authenticated ? { start_param: injectedStartParam } : {},
         ready() {
           state.ready += 1;
         },
@@ -383,7 +388,7 @@ async function installTelegramMock(page, { startParam = QUIZ_ID } = {}) {
     window.__triggerBackButton = () => {
       if (backHandler) backHandler();
     };
-  }, { injectedStartParam: startParam });
+  }, { injectedStartParam: startParam, requireHash: requireLaunchHash });
 
   await page.route("https://telegram.org/**", (route) => route.abort());
   await page.route("https://fonts.googleapis.com/**", (route) => route.abort());

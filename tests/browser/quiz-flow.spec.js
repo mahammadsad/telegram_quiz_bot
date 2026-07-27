@@ -224,3 +224,32 @@ test("result revision action opens the due queue and activates revision navigati
   await expect(page.locator("#nav-practice")).not.toHaveClass(/active/);
   expect(api.practiceSubmissions).toHaveLength(0);
 });
+
+test("cross-page navigation preserves Telegram authentication and personal dashboard cards", async ({
+  page,
+}) => {
+  await installTelegramMock(page, { requireLaunchHash: true });
+  await installApiMocks(page);
+  const launchHash =
+    "#tgWebAppData=deterministic-browser-test&tgWebAppVersion=9.6&tgWebAppPlatform=android";
+  await page.goto(`/index.html?quiz=${QUIZ_ID}${launchHash}`);
+  await expect(page.locator("#screen-intro")).toBeVisible();
+
+  await page.locator(".bottom-nav").getByRole("link", { name: "অনুশীলন" }).click();
+  await expect(page.locator("#practice")).toBeVisible();
+  await expect(page.locator("#error")).toBeHidden();
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(launchHash);
+
+  await page.locator(".bottom").getByRole("link", { name: "হোম" }).click();
+  await expect(page.locator("#identity-card")).toBeVisible();
+  await expect(page.locator("#bookmarks-card")).toBeVisible();
+  await expect(page.locator(".bookmark-item")).toHaveCount(2);
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(launchHash);
+
+  await page.locator(".bottom").getByRole("link", { name: "পরিসংখ্যান" }).click();
+  await expect
+    .poll(() => page.evaluate(() => new URLSearchParams(location.search).get("section")))
+    .toBe("analytics");
+  await expect.poll(() => page.evaluate(() => location.hash)).toBe(launchHash);
+  await expect(page.locator("#analytics")).toBeVisible();
+});

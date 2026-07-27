@@ -478,6 +478,10 @@
 
   var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   var isTelegram = !!(tg && tg.initData);
+  var telegramLaunchHash = /(?:^|&)tgWebAppData=/.test(window.location.hash.slice(1))
+    ? window.location.hash
+    : "";
+  installTelegramNavigation();
   if (tg) {
     try {
       tg.ready();
@@ -534,7 +538,7 @@
   byId("btn-next").addEventListener("click", nextOrFinish);
   byId("btn-retake").addEventListener("click", startQuiz);
   byId("btn-dashboard").addEventListener("click", openDashboard);
-  byId("btn-personal-dashboard").addEventListener("click", function(){window.location.href="dashboard.html";});
+  byId("btn-personal-dashboard").addEventListener("click", function(){ navigateTelegram("dashboard.html"); });
   byId("btn-wrong-practice").addEventListener("click", openWrongPractice);
   byId("btn-revise").addEventListener("click", openRevisionPractice);
   byId("btn-mark").addEventListener("click", toggleMarked);
@@ -581,7 +585,33 @@
   function bn(value){ return String(value).replace(/[0-9]/g, function(d){ return BN[+d]; }); }
   function pad2(n){ return n < 10 ? "0" + n : "" + n; }
   function api(path){ return API_BASE + path; }
-  function quizHomeUrl(){ return "/?quiz=" + encodeURIComponent(quizId); }
+  function telegramUrl(path){
+    var url = new URL(path, window.location.href);
+    if (url.origin !== window.location.origin) return url.href;
+    if (telegramLaunchHash) {
+      if (url.hash && url.hash !== telegramLaunchHash) {
+        var section = url.hash.slice(1);
+        if (/^[A-Za-z0-9_-]+$/.test(section)) url.searchParams.set("section", section);
+      }
+      url.hash = telegramLaunchHash;
+    }
+    return url.pathname + url.search + url.hash;
+  }
+  function navigateTelegram(path){ window.location.href = telegramUrl(path); }
+  function installTelegramNavigation(){
+    if (!telegramLaunchHash) return;
+    document.addEventListener("click", function(event){
+      if (event.defaultPrevented || (event.button !== undefined && event.button !== 0) ||
+          event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      var link = event.target.closest ? event.target.closest("a[href]") : null;
+      if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
+      var url = new URL(link.getAttribute("href"), window.location.href);
+      if (url.origin !== window.location.origin) return;
+      event.preventDefault();
+      navigateTelegram(link.getAttribute("href"));
+    });
+  }
+  function quizHomeUrl(){ return telegramUrl("/?quiz=" + encodeURIComponent(quizId)); }
   function jsonOrThrow(resp, label){
     if (resp.ok) return resp.json();
     return resp.json().catch(function(){ return {}; }).then(function(body){
@@ -1156,16 +1186,16 @@
   }
 
   function openDashboard(){
-    window.location.href = "dashboard.html?quiz=" + encodeURIComponent(quizId);
+    navigateTelegram("dashboard.html?quiz=" + encodeURIComponent(quizId));
   }
 
   function openWrongPractice(){
     var subject = quiz && quiz.meta ? (quiz.meta.subject_key || quiz.meta.subjectKey || "") : "";
-    window.location.href = "practice.html?source=wrong" + (subject ? "&subject=" + encodeURIComponent(subject) : "");
+    navigateTelegram("practice.html?source=wrong" + (subject ? "&subject=" + encodeURIComponent(subject) : ""));
   }
 
   function openRevisionPractice(){
-    window.location.href = "practice.html?source=due";
+    navigateTelegram("practice.html?source=due");
   }
 
   function newAttemptId(){

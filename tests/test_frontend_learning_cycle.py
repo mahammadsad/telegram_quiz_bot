@@ -37,7 +37,7 @@ def test_quiz_result_links_the_complete_learning_cycle():
     assert 'byId("btn-revise").addEventListener("click",openRevisionPractice)' in INDEX.replace(
         " ", ""
     )
-    assert 'window.location.href="practice.html?source=due"' in INDEX.replace(" ", "")
+    assert 'navigateTelegram("practice.html?source=due")' in INDEX.replace(" ", "")
     assert 'byId("btn-revise").addEventListener("click",loadResources)' not in INDEX.replace(
         " ", ""
     )
@@ -143,6 +143,16 @@ def test_mini_app_navigation_uses_live_routes_and_marks_revision_active():
     assert 'link.href=quizHomeUrl' in DASHBOARD
     assert 'el("nav-practice").classList.toggle("active",requestedSource!=="due")' in PRACTICE
     assert 'el("nav-revision").classList.toggle("active",requestedSource==="due")' in PRACTICE
+    for source in (INDEX, DASHBOARD, PRACTICE):
+        assert "tgWebAppData=" in source
+        assert "telegramLaunchHash" in source
+        assert "installTelegramNavigation()" in source
+        assert "url.hash=telegramLaunchHash" in source.replace(" ", "")
+        assert 'searchParams.set("tgWebAppData"' not in source
+        assert "sessionStorage.setItem" not in source.split("telegramLaunchHash", 1)[1].split(
+            "function authHeaders", 1
+        )[0]
+    assert 'requestedSection==="analytics"' in DASHBOARD
 
 
 def test_dashboard_filters_and_leaderboard_pagination_are_wired():
