@@ -1,0 +1,13 @@
+{
+  "name": "telegram-quiz-platform-browser-tests",
+  "version": "7.0.0",
+  "private": true,
+  "description": "Deterministic mobile browser tests for the Telegram quiz platform",
+  "scripts": {
+    "test:browser": "playwright test",
+    "test:browser:report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
+  }
+}

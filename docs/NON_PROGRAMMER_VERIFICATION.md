@@ -8,7 +8,7 @@ Telegram signed data into screenshots or support messages.
 1. In Supabase, confirm the selected project is
    `telegram-quiz-bot-rollout-staging`, not production or Citizen Affairs.
 2. Ask the technical operator to show the `/health/ready` page. It must be HTTP
-   200, say `ready`, show migration `20260722120827`, contract `2.2.0`, and every
+   200, say `ready`, show migration `20260724212939`, contract `2.2.0`, and every
    check must be true.
 3. In GitHub Actions, confirm the Tests workflow is green and the manual
    preflight job succeeds before a subject job is run.

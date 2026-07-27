@@ -344,7 +344,7 @@
   }
   .resume-box{margin-top:16px;border:1px solid color-mix(in srgb,var(--primary) 45%,var(--line));background:color-mix(in srgb,var(--primary) 9%,var(--surface));padding:14px;border-radius:var(--radius);line-height:1.6}
   .navigator{display:grid;grid-template-columns:repeat(10,minmax(36px,1fr));gap:6px;padding:13px 18px;border-bottom:1px solid var(--line);background:color-mix(in srgb,var(--surface) 92%,transparent)}
-  .nav-q{min-height:38px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--muted);font-weight:800;cursor:pointer;position:relative}
+  .nav-q{min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--surface);color:var(--muted);font-weight:800;cursor:pointer;position:relative}
   .nav-q.answered{border-color:var(--success);color:var(--success)}.nav-q.current{background:var(--primary);border-color:var(--primary);color:#fff}.nav-q.marked:after{content:'★';position:absolute;right:2px;top:-6px;color:var(--warning);font-size:12px}.nav-q:focus-visible{outline:3px solid color-mix(in srgb,var(--accent) 38%,transparent);outline-offset:2px}
   .question-tools{display:flex;justify-content:space-between;gap:9px;align-items:center;margin:12px 0}.mark-btn{width:auto;min-height:44px;border:1px solid var(--line);border-radius:12px;padding:9px 12px;background:var(--surface);color:var(--muted);font-weight:800;cursor:pointer}.mark-btn.active{border-color:var(--warning);color:var(--warning);background:color-mix(in srgb,var(--warning) 9%,var(--surface))}
   .result-metrics{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:16px 0}.result-metric{border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--surface)}.result-metric b{display:block;color:var(--muted);font-size:11px}.result-metric span{font-weight:800}
@@ -470,7 +470,7 @@
   </section>
 </main>
 <div class="modal hidden" id="submit-modal" role="dialog" aria-modal="true" aria-labelledby="submit-title"><div class="modal-card"><h2 id="submit-title">উত্তরপত্র সাবমিট করবেন?</h2><p id="submit-summary"></p><div class="actions"><button class="btn btn-secondary" id="btn-submit-back" type="button">ফিরে যান</button><button class="btn btn-primary" id="btn-submit-confirm" type="button">তবুও সাবমিট করুন</button></div></div></div>
-<nav class="bottom-nav" aria-label="প্রধান নেভিগেশন"><a class="active" href="index.html">কুইজ</a><a href="practice.html?source=wrong">অনুশীলন</a><a href="practice.html?source=due">পুনরাবৃত্তি</a><a href="dashboard.html">পরিসংখ্যান</a></nav>
+<nav class="bottom-nav" aria-label="প্রধান নেভিগেশন"><a class="active" id="nav-quiz" href="/">কুইজ</a><a href="practice.html?source=wrong">অনুশীলন</a><a href="practice.html?source=due">পুনরাবৃত্তি</a><a href="dashboard.html">পরিসংখ্যান</a></nav>
 
 <script>
 (function(){
@@ -478,6 +478,10 @@
 
   var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   var isTelegram = !!(tg && tg.initData);
+  var telegramLaunchHash = /(?:^|&)tgWebAppData=/.test(window.location.hash.slice(1))
+    ? window.location.hash
+    : "";
+  installTelegramNavigation();
   if (tg) {
     try {
       tg.ready();
@@ -534,9 +538,9 @@
   byId("btn-next").addEventListener("click", nextOrFinish);
   byId("btn-retake").addEventListener("click", startQuiz);
   byId("btn-dashboard").addEventListener("click", openDashboard);
-  byId("btn-personal-dashboard").addEventListener("click", function(){window.location.href="dashboard.html";});
+  byId("btn-personal-dashboard").addEventListener("click", function(){ navigateTelegram("dashboard.html"); });
   byId("btn-wrong-practice").addEventListener("click", openWrongPractice);
-  byId("btn-revise").addEventListener("click", loadResources);
+  byId("btn-revise").addEventListener("click", openRevisionPractice);
   byId("btn-mark").addEventListener("click", toggleMarked);
   byId("btn-resume").addEventListener("click", resumeDraft);
   byId("btn-new-attempt").addEventListener("click", function(){ discardDraft(); startQuiz(); });
@@ -572,6 +576,7 @@
     showError("কুইজ আইডি পাওয়া যায়নি। Telegram পোস্টের কুইজ বাটন থেকে খুলুন।");
   } else {
     byId("quiz-id-pill").textContent = "#" + quizId;
+    byId("nav-quiz").href = quizHomeUrl();
     loadQuizPreferences();
     loadQuiz();
   }
@@ -580,6 +585,33 @@
   function bn(value){ return String(value).replace(/[0-9]/g, function(d){ return BN[+d]; }); }
   function pad2(n){ return n < 10 ? "0" + n : "" + n; }
   function api(path){ return API_BASE + path; }
+  function telegramUrl(path){
+    var url = new URL(path, window.location.href);
+    if (url.origin !== window.location.origin) return url.href;
+    if (telegramLaunchHash) {
+      if (url.hash && url.hash !== telegramLaunchHash) {
+        var section = url.hash.slice(1);
+        if (/^[A-Za-z0-9_-]+$/.test(section)) url.searchParams.set("section", section);
+      }
+      url.hash = telegramLaunchHash;
+    }
+    return url.pathname + url.search + url.hash;
+  }
+  function navigateTelegram(path){ window.location.href = telegramUrl(path); }
+  function installTelegramNavigation(){
+    if (!telegramLaunchHash) return;
+    document.addEventListener("click", function(event){
+      if (event.defaultPrevented || (event.button !== undefined && event.button !== 0) ||
+          event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+      var link = event.target.closest ? event.target.closest("a[href]") : null;
+      if (!link || link.target === "_blank" || link.hasAttribute("download")) return;
+      var url = new URL(link.getAttribute("href"), window.location.href);
+      if (url.origin !== window.location.origin) return;
+      event.preventDefault();
+      navigateTelegram(link.getAttribute("href"));
+    });
+  }
+  function quizHomeUrl(){ return telegramUrl("/?quiz=" + encodeURIComponent(quizId)); }
   function jsonOrThrow(resp, label){
     if (resp.ok) return resp.json();
     return resp.json().catch(function(){ return {}; }).then(function(body){
@@ -1154,12 +1186,16 @@
   }
 
   function openDashboard(){
-    window.location.href = "dashboard.html?quiz=" + encodeURIComponent(quizId);
+    navigateTelegram("dashboard.html?quiz=" + encodeURIComponent(quizId));
   }
 
   function openWrongPractice(){
     var subject = quiz && quiz.meta ? (quiz.meta.subject_key || quiz.meta.subjectKey || "") : "";
-    window.location.href = "practice.html?source=wrong" + (subject ? "&subject=" + encodeURIComponent(subject) : "");
+    navigateTelegram("practice.html?source=wrong" + (subject ? "&subject=" + encodeURIComponent(subject) : ""));
+  }
+
+  function openRevisionPractice(){
+    navigateTelegram("practice.html?source=due");
   }
 
   function newAttemptId(){

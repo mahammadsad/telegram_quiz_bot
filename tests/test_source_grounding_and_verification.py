@@ -86,6 +86,23 @@ def test_grounding_fails_closed_without_verified_source_rows(monkeypatch):
         source_grounding.load_grounding_bundle("history", "আধুনিক ভারত", date(2026, 7, 18))
 
 
+def test_grounding_rejects_placeholder_source_metadata(monkeypatch):
+    monkeypatch.setattr(
+        source_grounding.source_documents_repo,
+        "list_grounding_bundle",
+        lambda *args, **kwargs: [source_row(
+            source_url="https://example.gov.in/computer-foundation",
+            source_title="Synthetic official computer source",
+            source_domain="example.gov.in",
+        )],
+    )
+
+    with pytest.raises(QuizValidationError, match="placeholder source metadata"):
+        source_grounding.load_grounding_bundle(
+            "current-affairs", "জাতীয় সাম্প্রতিক ঘটনা", date(2026, 7, 18)
+        )
+
+
 def test_independent_verifier_rejects_any_failed_check(valid_questions):
     results = []
     for index in range(1, 11):

@@ -45,11 +45,18 @@ staging test has passed. Source-code inspection alone is not sufficient.
   quarantine, rankings, and statistics against PostgreSQL.
 - [x] Remove the blanket storage-layer mypy exclusion and type its public API.
 - [x] Use a shorter Telegram authentication window for sensitive writes.
-- [x] Rate-limit submission, revision, practice, bookmark, report, preference, and
-  resource-feedback writes.
+- [x] Rate-limit submission, revision, practice, bookmark, report, preference,
+  resource-feedback, and administrative-review writes in PostgreSQL. The
+  disposable and hosted staging probes both accept through the limit and reject
+  the next event; the staging probe removed its one exact test actor.
 - [x] Add private/no-store cache headers and browser security headers.
 - [x] Pin GitHub Actions, minimize permissions, add timeouts and concurrency
   controls, and validate environment ownership before production jobs.
+- [x] Add a manual-only staging workflow that fails closed on the exact staging
+  project and excludes production, recovery, announcement, bulk, and fallback
+  modes.
+- [x] Scan the complete reachable Git history and current tree for supported
+  credential shapes, and recursively scan public JSON for answer fields.
 - [x] Point Render liveness/readiness monitoring to the correct endpoint.
 
 ## Phase 3 — Bengali-first user experience
@@ -64,7 +71,9 @@ staging test has passed. Source-code inspection alone is not sufficient.
 - [x] Add explicit revision mode and play mistake feedback only after an incorrect
   revision answer.
 - [x] Add persistent revision sound and vibration preferences plus a sound test.
-- [ ] Verify mobile layout, touch targets, focus visibility, and keyboard use.
+- [x] Verify mobile layout, touch targets, focus visibility, keyboard use,
+  reduced motion, bottom-navigation clearance, and Bengali wrapping with real
+  Chromium at 320×568, 360×800, 390×844, and 412×915.
 - [x] Review visible Bengali terminology and error messages; use “পুনরাবৃত্তি”
   consistently in learner-facing navigation.
 
@@ -94,24 +103,28 @@ staging test has passed. Source-code inspection alone is not sufficient.
 
 ## Final release evidence
 
-- [x] Local Python suite: 205 passed, 13 skipped (database cases skip without
-  `TEST_DATABASE_URL`); the 13 database cases passed separately against a fresh
-  disposable PostgreSQL database.
-- [x] Local Ruff, mypy (58 source files), JavaScript parse, and whitespace gates
-  pass.
+- [x] Local Python suite: 227 passed, 15 skipped; the skips are the expected
+  database cases without `TEST_DATABASE_URL`.
+- [x] Local Ruff, configured mypy (58 source files), full-history scanner,
+  browser JavaScript execution, and whitespace gates pass.
+- [x] Local Playwright suite: 48 passed across all four required Android
+  viewports with 44 screenshot attachments and an HTML report.
+- [x] GitHub Actions run #84 uploaded
+  `mobile-browser-evidence-1` (artifact `8610726968`, 19.3 MB), retained through
+  2026-08-23.
 - [ ] Manually exercise every control and error path in Telegram staging.
-- [x] Hosted staging is `ACTIVE_HEALTHY`; both missing forward migrations applied
-  successfully, original row counts were preserved, and the service-only
-  contract reports ready.
+- [x] Hosted staging applied ledger entry `durable_write_rate_limits`; contract
+  `2.2.0` requires `20260724212939`, all failure arrays are empty, and every
+  recorded application-data count is unchanged.
 - [x] Rollback-only staging database lifecycle passed exact-ten checksum
   readback, UUID retry/retake, current-user leaderboard, revision scheduling,
   and revision-report checks without leaving test rows.
 
-- [x] CI passes from a clean checkout: GitHub Actions Tests run #77 completed
-  successfully with 218 tests against PostgreSQL 17, plus the public-data and
-  migration-security gates.
-- [x] Staging migration version `20260722120827` and contract `2.2.0` are exact;
-  all ten contract failure arrays are empty.
+- [x] Final branch CI passes from a clean checkout: GitHub Actions Tests run #84
+  completed 242 PostgreSQL-backed tests, 6 migration-security tests,
+  full-history scanning, and 48 browser tests across four projects.
+- [x] Staging required migration `20260724212939` and contract `2.2.0` are exact;
+  all contract failure arrays are empty.
 - [ ] Staging `/health/ready` returns HTTP 200.
 - [ ] Staging end-to-end quiz lifecycle passes without answer leakage.
 - [ ] Screenshots cover small Android widths, dashboard identity, out-of-top-ten
@@ -119,5 +132,6 @@ staging test has passed. Source-code inspection alone is not sufficient.
 - [ ] Production environment ownership is reviewed before migration/deployment.
 - [ ] A reversible production migration and rollback/recovery plan is approved.
 - [ ] Production `/health/ready` and critical user flows are checked after deploy.
-- [ ] Release notes, operator guide, database runbook, and non-programmer
-  verification instructions are current.
+- [x] Release notes, staging/Telegram/mobile guides, database runbook, production
+  rollback guide, and non-programmer verification instructions describe the
+  current gates without claiming pending hosted results.

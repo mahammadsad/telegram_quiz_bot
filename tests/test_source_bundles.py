@@ -151,6 +151,18 @@ def test_computer_expansion_uses_reviewed_primary_or_official_sources():
     assert all(len(row["fact_summary"]) >= 160 for row in rows)
 
 
+def test_source_bundle_rejects_placeholder_source_metadata():
+    row = dict(_bundle_rows()[0])
+    row.update({
+        "source_url": "https://example.gov.in/computer-foundation",
+        "source_title": "Synthetic official computer source",
+        "source_domain": "example.gov.in",
+    })
+
+    with pytest.raises(ValueError, match="placeholder source metadata"):
+        validate_source_bundle([row])
+
+
 def test_composite_topics_have_independent_fact_sources():
     rows = _bundle_rows()
     source_counts: dict[str, int] = {}

@@ -65,8 +65,8 @@ def supabase_project_ref_matches(
 # a private environment mapping without mutating global state.
 GEMINI_MODEL_PRIMARY = os.environ.get(
     "GEMINI_MODEL_PRIMARY",
-    os.environ.get("GEMINI_MODEL", "gemini-2.5-flash-lite"),
-).strip() or "gemini-2.5-flash-lite"
+    os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite"),
+).strip() or "gemini-3.1-flash-lite"
 GEMINI_MODEL_FALLBACK = os.environ.get(
     "GEMINI_MODEL_FALLBACK", "gemini-2.5-flash"
 ).strip() or "gemini-2.5-flash"

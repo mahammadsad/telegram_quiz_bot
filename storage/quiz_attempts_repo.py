@@ -6,7 +6,7 @@ import uuid
 
 from database.client import get_client
 from errors import DatabaseIntegrityError
-from storage.contracts import Row, as_row
+from storage.contracts import Row, as_row, raise_safe_rate_limit
 
 
 def submit_atomic(
@@ -19,18 +19,22 @@ def submit_atomic(
     response_times: list[float | None] | None = None,
     marked_for_review: list[bool] | None = None,
 ) -> dict:
-    result = get_client().rpc(
-        "submit_quiz_attempt_atomic",
-        {
-            "p_quiz_id": quiz_id,
-            "p_user_id": user_id,
-            "p_client_attempt_id": str(client_attempt_id),
-            "p_answers": answers,
-            "p_duration_seconds": duration_seconds,
-            "p_response_times": response_times,
-            "p_marked_for_review": marked_for_review,
-        },
-    ).execute()
+    try:
+        result = get_client().rpc(
+            "submit_quiz_attempt_atomic",
+            {
+                "p_quiz_id": quiz_id,
+                "p_user_id": user_id,
+                "p_client_attempt_id": str(client_attempt_id),
+                "p_answers": answers,
+                "p_duration_seconds": duration_seconds,
+                "p_response_times": response_times,
+                "p_marked_for_review": marked_for_review,
+            },
+        ).execute()
+    except Exception as exc:
+        raise_safe_rate_limit(exc)
+        raise
     if not isinstance(result.data, dict) or "score" not in result.data:
         raise DatabaseIntegrityError("Atomic attempt submission returned an invalid result.")
     return result.data

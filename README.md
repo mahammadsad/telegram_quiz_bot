@@ -37,7 +37,7 @@ an administrator approves it.
 | `index.html` | Telegram-theme-aware quiz UI with a clearly read-only static fallback |
 | `dashboard.html` | Private learner analytics, preferences, and privacy-safe leaderboard families |
 | `practice.html` | Authenticated wrong/due/bookmark/weak-topic practice with post-answer review |
-| `.github/workflows/` | Hourly recovery, daily fallback batching, CI, and resource-quality maintenance |
+| `.github/workflows/` | Production recovery, staging-only smoke, PostgreSQL/Playwright CI, and resource maintenance |
 
 The browser never receives a Supabase service-role key. It talks only to
 FastAPI. FastAPI verifies signed Telegram `initData`; the trusted server and bot
@@ -95,6 +95,10 @@ use the service role against RLS-protected tables and explicitly granted RPCs.
     while timeouts, rate limits, access denials, and server errors stay
     transient. Bengali/Hindi replacements enter a bounded discovery queue and
     remain `pending_review` until an authenticated administrator decides.
+16. PostgreSQL enforces durable write limits for submissions, reports,
+    practice/revision answers, bookmarks, preferences, resource feedback, and
+    administrator resource reviews. The process-local limiter remains only a
+    secondary button-storm guard.
 
 Static JSON is an emergency read-only fallback. When the live API is
 unavailable, the Mini App disables submission and scoring, labels the state,
@@ -173,7 +177,7 @@ still checks cached links and queues missing coverage but skips discovery.
 disposable empty database. Never run it on staging or production. Hosted
 projects advance only through unapplied files in `supabase/migrations/`, in
 timestamp order. The authoritative required version is
-`20260722120827_revision_reports_and_rankings.sql`, database contract `2.2.0`.
+`20260724212939_durable_write_rate_limits.sql`, database contract `2.2.0`.
 The application never applies DDL during startup.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,
@@ -188,8 +192,10 @@ submission, and canonical subject compatibility are covered by
 Resource feedback, link health, discovery moderation, security verification,
 and rollback are covered by
 `docs/MIGRATION_20260719_RESOURCE_OPERATIONS.md`.
-The current immutable-integrity, revision-report, ranking, staging, and recovery
-runbook is `docs/MIGRATION_20260722_PRODUCTION_CONTRACT.md`.
+The immutable-integrity, revision-report, and ranking runbook is
+`docs/MIGRATION_20260722_PRODUCTION_CONTRACT.md`; the current durable-write
+forward migration and verification queries are documented in
+`docs/MIGRATION_20260724_DURABLE_RATE_LIMITS.md`.
 
 Before enabling scheduled generation, import approved source facts for every
 due chapter:
@@ -235,7 +241,9 @@ pip install -r requirements-dev.lock
 ruff check .
 mypy
 pytest -q
-python scripts/check_public_data.py
+python scripts/check_public_data.py --history
+npm ci
+npm run test:browser
 ```
 
 CI uses a real disposable PostgreSQL 17 service. To reproduce that locally with
@@ -326,7 +334,10 @@ threshold, and retrieval of a ten-question checksum-certified active quiz. It
 returns HTTP 503 on any essential failure and never exposes secret values or raw
 database errors.
 
-Deployment and production drills are in `DEPLOYMENT_GUIDE.md`.
+Deployment and production drills are in `DEPLOYMENT_GUIDE.md`. Environment
+separation, Telegram evidence, mobile artifacts, and rollback procedures are in
+`docs/STAGING_GUIDE.md`, `docs/TELEGRAM_SMOKE_TEST.md`,
+`docs/MOBILE_SCREENSHOT_GUIDE.md`, and `docs/PRODUCTION_ROLLBACK.md`.
 
 ## Privacy and accessibility
 

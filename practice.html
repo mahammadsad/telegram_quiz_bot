@@ -54,7 +54,7 @@
   .feedback{margin-top:16px;border-left:4px solid var(--success);padding:12px 14px;background:color-mix(in srgb,var(--success) 8%,var(--surface));border-radius:10px}.feedback.bad{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 8%,var(--surface))}.feedback h2{font-size:18px;margin:0 0 6px}.feedback p{margin:5px 0}.feedback a{color:var(--link);font-weight:700}
   .report{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}.report summary{cursor:pointer;color:var(--danger);font-weight:800}.report-fields{display:grid;gap:8px;margin-top:9px}.report-fields textarea{min-height:72px;resize:vertical}.report-message{min-height:20px;margin:0!important;color:var(--hint);font-size:13px}
   .bottom{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);width:min(calc(100% - 20px),720px);display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:6px;background:color-mix(in srgb,var(--surface) 94%,transparent);border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 28px rgba(16,32,44,.16);backdrop-filter:blur(12px)}
-  .bottom a{text-align:center;text-decoration:none;color:var(--hint);padding:9px 4px;border-radius:12px;font-size:12px;font-weight:800}.bottom a.active{background:color-mix(in srgb,var(--button) 12%,transparent);color:var(--button)}
+  .bottom a{min-height:44px;display:grid;place-items:center;text-align:center;text-decoration:none;color:var(--hint);padding:9px 4px;border-radius:12px;font-size:12px;font-weight:800}.bottom a.active{background:color-mix(in srgb,var(--button) 12%,transparent);color:var(--button)}
   @media(max-width:520px){.app{padding:14px 10px 88px}.card{padding:15px}.question{font-size:19px}.actions{flex-direction:column}}
   @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style>
@@ -67,7 +67,7 @@
   </header>
   <section class="card" aria-live="polite">
     <div id="loading" class="state"><div class="loader"></div>প্রশ্ন লোড হচ্ছে...</div>
-    <div id="empty" class="state hidden"><p id="empty-message">এই তালিকায় এখন কোনো প্রশ্ন নেই। নতুন কুইজ শেষ করলে এখানে প্রশ্ন যোগ হবে।</p><div class="actions"><a class="btn primary" href="dashboard.html">ড্যাশবোর্ডে ফিরুন</a><a class="btn" href="index.html">কুইজ খুলুন</a></div></div>
+    <div id="empty" class="state hidden"><p id="empty-message">এই তালিকায় এখন কোনো প্রশ্ন নেই। নতুন কুইজ শেষ করলে এখানে প্রশ্ন যোগ হবে।</p><div class="actions"><a class="btn primary" href="dashboard.html">ড্যাশবোর্ডে ফিরুন</a><a class="btn" id="empty-quiz-link" href="/">কুইজ খুলুন</a></div></div>
     <div id="error" class="state hidden">অনুশীলন খুলতে Telegram-এর কুইজ বাটন ব্যবহার করুন, অথবা পরে আবার চেষ্টা করুন।<div class="actions"><button class="btn" id="retry" type="button">আবার চেষ্টা করুন</button></div></div>
     <div id="practice" class="hidden">
       <div class="progress" aria-hidden="true"><span id="bar"></span></div>
@@ -82,19 +82,24 @@
   </section>
 </main>
 <nav class="bottom" aria-label="প্রধান নেভিগেশন">
-  <a href="dashboard.html">হোম</a><a class="active" href="practice.html?source=wrong">অনুশীলন</a><a href="practice.html?source=due">পুনরাবৃত্তি</a><a href="dashboard.html#analytics">পরিসংখ্যান</a>
+  <a href="dashboard.html">হোম</a><a id="nav-practice" href="practice.html?source=wrong">অনুশীলন</a><a id="nav-revision" href="practice.html?source=due">পুনরাবৃত্তি</a><a href="dashboard.html#analytics">পরিসংখ্যান</a>
 </nav>
 <script>
 (function(){
   "use strict";
   var tg=window.Telegram&&window.Telegram.WebApp?window.Telegram.WebApp:null;
   var initData=tg&&tg.initData?tg.initData:"";
+  var telegramLaunchHash=/(?:^|&)tgWebAppData=/.test(window.location.hash.slice(1))
+    ?window.location.hash:"";
+  installTelegramNavigation();
   if(tg){try{tg.ready();tg.expand();}catch(e){}}
   var API_BASE=(window.QUIZ_API_BASE||document.querySelector('meta[name="quiz-api-base"]').content||"").replace(/\/$/,"");
   var params=new URLSearchParams(location.search);
   var requestedSource=params.get("source")||"wrong";
   var subject=params.get("subject")||"";
   if(["wrong","due","bookmark","weak_topic"].indexOf(requestedSource)<0)requestedSource="wrong";
+  var launchQuizId=(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.start_param)||"";
+  var quizHomeUrl=telegramUrl(launchQuizId?"/?quiz="+encodeURIComponent(launchQuizId):"/");
   var rows=[],index=0,selected=null,started=0,submitting=false,answerFrozen=false;
   var queueMode="",queueSource="",attemptId="",audioContext=null;
   var feedbackPlayed=Object.create(null);
@@ -105,6 +110,31 @@
   function el(id){return document.getElementById(id)}
   function bn(v){return String(v).replace(/[0-9]/g,function(d){return BN[+d]})}
   function api(p){return API_BASE+p}
+  function telegramUrl(path){
+    var url=new URL(path,window.location.href);
+    if(url.origin!==window.location.origin)return url.href;
+    if(telegramLaunchHash){
+      if(url.hash&&url.hash!==telegramLaunchHash){
+        var section=url.hash.slice(1);
+        if(/^[A-Za-z0-9_-]+$/.test(section))url.searchParams.set("section",section);
+      }
+      url.hash=telegramLaunchHash;
+    }
+    return url.pathname+url.search+url.hash;
+  }
+  function navigateTelegram(path){window.location.href=telegramUrl(path)}
+  function installTelegramNavigation(){
+    if(!telegramLaunchHash)return;
+    document.addEventListener("click",function(event){
+      if(event.defaultPrevented||(event.button!==undefined&&event.button!==0)||
+          event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+      var link=event.target.closest?event.target.closest("a[href]"):null;
+      if(!link||link.target==="_blank"||link.hasAttribute("download"))return;
+      var url=new URL(link.getAttribute("href"),window.location.href);
+      if(url.origin!==window.location.origin)return;
+      event.preventDefault();navigateTelegram(link.getAttribute("href"));
+    });
+  }
   function state(name){["loading","empty","error","practice"].forEach(function(k){el(k).classList.toggle("hidden",k!==name)})}
   function check(response){return response.ok?response.json():response.json().catch(function(){return{}}).then(function(body){var error=new Error(body.detail||String(response.status));error.status=response.status;throw error})}
   function readLocalPreference(name,fallback){try{var value=localStorage.getItem("telegram-quiz-pref:"+name);return value===null?fallback:value==="true"}catch(e){return fallback}}
@@ -129,6 +159,9 @@
   }
 
   el("title").textContent=labels[requestedSource][0];el("subtitle").textContent=labels[requestedSource][1];
+  el("empty-quiz-link").href=quizHomeUrl;
+  el("nav-practice").classList.toggle("active",requestedSource!=="due");
+  el("nav-revision").classList.toggle("active",requestedSource==="due");
   el("submit").addEventListener("click",submit);el("next").addEventListener("click",next);el("retry").addEventListener("click",load);
   document.addEventListener("keydown",function(event){if(answerFrozen||submitting)return;if(["1","2","3","4"].indexOf(event.key)>=0){selected=+event.key-1;savePending(false);renderOptions()}else if(event.key==="Enter"&&selected!==null)submit()});
   load();

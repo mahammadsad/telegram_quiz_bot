@@ -133,6 +133,85 @@ def test_force_post_reuses_saved_pack_without_gemini(monkeypatch, valid_question
     assert any(event[0] == "telegram" for event in events)
 
 
+def test_certified_generation_failure_reuses_pack_and_restores_ready(
+    monkeypatch,
+    valid_questions,
+):
+    existing = {
+        "status": "generation_failed",
+        "question_count": 10,
+        "ready_at": "2026-07-27T00:16:06+00:00",
+        "integrity_verified": True,
+        "checksum_contract_version": 2,
+        "generated_checksum": "checksum",
+        "persisted_checksum": "checksum",
+    }
+    events, saved = setup_run(monkeypatch, valid_questions, existing_run=existing)
+    monkeypatch.setattr(bot, "valid_saved_pack", lambda quiz_id, run: saved)
+    monkeypatch.setattr(
+        bot,
+        "generate_mcqs",
+        lambda *args, **kwargs: pytest.fail("Gemini was called"),
+    )
+
+    result = bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
+
+    assert result == "posted_from_saved_quiz"
+    assert ("status", "ready") in events
+    assert not any(event[0] == "save_pack" for event in events)
+    assert any(event[0] == "telegram" for event in events)
+
+
+def test_valid_saved_pack_accepts_only_certified_generation_failure(
+    monkeypatch,
+    valid_questions,
+):
+    saved = pack_from_questions(valid_questions)
+    monkeypatch.setattr(bot.quiz_pack_service, "get_quiz_pack", lambda quiz_id: saved)
+    monkeypatch.setattr(bot, "checksum_for_pack", lambda pack: "checksum")
+    certified = {
+        "status": "generation_failed",
+        "question_count": 10,
+        "ready_at": "2026-07-27T00:16:06+00:00",
+        "integrity_verified": True,
+        "checksum_contract_version": 2,
+        "generated_checksum": "checksum",
+        "persisted_checksum": "checksum",
+    }
+
+    assert bot.valid_saved_pack("20260710-history", certified) is saved
+
+    for field, value in (
+        ("question_count", 9),
+        ("ready_at", None),
+        ("integrity_verified", False),
+        ("checksum_contract_version", 1),
+        ("persisted_checksum", "different"),
+    ):
+        invalid = {**certified, field: value}
+        assert bot.valid_saved_pack("20260710-history", invalid) is None
+
+
+def test_chapter_history_failure_never_blocks_certified_quiz_post(
+    monkeypatch,
+    valid_questions,
+    caplog,
+):
+    events, _ = setup_run(monkeypatch, valid_questions)
+    monkeypatch.setattr(
+        bot.chapter_history_repo,
+        "record",
+        lambda *args: (_ for _ in ()).throw(RuntimeError("history unavailable")),
+    )
+
+    result = bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
+
+    assert result == "generated_and_posted"
+    assert ("status", "generation_failed") not in events
+    assert any(event[0] == "telegram" for event in events)
+    assert "CHAPTER_HISTORY_UPDATE_FAILED" in caplog.text
+
+
 def test_force_regenerate_uses_explicit_replacement_path(monkeypatch, valid_questions):
     existing = {"status": "generated", "content_checksum": "old"}
     events, _ = setup_run(monkeypatch, valid_questions, existing_run=existing)
@@ -276,6 +355,143 @@ def test_invalid_repaired_json_is_never_accepted():
             "history", "আধুনিক ভারত", pool=pool, grounding_bundle=grounding_bundle()
         )
     assert pool.calls == 2
+
+
+def test_semantically_invalid_json_gets_one_full_repair(valid_questions, caplog):
+    invalid = [dict(row, difficulty="medium") for row in valid_questions]
+
+    class Pool:
+        def __init__(self):
+            self.calls = []
+
+        def generate_subject_quiz(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                return json.dumps(invalid, ensure_ascii=False), {
+                    "provider": "primary",
+                    "model": "generator",
+                    "attempts": 1,
+                    "providers_attempted": ["primary"],
+                }
+            if len(self.calls) == 2:
+                return json.dumps(valid_questions, ensure_ascii=False), {
+                    "provider": "primary",
+                    "model": "generator",
+                    "attempts": 1,
+                    "providers_attempted": ["primary"],
+                }
+            return json.dumps(verifier_rows()), {
+                "provider": "secondary",
+                "model": "verifier",
+                "attempts": 1,
+                "providers_attempted": ["secondary"],
+            }
+
+    pool = Pool()
+    clean, metadata = bot.generate_mcqs(
+        "history",
+        "আধুনিক ভারত",
+        pool=pool,
+        grounding_bundle=grounding_bundle(),
+    )
+
+    assert len(clean) == 10
+    assert len(pool.calls) == 3
+    assert "difficulty_distribution" in pool.calls[1]["prompt"]
+    assert invalid[0]["question"] not in pool.calls[1]["prompt"]
+    assert "difficulty_distribution" in caplog.text
+    assert invalid[0]["question"] not in caplog.text
+    assert metadata["attempts"] == 2
+    assert metadata["semantic_repair_attempted"] is True
+
+
+def test_unbalanced_answer_positions_are_randomized_without_model_repair(
+    valid_questions,
+):
+    unbalanced = []
+    original_answers = []
+    for row in valid_questions:
+        moved = dict(row)
+        options = list(row["options"])
+        correct = row["correct_index"]
+        original_answers.append(options[correct])
+        options[0], options[correct] = options[correct], options[0]
+        moved["options"] = options
+        moved["correct_index"] = 0
+        unbalanced.append(moved)
+
+    class Pool:
+        def __init__(self):
+            self.calls = []
+
+        def generate_subject_quiz(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) == 1:
+                return json.dumps(unbalanced, ensure_ascii=False), {
+                    "provider": "primary",
+                    "model": "generator",
+                    "attempts": 1,
+                    "providers_attempted": ["primary"],
+                }
+            return json.dumps(verifier_rows()), {
+                "provider": "secondary",
+                "model": "verifier",
+                "attempts": 1,
+                "providers_attempted": ["secondary"],
+            }
+
+    pool = Pool()
+    clean, metadata = bot.generate_mcqs(
+        "history",
+        "আধুনিক ভারত",
+        pool=pool,
+        grounding_bundle=grounding_bundle(),
+    )
+
+    assert len(pool.calls) == 2
+    assert metadata["semantic_repair_attempted"] is False
+    assert sorted(
+        sum(row["correct_index"] == position for row in clean)
+        for position in range(4)
+    ) == [2, 2, 3, 3]
+    assert [
+        row["options"][row["correct_index"]]
+        for row in clean
+    ] == original_answers
+
+
+def test_semantically_invalid_json_twice_fails_closed(valid_questions):
+    invalid = [dict(row, difficulty="medium") for row in valid_questions]
+
+    class Pool:
+        def __init__(self):
+            self.calls = 0
+
+        def generate_subject_quiz(self, **kwargs):
+            self.calls += 1
+            return json.dumps(invalid, ensure_ascii=False), {
+                "provider": "primary",
+                "model": "generator",
+                "attempts": 1,
+                "providers_attempted": ["primary"],
+            }
+
+    pool = Pool()
+    with pytest.raises(
+        bot.QuizValidationError,
+        match="after one repair attempt.*difficulty_distribution",
+    ) as caught:
+        bot.generate_mcqs(
+            "history",
+            "আধুনিক ভারত",
+            pool=pool,
+            grounding_bundle=grounding_bundle(),
+            quiz_id="20260710-history",
+        )
+
+    assert pool.calls == 2
+    assert len(caught.value.attempts) == 2
+    assert caught.value.retryable is False
 
 
 def test_recovery_only_processes_due_and_skips_posted(monkeypatch):

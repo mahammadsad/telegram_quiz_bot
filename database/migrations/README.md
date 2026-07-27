@@ -12,7 +12,7 @@ New migrations use the Supabase CLI timestamp convention and live in
    `001` through `003` for an existing project that has not run them.
 2. Every `supabase/migrations/*.sql` file in filename/timestamp order. The
    authoritative current endpoint is
-   `20260722120827_revision_reports_and_rankings.sql`; existing hosted projects
+   `20260724212939_durable_write_rate_limits.sql`; existing hosted projects
    apply only ledger entries they have not already applied.
 
 `database/schema.sql` is therefore a bootstrap-only schema, not the final

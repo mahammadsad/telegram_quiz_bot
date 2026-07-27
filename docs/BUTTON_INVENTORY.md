@@ -102,11 +102,12 @@ states. This is not a substitute for the small-device Telegram sign-off below.
 
 ## Sign-off evidence
 
-For each page, retain test output plus screenshots at 320 px, 360 px, and 412 px
-width. Manual Telegram checks must record Android/iOS/browser, quiz ID, attempt ID,
-logical date, and whether the account was inside or outside the visible top ten.
+For each page, retain test output plus screenshots at 320×568, 360×800, 390×844,
+and 412×915. Manual Telegram checks must record Android/iOS/browser, quiz ID,
+attempt ID, logical date, and whether the account was inside or outside the
+visible top ten.
 Never record signed `initData` or any secret in the evidence.
 
-The local cloud-browser runner cannot reach the workspace loopback server, so no
-manual device row is signed off by the repository tests. Capture those screenshots
-against the private staging URL after staging is active.
+The repository Playwright suite covers all four viewports with deterministic
+mocks and screenshot artifacts. It does not sign off a real Telegram device;
+capture a separate sanitized observation against the private staging URL.

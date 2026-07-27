@@ -6,7 +6,7 @@ from typing import Any
 
 from database.client import get_client
 from errors import DatabaseIntegrityError
-from storage.contracts import Row, as_int, as_row, as_rows
+from storage.contracts import Row, as_int, as_row, as_rows, raise_safe_rate_limit
 
 
 def submit_feedback(
@@ -119,7 +119,11 @@ def channel_policies() -> list[Row]:
 
 
 def _rpc(name: str, payload: dict[str, Any]) -> Row:
-    result = get_client().rpc(name, payload).execute()
+    try:
+        result = get_client().rpc(name, payload).execute()
+    except Exception as exc:
+        raise_safe_rate_limit(exc)
+        raise
     if not isinstance(result.data, dict):
         raise DatabaseIntegrityError(f"{name} returned an invalid response.")
     return as_row(result.data, name)

@@ -1,8 +1,14 @@
 from copy import deepcopy
+from random import Random
 
 import pytest
 
-from services.question_validation import QuizValidationError, content_checksum, validate_questions
+from services.question_validation import (
+    QuizValidationError,
+    content_checksum,
+    randomize_balanced_answer_positions,
+    validate_questions,
+)
 
 
 def test_exactly_ten_valid_questions_accepted(valid_questions):
@@ -138,3 +144,58 @@ def test_correct_answer_positions_must_be_balanced(valid_questions):
         row["correct_index"] = 0
     with pytest.raises(QuizValidationError, match="balanced"):
         validate_questions(rows, "history", "আধুনিক ভারত")
+
+
+def test_answer_position_randomization_preserves_answers_and_balances_positions(
+    valid_questions,
+):
+    original = deepcopy(valid_questions)
+    original_answers = [
+        row["options"][row["correct_index"]]
+        for row in original
+    ]
+
+    balanced = randomize_balanced_answer_positions(
+        original,
+        rng=Random(20260727),
+    )
+
+    assert original == valid_questions
+    assert sorted(
+        sum(row["correct_index"] == position for row in balanced)
+        for position in range(4)
+    ) == [2, 2, 3, 3]
+    assert [
+        row["options"][row["correct_index"]]
+        for row in balanced
+    ] == original_answers
+    validate_questions(balanced, "history", "আধুনিক ভারত")
+
+
+def test_answer_position_randomization_is_repeatable_with_injected_rng(
+    valid_questions,
+):
+    first = randomize_balanced_answer_positions(
+        valid_questions,
+        rng=Random(42),
+    )
+    second = randomize_balanced_answer_positions(
+        valid_questions,
+        rng=Random(42),
+    )
+    assert first == second
+
+
+def test_answer_position_randomization_removes_stale_version_fields(
+    valid_questions,
+):
+    clean = validate_questions(valid_questions, "history", "আধুনিক ভারত")
+    balanced = randomize_balanced_answer_positions(clean, rng=Random(42))
+
+    for row in balanced:
+        assert {
+            "content_hash",
+            "question_hash",
+            "question_id",
+            "stem_hash",
+        }.isdisjoint(row)

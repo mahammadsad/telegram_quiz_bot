@@ -6,8 +6,9 @@ Apply these forward migrations in timestamp order after
 1. `20260718220112_production_integrity_contract_v2.sql`
 2. `20260718222134_learning_and_leaderboard_contract_v2.sql`
 3. `20260722120827_revision_reports_and_rankings.sql`
+4. `20260724212939_durable_write_rate_limits.sql`
 
-The final required migration is `20260722120827`; the application database
+The final required migration is `20260724212939`; the application database
 contract is `2.2.0`. `database/contract.py` is the only application source for
 these identifiers.
 
@@ -25,6 +26,10 @@ these identifiers.
 - makes competitive accuracy rankings first-attempt-only;
 - exposes one exact contract RPC that checks tables, columns, function
   signatures, RLS, grants, verification threshold, and migration ledger.
+- adds a private RLS-protected write-rate bucket and service-role-only limiter
+  for bookmarks, preferences, resource feedback, and administrative resource
+  review; submission, report, and practice/revision writes retain their
+  existing PostgreSQL-backed limits.
 
 ## Safe rollout
 
@@ -36,7 +41,7 @@ these identifiers.
    ledger. Never run `database/schema.sql` on a hosted project.
 4. Apply each unapplied migration to staging only.
 5. Run the schema-contract RPC as the service role. It must return `ready: true`,
-   contract `2.2.0`, migration `20260722120827`, and ten empty failure arrays
+   contract `2.2.0`, migration `20260724212939`, and ten empty failure arrays
    (tables, columns, indexes, triggers, functions, grants, function settings,
    schema access, RLS, and table permissions).
 6. Run staging API, UI, private Telegram-topic, duplicate-attempt, revision,
@@ -57,3 +62,6 @@ after the backup timestamp.
 If checksum certification fails, keep the run in `integrity_failed`; do not
 post it. If Telegram delivery is ambiguous, keep `posting_unknown`, inspect the
 target topic, and never automatically post a second copy.
+
+The exact checkpoint, preservation-count, application rollback, and
+migration-failure procedure is in `PRODUCTION_ROLLBACK.md`.

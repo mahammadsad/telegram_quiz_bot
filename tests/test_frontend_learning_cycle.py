@@ -34,6 +34,13 @@ def test_quiz_result_links_the_complete_learning_cycle():
     assert "bookmark-submit" in INDEX
     assert "result-average" in INDEX
     assert "result-unanswered" in INDEX
+    assert 'byId("btn-revise").addEventListener("click",openRevisionPractice)' in INDEX.replace(
+        " ", ""
+    )
+    assert 'navigateTelegram("practice.html?source=due")' in INDEX.replace(" ", "")
+    assert 'byId("btn-revise").addEventListener("click",loadResources)' not in INDEX.replace(
+        " ", ""
+    )
 
 
 def test_quiz_result_survives_refresh_and_retake_gets_a_new_identity():
@@ -101,11 +108,15 @@ def test_current_user_and_revision_preferences_are_visible_and_persisted():
     assert 'source=weak_topic&subject=' in DASHBOARD
     assert 'el("page-title").textContent="কুইজ ড্যাশবোর্ড"' in DASHBOARD
     assert 'el("page-link").textContent="আমার ড্যাশবোর্ড"' in DASHBOARD
-    assert 'id="bookmarks-card"' in DASHBOARD
+    assert 'id="bookmark-practice"' in DASHBOARD
+    assert 'id="bookmarks-card"' not in DASHBOARD
+    assert 'fetch(api("/api/me/bookmarks")' not in DASHBOARD
     assert 'id="r-overdue"' in DASHBOARD
     assert 'id="revision-subjects"' in DASHBOARD
-    assert "function removeBookmark" in DASHBOARD
-    assert "active:false" in DASHBOARD
+    assert 'id="due-revision"' in DASHBOARD
+    assert 'id="mastery-card"' in DASHBOARD
+    assert 'id="mastery-card" class="card half hidden"' in DASHBOARD
+    assert "function removeBookmark" not in DASHBOARD
 
 
 def test_revision_review_has_attempt_owned_question_reporting():
@@ -124,6 +135,28 @@ def test_practice_errors_are_inline_retryable_and_empty_states_have_actions():
     assert "এতে নকল চেষ্টা তৈরি হবে না" in PRACTICE
     assert 'el("submit").disabled=error.status===409' in PRACTICE
     assert 'el("empty-message").textContent=' in PRACTICE
+
+
+def test_mini_app_navigation_uses_live_routes_and_marks_revision_active():
+    assert 'href="index.html"' not in INDEX
+    assert 'href="index.html"' not in DASHBOARD
+    assert 'href="index.html"' not in PRACTICE
+    assert 'id="nav-quiz" href="/"' in INDEX
+    assert 'id="empty-quiz-link" href="/"' in PRACTICE
+    assert 'el("page-link").href=quizHomeUrl' in DASHBOARD
+    assert 'link.href=quizHomeUrl' in DASHBOARD
+    assert 'el("nav-practice").classList.toggle("active",requestedSource!=="due")' in PRACTICE
+    assert 'el("nav-revision").classList.toggle("active",requestedSource==="due")' in PRACTICE
+    for source in (INDEX, DASHBOARD, PRACTICE):
+        assert "tgWebAppData=" in source
+        assert "telegramLaunchHash" in source
+        assert "installTelegramNavigation()" in source
+        assert "url.hash=telegramLaunchHash" in source.replace(" ", "")
+        assert 'searchParams.set("tgWebAppData"' not in source
+        assert "sessionStorage.setItem" not in source.split("telegramLaunchHash", 1)[1].split(
+            "function authHeaders", 1
+        )[0]
+    assert 'requestedSection==="analytics"' in DASHBOARD
 
 
 def test_dashboard_filters_and_leaderboard_pagination_are_wired():
