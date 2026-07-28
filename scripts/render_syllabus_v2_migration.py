@@ -8,6 +8,21 @@ import json
 from pathlib import Path
 
 from config.syllabus import SYLLABUS
+from config.syllabus_catalog import CATALOGUE_ROWS
+
+
+def _legacy_rotation(subject_key: str, chapter_key: str) -> bool:
+    """Keep the already-applied seed migration immutable.
+
+    Runtime rotation now comes from config/source_rollout.py. The historical
+    syllabus-v2 migration must continue rendering the exact legacy seed that
+    production and staging already applied.
+    """
+    short_key = chapter_key.removeprefix(f"{subject_key}:")
+    for row_key, _name, _priority, rotation_enabled, _topics in CATALOGUE_ROWS[subject_key]:
+        if row_key == short_key:
+            return rotation_enabled
+    raise ValueError(f"Unknown historical syllabus chapter: {chapter_key}")
 
 
 def catalogue_payload() -> list[dict]:
@@ -21,7 +36,7 @@ def catalogue_payload() -> list[dict]:
                     "name": chapter.name,
                     "display_order": chapter.display_order,
                     "priority": chapter.priority,
-                    "rotation_enabled": chapter.rotation_enabled,
+                    "rotation_enabled": _legacy_rotation(subject_key, chapter.key),
                     "micro_topics": [
                         {
                             "key": topic.key,

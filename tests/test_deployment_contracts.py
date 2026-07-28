@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 import subprocess
 import sys
@@ -7,7 +8,11 @@ from pathlib import Path
 
 import yaml
 
-from database.contract import REQUIRED_MIGRATION_VERSION
+from database.contract import (
+    APPLICATION_VERSION,
+    REQUIRED_MIGRATION_VERSION,
+    SOURCE_ROLLOUT_MIGRATION_VERSION,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_DIR = ROOT / ".github" / "workflows"
@@ -35,6 +40,7 @@ def test_render_blueprint_is_fail_closed_and_uses_readiness() -> None:
 
     env = {item["key"]: item for item in service["envVars"]}
     assert env["EXPECTED_SUPABASE_PROJECT_REF"]["value"] == PRODUCTION_PROJECT_REF
+    assert env["SOURCE_BACKED_ROTATION_ENABLED"]["value"] == "false"
     for secret_name in (
         "SUPABASE_URL",
         "SUPABASE_SERVICE_KEY",
@@ -76,6 +82,11 @@ def test_workflows_have_minimum_permissions_timeouts_and_environment_guards() ->
     assert run_bot["timeout-minutes"] == 45
     assert run_bot["environment"] == "production"
     assert run_bot["concurrency"]["cancel-in-progress"] is False
+    main_source = (WORKFLOW_DIR / "main.yml").read_text(encoding="utf-8")
+    assert (
+        "SOURCE_BACKED_ROTATION_ENABLED: "
+        "${{ vars.SOURCE_BACKED_ROTATION_ENABLED || 'false' }}"
+    ) in main_source
 
     assert resources["permissions"] == {"contents": "read"}
     maintenance = resources["jobs"]["maintain-resources"]
@@ -108,6 +119,7 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert job["env"]["DEV_ALLOW_UNVERIFIED_TELEGRAM"] == "false"
     assert job["env"]["WRITE_STATIC_QUIZ_JSON"] == "false"
     assert job["env"]["APP_TIMEZONE"] == "Asia/Kolkata"
+    assert job["env"]["SOURCE_BACKED_ROTATION_ENABLED"] == "true"
 
     source = path.read_text(encoding="utf-8")
     assert PRODUCTION_PROJECT_REF not in source
@@ -139,10 +151,68 @@ def test_staging_workflow_uses_only_staging_secret_expressions() -> None:
         assert env[name] == f"${{{{ secrets.{name} }}}}"
 
 
+def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> None:
+    static_path = WORKFLOW_DIR / "source-rollout.yml"
+    static = _load_yaml(static_path)
+    static_trigger = static.get("on") or static.get(True)
+    assert set(static_trigger) == {"workflow_dispatch"}
+    static_inputs = static_trigger["workflow_dispatch"]["inputs"]
+    assert static_inputs["target"]["options"] == ["staging", "production"]
+    assert static_inputs["target"]["default"] == "staging"
+    assert static_inputs["operation"]["options"] == ["validate", "import"]
+    assert static["permissions"] == {"contents": "read"}
+    assert static["concurrency"]["cancel-in-progress"] is False
+
+    current_path = WORKFLOW_DIR / "current-affairs-sources.yml"
+    current = _load_yaml(current_path)
+    current_trigger = current.get("on") or current.get(True)
+    assert current_trigger["schedule"] == [{"cron": "30 0,12 * * *"}]
+    current_inputs = current_trigger["workflow_dispatch"]["inputs"]
+    assert current_inputs["target"]["options"] == ["staging", "production"]
+    assert current_inputs["operation"]["options"] == ["validate", "refresh"]
+    assert current["permissions"] == {"contents": "read"}
+    assert current["concurrency"]["cancel-in-progress"] is False
+
+    for path in (static_path, current_path):
+        source = path.read_text(encoding="utf-8")
+        assert PRODUCTION_PROJECT_REF in source
+        assert STAGING_PROJECT_REF in source
+        assert "TELEGRAM_" not in source
+        assert "GEMINI_" not in source
+        assert "get_application_schema_contract" in source
+        assert "SUPABASE_SERVICE_KEY" in source
+
+    static_source = static_path.read_text(encoding="utf-8")
+    assert static_source.index("get_application_schema_contract") < (
+        static_source.index("scripts/import_source_rollout.py --approve")
+    )
+    assert "IMPORT REVIEWED SOURCES TO" in static_source
+
+    current_source = current_path.read_text(encoding="utf-8")
+    assert current_source.index("get_application_schema_contract") < (
+        current_source.index("--max-items 80 --minimum-per-chapter 4 --approve")
+    )
+    assert "REFRESH PIB SOURCES IN" in current_source
+
+
 def test_authoritative_migration_version_is_latest_filename() -> None:
     migrations = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
     assert migrations
-    assert migrations[-1].name.startswith(f"{REQUIRED_MIGRATION_VERSION}_")
+    assert migrations[-1].name.startswith(f"{SOURCE_ROLLOUT_MIGRATION_VERSION}_")
+    assert any(
+        path.name.startswith(f"{REQUIRED_MIGRATION_VERSION}_")
+        for path in migrations
+    )
+
+
+def test_python_and_browser_packages_share_the_release_version() -> None:
+    package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
+    lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
+
+    assert APPLICATION_VERSION == "7.1.0"
+    assert package["version"] == APPLICATION_VERSION
+    assert lock["version"] == APPLICATION_VERSION
+    assert lock["packages"][""]["version"] == APPLICATION_VERSION
 
 
 def test_disposable_database_builder_can_run_as_a_direct_script() -> None:

@@ -12,7 +12,12 @@ import pytest
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
-from database.contract import DATABASE_CONTRACT_VERSION, REQUIRED_MIGRATION_VERSION
+from config.source_rollout import ROTATION_CHAPTER_KEYS
+from database.contract import (
+    DATABASE_CONTRACT_VERSION,
+    REQUIRED_MIGRATION_VERSION,
+    SOURCE_ROLLOUT_MIGRATION_VERSION,
+)
 from services.question_validation import content_checksum, validate_questions
 from utils.hashing import normalize_text
 
@@ -271,6 +276,13 @@ def test_exact_database_contract_and_permissions(database_url: str) -> None:
     assert contract["ready"] is True
     assert contract["contract_version"] == DATABASE_CONTRACT_VERSION
     assert contract["required_migration_version"] == REQUIRED_MIGRATION_VERSION
+    assert (
+        contract["source_rollout_migration_version"]
+        == SOURCE_ROLLOUT_MIGRATION_VERSION
+    )
+    assert contract["source_rollout_migration_applied"] is True
+    assert contract["source_backed_rotation_ready"] is True
+    assert isinstance(contract["source_coverage_ready"], bool)
     for key in (
         "missing_tables",
         "missing_columns",
@@ -284,6 +296,27 @@ def test_exact_database_contract_and_permissions(database_url: str) -> None:
         "table_permission_failures",
     ):
         assert contract[key] == []
+
+
+def test_database_rotation_is_exactly_the_reviewed_source_allowlist(
+    database_url: str,
+) -> None:
+    expected = {
+        key
+        for chapter_keys in ROTATION_CHAPTER_KEYS.values()
+        for key in chapter_keys
+    }
+    with connect(database_url) as connection:
+        rows = connection.execute(
+            """
+            select key
+            from public.quiz_chapters
+            where active and rotation_enabled
+            order by key
+            """
+        ).fetchall()
+
+    assert {row["key"] for row in rows} == expected
 
 
 @pytest.mark.parametrize("role", ["anon", "authenticated"])

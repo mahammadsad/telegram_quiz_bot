@@ -5,8 +5,10 @@ from pathlib import Path
 
 import pytest
 
+from config.source_rollout import ROTATION_CHAPTER_KEYS, STATIC_SOURCE_BUNDLES
 from config.syllabus import SYLLABUS
 from scripts.import_source_documents import validate_source_bundle
+from scripts.import_source_rollout import load_static_rollout_rows
 
 ROOT = Path(__file__).resolve().parents[1]
 COMPUTER_EXPANSION = ROOT / "sources" / "computer_education_expansion_v2.json"
@@ -14,6 +16,12 @@ POLITY_EXPANSION = ROOT / "sources" / "polity_expansion_v2.json"
 ENGLISH_EXPANSION = ROOT / "sources" / "english_expansion_v2.json"
 MATHEMATICS_EXPANSION = ROOT / "sources" / "mathematics_expansion_v2.json"
 SCIENCE_EXPANSION = ROOT / "sources" / "science_expansion_v2.json"
+LANGUAGE_REASONING_GK_EXPANSION = (
+    ROOT / "sources" / "bengali_reasoning_gk_expansion_v1.json"
+)
+GEO_ECON_HISTORY_ENV_EXPANSION = (
+    ROOT / "sources" / "geography_economics_history_environment_expansion_v1.json"
+)
 EXPANSION_CHAPTER_KEYS = {
     "computer:number-systems",
     "computer:architecture-memory",
@@ -91,6 +99,20 @@ MATHEMATICS_TRUSTED_DOMAINS = {
 SCIENCE_TRUSTED_DOMAINS = {
     "nios.ac.in",
     "digital.nios.ac.in",
+}
+LANGUAGE_REASONING_GK_TRUSTED_DOMAINS = {
+    "scertwb.org",
+    "egyankosh.ac.in",
+    "digital.nios.ac.in",
+    "mha.gov.in",
+    "india.gov.in",
+    "ccrtindia.gov.in",
+}
+GEO_ECON_HISTORY_ENV_TRUSTED_DOMAINS = {
+    "digital.nios.ac.in",
+    "rbi.org.in",
+    "mospi.gov.in",
+    "moef.gov.in",
 }
 
 
@@ -182,7 +204,10 @@ def test_polity_expansion_covers_every_gated_micro_topic_exactly():
         if chapter.key in POLITY_EXPANSION_CHAPTER_KEYS
     ]
     assert {chapter.key for chapter in chapters} == POLITY_EXPANSION_CHAPTER_KEYS
-    assert all(not chapter.rotation_enabled and chapter.priority == 3 for chapter in chapters)
+    assert all(chapter.priority == 3 for chapter in chapters)
+    assert {
+        chapter.key for chapter in chapters if chapter.rotation_enabled
+    } == set(ROTATION_CHAPTER_KEYS["polity"])
 
     expected = {
         topic.key: (chapter.name, topic.name)
@@ -235,7 +260,10 @@ def test_english_expansion_covers_every_gated_micro_topic_exactly():
         if chapter.key in ENGLISH_EXPANSION_CHAPTER_KEYS
     ]
     assert {chapter.key for chapter in chapters} == ENGLISH_EXPANSION_CHAPTER_KEYS
-    assert all(not chapter.rotation_enabled and chapter.priority == 3 for chapter in chapters)
+    assert all(chapter.priority == 3 for chapter in chapters)
+    assert {
+        chapter.key for chapter in chapters if chapter.rotation_enabled
+    } == set(ROTATION_CHAPTER_KEYS["english"])
 
     expected = {
         topic.key: (chapter.name, topic.name)
@@ -281,7 +309,9 @@ def test_mathematics_expansion_covers_every_gated_micro_topic_exactly():
         if chapter.key in MATHEMATICS_EXPANSION_CHAPTER_KEYS
     ]
     assert {chapter.key for chapter in chapters} == MATHEMATICS_EXPANSION_CHAPTER_KEYS
-    assert all(not chapter.rotation_enabled for chapter in chapters)
+    assert {
+        chapter.key for chapter in chapters if chapter.rotation_enabled
+    } == set(ROTATION_CHAPTER_KEYS["mathematics"])
     assert {chapter.priority for chapter in chapters} == {2, 3}
 
     expected = {
@@ -331,7 +361,9 @@ def test_science_expansion_covers_every_gated_micro_topic_exactly():
         if chapter.key in SCIENCE_EXPANSION_CHAPTER_KEYS
     ]
     assert {chapter.key for chapter in chapters} == SCIENCE_EXPANSION_CHAPTER_KEYS
-    assert all(not chapter.rotation_enabled for chapter in chapters)
+    assert {
+        chapter.key for chapter in chapters if chapter.rotation_enabled
+    } == set(ROTATION_CHAPTER_KEYS["science"])
     assert {chapter.priority for chapter in chapters} == {2, 3}
 
     expected = {
@@ -374,3 +406,100 @@ def test_bundle_validator_rejects_duplicate_source_versions():
     rows = _bundle_rows()
     with pytest.raises(ValueError, match="duplicates a micro-topic, URL, and fact version"):
         validate_source_bundle([rows[0], dict(rows[0])])
+
+
+def test_new_static_rollout_bundles_cover_every_selected_micro_topic_once():
+    rows = json.loads(LANGUAGE_REASONING_GK_EXPANSION.read_text(encoding="utf-8"))
+    rows.extend(
+        json.loads(GEO_ECON_HISTORY_ENV_EXPANSION.read_text(encoding="utf-8"))
+    )
+    selected_subjects = {
+        "bengali",
+        "reasoning",
+        "miscellaneous",
+        "geography",
+        "economics",
+        "history",
+        "environment",
+    }
+    expected = {
+        topic.key: (subject_key, chapter.name, topic.name)
+        for subject_key in selected_subjects
+        for chapter in SYLLABUS[subject_key]
+        if chapter.key in ROTATION_CHAPTER_KEYS[subject_key]
+        for topic in chapter.micro_topics
+    }
+
+    assert len(rows) == 56
+    assert {row["micro_topic_key"] for row in rows} == set(expected)
+    for row in rows:
+        assert (
+            row["subject_key"],
+            row["chapter"],
+            row["micro_topic_name"],
+        ) == expected[row["micro_topic_key"]]
+
+
+def test_new_static_rollout_sources_are_official_reviewed_and_non_expiring():
+    language_rows = validate_source_bundle(json.loads(
+        LANGUAGE_REASONING_GK_EXPANSION.read_text(encoding="utf-8")
+    ))
+    domain_rows = validate_source_bundle(json.loads(
+        GEO_ECON_HISTORY_ENV_EXPANSION.read_text(encoding="utf-8")
+    ))
+
+    assert {row["source_domain"] for row in language_rows} <= (
+        LANGUAGE_REASONING_GK_TRUSTED_DOMAINS
+    )
+    assert {row["source_domain"] for row in domain_rows} <= (
+        GEO_ECON_HISTORY_ENV_TRUSTED_DOMAINS
+    )
+    assert all(row["source_kind"] == "official" for row in language_rows + domain_rows)
+    assert all(
+        row["source_accessed_at"].startswith("2026-07-28T")
+        for row in language_rows + domain_rows
+    )
+    assert all(row["expires_at"] is None for row in language_rows + domain_rows)
+    assert all(len(row["fact_summary"]) >= 300 for row in language_rows + domain_rows)
+
+
+def test_static_bundle_manifest_covers_every_non_dynamic_rotation_chapter():
+    covered: set[tuple[str, str]] = set()
+    for relative_path in STATIC_SOURCE_BUNDLES:
+        rows = json.loads((ROOT / relative_path).read_text(encoding="utf-8"))
+        covered.update((row["subject_key"], row["chapter"]) for row in rows)
+
+    expected = {
+        (subject_key, chapter.name)
+        for subject_key, chapters in SYLLABUS.items()
+        if subject_key != "current-affairs"
+        for chapter in chapters
+        if chapter.rotation_enabled
+    }
+    assert expected <= covered
+
+
+def test_static_rollout_import_filters_out_every_unapproved_chapter():
+    rows, coverage = load_static_rollout_rows(root=ROOT)
+    expected_chapters = {
+        chapter.key
+        for subject_key, chapters in SYLLABUS.items()
+        if subject_key != "current-affairs"
+        for chapter in chapters
+        if chapter.key in ROTATION_CHAPTER_KEYS[subject_key]
+    }
+    selected_pairs = {
+        (subject_key, chapter.name): chapter.key
+        for subject_key, chapters in SYLLABUS.items()
+        if subject_key != "current-affairs"
+        for chapter in chapters
+        if chapter.key in ROTATION_CHAPTER_KEYS[subject_key]
+    }
+
+    assert set(coverage) == expected_chapters
+    assert len(coverage) == 29
+    assert len(rows) == 110
+    assert all(
+        (row["subject_key"], row["chapter"]) in selected_pairs
+        for row in rows
+    )

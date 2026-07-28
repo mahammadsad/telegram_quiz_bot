@@ -80,6 +80,7 @@ jobs:
       GEMINI_FAILOVER_ENABLED: "true"
       DEV_ALLOW_UNVERIFIED_TELEGRAM: "false"
       WRITE_STATIC_QUIZ_JSON: "false"
+      SOURCE_BACKED_ROTATION_ENABLED: "true"
       RENDER_STAGING_URL: https://telegram-quiz-bot-staging.onrender.com
       INPUT_OPERATION: ${{ inputs.operation }}
       INPUT_SUBJECT: ${{ inputs.subject }}
@@ -207,13 +208,19 @@ jobs:
                   "applicationVersion": body.get("applicationVersion"),
                   "databaseContractVersion": body.get("databaseContractVersion"),
                   "requiredMigrationVersion": body.get("requiredMigrationVersion"),
+                  "sourceRolloutMigrationVersion": body.get(
+                      "sourceRolloutMigrationVersion"
+                  ),
+                  "sourceBackedRotationEnabled": body.get(
+                      "sourceBackedRotationEnabled"
+                  ),
                   "ready": body.get("status") == "ready",
                   "checks": body.get("checks"),
                   "failureCategories": body.get("failureCategories"),
               }
               print(json.dumps(safe, sort_keys=True))
 
-              if body.get("applicationVersion") != "7.0.0":
+              if body.get("applicationVersion") != "7.1.0":
                   raise SystemExit("Staging application version is not the release candidate.")
               if path == "/health/live":
                   if status != 200:
@@ -224,6 +231,10 @@ jobs:
                   raise SystemExit("Staging database contract version mismatch.")
               if body.get("requiredMigrationVersion") != "20260724212939":
                   raise SystemExit("Staging migration version mismatch.")
+              if body.get("sourceRolloutMigrationVersion") != "20260728040209":
+                  raise SystemExit("Staging source-rollout migration mismatch.")
+              if body.get("sourceBackedRotationEnabled") is not True:
+                  raise SystemExit("Staging source-backed rotation is not enabled.")
               if operation == "subject-quiz":
                   if status != 200 or body.get("status") != "ready":
                       raise SystemExit(

@@ -24,7 +24,8 @@ ATTEMPT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
 def test_forward_migration_durably_protects_every_required_write() -> None:
     sql = MIGRATION.read_text(encoding="utf-8").casefold()
-    assert REQUIRED_MIGRATION_VERSION == "20260724212939"
+    assert MIGRATION.name.startswith("20260724212939_")
+    assert int(REQUIRED_MIGRATION_VERSION) >= 20260724212939
     assert "create table if not exists public.write_rate_limit_buckets" in sql
     assert "alter table public.write_rate_limit_buckets enable row level security" in sql
     assert "from public, anon, authenticated" in sql

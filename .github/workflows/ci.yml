@@ -40,11 +40,8 @@ jobs:
       - name: Build disposable database and apply every migration
         run: python scripts/apply_test_database.py
       - run: pytest -q
-      - name: Validate gated expansion source bundles
-        run: |
-          for bundle in sources/*_expansion_v2.json; do
-            python scripts/import_source_documents.py "$bundle" --validate-only
-          done
+      - name: Validate exact static source rollout
+        run: python scripts/import_source_rollout.py --validate-only
       - run: python scripts/check_public_data.py --history
       - name: Migration security contract
         run: pytest -q tests/test_atomic_integrity_contracts.py

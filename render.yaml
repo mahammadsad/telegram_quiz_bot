@@ -44,6 +44,8 @@ services:
         value: "0.85"
       - key: QUESTION_REPORT_THRESHOLD
         value: "3"
+      - key: SOURCE_BACKED_ROTATION_ENABLED
+        value: "false"
       - key: TELEGRAM_INIT_DATA_MAX_AGE_SECONDS
         value: "86400"
       - key: TELEGRAM_WRITE_INIT_DATA_MAX_AGE_SECONDS

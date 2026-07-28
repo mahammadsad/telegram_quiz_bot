@@ -6,7 +6,8 @@ preflight, documentation tests, and deployment code import these values.
 
 from __future__ import annotations
 
-APPLICATION_VERSION = "7.0.0"
+APPLICATION_VERSION = "7.1.0"
 DATABASE_CONTRACT_KEY = "telegram_quiz_api"
 DATABASE_CONTRACT_VERSION = "2.2.0"
 REQUIRED_MIGRATION_VERSION = "20260724212939"
+SOURCE_ROLLOUT_MIGRATION_VERSION = "20260728040209"

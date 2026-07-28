@@ -11,6 +11,7 @@ from config.settings import (
     GEMINI_FAILOVER_ENABLED,
     MINIAPP_SHORT_NAME,
     QUESTION_VERIFICATION_MIN_CONFIDENCE,
+    SOURCE_BACKED_ROTATION_ENABLED,
     SUPABASE_SERVICE_KEY,
     SUPABASE_URL,
     TELEGRAM_BOT_TOKEN,
@@ -26,6 +27,7 @@ from database.contract import (
     DATABASE_CONTRACT_KEY,
     DATABASE_CONTRACT_VERSION,
     REQUIRED_MIGRATION_VERSION,
+    SOURCE_ROLLOUT_MIGRATION_VERSION,
 )
 from storage import schema_contract_repo
 from telegram.routing import ForumRouter, ForumRoutingError
@@ -50,6 +52,8 @@ class Readiness:
             "aiProviderCategory": self.provider_category,
             "applicationVersion": APPLICATION_VERSION,
             "requiredMigrationVersion": REQUIRED_MIGRATION_VERSION,
+            "sourceRolloutMigrationVersion": SOURCE_ROLLOUT_MIGRATION_VERSION,
+            "sourceBackedRotationEnabled": SOURCE_BACKED_ROTATION_ENABLED,
             "databaseContractVersion": DATABASE_CONTRACT_VERSION,
         }
 
@@ -125,12 +129,23 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 contract.get("function_permission_failures") or []
             ) + (contract.get("table_permission_failures") or [])
             checks["databasePermissions"] = not permission_failures
+            source_rollout_ready = bool(
+                contract.get("source_rollout_migration_version")
+                == SOURCE_ROLLOUT_MIGRATION_VERSION
+                and contract.get("source_rollout_migration_applied") is True
+                and contract.get("source_backed_rotation_ready") is True
+                and contract.get("source_coverage_ready") is True
+            )
             checks["databaseContract"] = bool(
                 contract.get("ready")
                 and contract.get("contract_key") == DATABASE_CONTRACT_KEY
                 and contract.get("contract_version") == DATABASE_CONTRACT_VERSION
                 and contract.get("required_migration_version")
                 == REQUIRED_MIGRATION_VERSION
+                and (
+                    not SOURCE_BACKED_ROTATION_ENABLED
+                    or source_rollout_ready
+                )
                 and float(contract.get("verification_threshold") or 0)
                 == QUESTION_VERIFICATION_MIN_CONFIDENCE
             )

@@ -23,13 +23,15 @@ contain staging-only values for these names:
 - `GEMINI_API_KEY_PRIMARY` and/or the configured fallback
 - `DEV_ALLOW_UNVERIFIED_TELEGRAM`
 - `WRITE_STATIC_QUIZ_JSON`
+- `SOURCE_BACKED_ROTATION_ENABLED`
 - `APP_TIMEZONE`
 
 Verify names, presence, project ownership, and non-secret public identifiers;
 never reveal values in screenshots, logs, pull-request text, or terminal output.
 The required safe settings are the staging project ref,
 `DEV_ALLOW_UNVERIFIED_TELEGRAM` false, `WRITE_STATIC_QUIZ_JSON` false, and
-`APP_TIMEZONE` set to `Asia/Kolkata`.
+`APP_TIMEZONE` set to `Asia/Kolkata`. Set
+`SOURCE_BACKED_ROTATION_ENABLED=true` only for the v7.1 rollout test.
 
 `SUPABASE_URL` must have the exact host
 `prdrabmcivgbygzjnmko.supabase.co`, and `SUPABASE_SERVICE_KEY` must come from
@@ -42,24 +44,27 @@ URL/project-ref mismatch before issuing a request.
 1. Require green PR CI, including PostgreSQL 17 migrations, security scans, and
    all four Playwright mobile projects.
 2. Record staging preservation counts and the migration ledger.
-3. Apply unapplied migrations in timestamp order. The expected final version is
-   `20260724212939`; the contract remains `2.2.0`.
-4. Deploy the exact CI-tested commit to the existing staging Render service.
+3. Import the exact selected static source rows and complete a fresh official
+   PIB coverage refresh.
+4. Apply unapplied migrations in timestamp order. Required migration remains
+   `20260724212939`, source rollout must report `20260728040209`, and the
+   contract remains `2.2.0`.
+5. Deploy the exact CI-tested commit to the existing staging Render service.
    Keep its health probe on `/health/live` until a certified active quiz exists.
    A legacy `/api/health` probe is readiness, not liveness, and will time out
    before the certified quiz exists.
-5. Check `/health/live` and the sanitized `/health/ready` body. Before quiz
+6. Check `/health/live` and the sanitized `/health/ready` body. Before quiz
    creation, only `activeQuizRetrieval` may fail.
-6. Dispatch **Staging Quiz Smoke** with `operation=preflight`.
-7. Choose one already-enabled chapter with current verified source coverage.
+7. Dispatch **Staging Quiz Smoke** with `operation=preflight`.
+8. Choose one source-backed subject/chapter.
    Dispatch `operation=subject-quiz` once with both force inputs false.
-8. Verify the database certification, answer-free public API, one private
+9. Verify the database certification, answer-free public API, one private
    Telegram delivery, and complete learner lifecycle using
    `TELEGRAM_SMOKE_TEST.md`.
-9. Retry the same safe operation and confirm it neither regenerates nor reposts.
-10. Require `activeQuizRetrieval` true and `/health/ready` HTTP 200, then change
+10. Retry the same safe operation and confirm it neither regenerates nor reposts.
+11. Require `activeQuizRetrieval` true and `/health/ready` HTTP 200, then change
     the staging Render health path to `/health/ready`.
-11. Preserve the certified active quiz. Remove only disposable test rows through
+12. Preserve the certified active quiz. Remove only disposable test rows through
     an explicitly designed cleanup transaction that cannot match real users.
 
 ## Certified quiz evidence
