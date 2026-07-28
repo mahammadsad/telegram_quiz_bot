@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -157,6 +159,25 @@ def test_discovery_helpers_are_quota_bounded_and_language_specific():
     assert "Hindi" in discover_learning_resources.build_query("hi", "Operating Systems")
 
 
+@pytest.mark.parametrize(
+    "module",
+    (
+        "scripts.check_learning_resources",
+        "scripts.discover_learning_resources",
+    ),
+)
+def test_resource_maintenance_modules_start_from_repository_root(module):
+    result = subprocess.run(
+        [sys.executable, "-m", module, "--help"],
+        cwd=ROOT,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+
+    assert result.returncode == 0, result.stderr
+
+
 def test_feedback_service_validates_and_resolves_user(monkeypatch):
     monkeypatch.setattr(resource_quality_service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
     captured = {}
@@ -229,6 +250,8 @@ def test_resource_feedback_ui_and_maintenance_workflows_are_bounded():
     assert "permissions:\n  contents: read" in resource_workflow
     assert "YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}" in resource_workflow
     assert "--limit \"$LIMIT\"" in resource_workflow
+    assert 'python -m scripts.check_learning_resources --limit "$LIMIT"' in resource_workflow
+    assert 'python -m scripts.discover_learning_resources --limit "$LIMIT"' in resource_workflow
     assert schedule_workflow.count("- cron:") == 2
     assert 'cron: "30 1-13 * * *"' in schedule_workflow
     assert "python bot.py --mode export-static-fallbacks" in schedule_workflow
