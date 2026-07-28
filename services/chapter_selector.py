@@ -15,12 +15,13 @@ def select_chapter(subject_key: str, target_date: date, history: list[dict] | No
     catalogue = CHAPTERS.get(subject_key)
     if not catalogue:
         raise ValueError(f"No chapter catalogue configured for {subject_key}.")
+    catalogue_set = set(catalogue)
     history = chapter_history_repo.list_for_subject(subject_key) if history is None else history
     normalized_history: list[tuple[str, date]] = []
     for row in history:
         chapter = str(row.get("chapter") or "")
         selected_for = _as_date(row.get("selected_for"))
-        if chapter and selected_for:
+        if chapter in catalogue_set and selected_for:
             normalized_history.append((chapter, selected_for))
     normalized_history.sort(key=lambda item: item[1], reverse=True)
     used = {chapter for chapter, _ in normalized_history}
