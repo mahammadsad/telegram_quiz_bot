@@ -213,25 +213,30 @@ def refresh_rows(
     max_items: int = DEFAULT_MAX_ITEMS,
 ) -> tuple[list[dict], RefreshStats]:
     now = _as_utc(now)
-    items: list[str] = []
+    item_batches: list[list[str]] = []
     for feed_url in (PIB_RSS_URL, PIB_SECONDARY_RSS_URL):
         try:
-            items = parse_rss_items(fetch_text(feed_url))
+            feed_items = parse_rss_items(fetch_text(feed_url))
         except CurrentAffairsRefreshError:
             continue
-        if items:
-            break
-    if not items:
-        items = parse_all_release_items(fetch_text(PIB_ALL_RELEASES_URL))
+        if feed_items:
+            item_batches.append(feed_items)
+    try:
+        release_index_items = parse_all_release_items(fetch_text(PIB_ALL_RELEASES_URL))
+    except CurrentAffairsRefreshError:
+        release_index_items = []
+    if release_index_items:
+        item_batches.append(release_index_items)
+    items = _interleave_unique(item_batches)
     if not items:
         raise CurrentAffairsRefreshError(
-            "The official PIB feeds returned no release items."
+            "The official PIB endpoints returned no release items."
         )
 
     candidates: list[tuple[str, str]] = []
     skipped = 0
     seen_prids: set[str] = set()
-    for raw_url in items[:max_items]:
+    for raw_url in items:
         try:
             prid, release_url = canonical_release_url(raw_url)
             if prid in seen_prids:
@@ -241,6 +246,8 @@ def refresh_rows(
             skipped += 1
             continue
         candidates.append((prid, release_url))
+        if len(candidates) >= max_items:
+            break
 
     def load_release(candidate: tuple[str, str]) -> Release | None:
         prid, release_url = candidate
@@ -267,6 +274,26 @@ def refresh_rows(
         accepted=len(rows),
         skipped=skipped,
     )
+
+
+def _interleave_unique(batches: list[list[str]]) -> list[str]:
+    """Mix official endpoint results so one feed cannot starve broad coverage."""
+    items: list[str] = []
+    seen: set[str] = set()
+    offsets = [0] * len(batches)
+    while True:
+        added = False
+        for index, batch in enumerate(batches):
+            if offsets[index] >= len(batch):
+                continue
+            item = batch[offsets[index]]
+            offsets[index] += 1
+            added = True
+            if item not in seen:
+                seen.add(item)
+                items.append(item)
+        if not added:
+            return items
 
 
 def fetch_text(url: str) -> str:

@@ -26,10 +26,11 @@ def _release_html(
     title: str,
     date_text: str = "27 JUL 2026 10:40PM by PIB Delhi",
     body: str,
+    ministry: str = "Ministry of Science and Technology",
 ) -> str:
     return f"""
     <html><body>
-      <div id="MinistryName">Ministry of Science and Technology</div>
+      <div id="MinistryName">{ministry}</div>
       <h2 id="Titleh2">{title}</h2>
       <div id="PrDateTime">प्रविष्टि तिथि: {date_text}</div>
       <p>{body}</p>
@@ -78,6 +79,10 @@ def test_refresh_parses_only_canonical_current_pib_release_content():
     def fetch(url: str) -> str:
         if url == PIB_RSS_URL:
             return rss
+        if url == PIB_SECONDARY_RSS_URL:
+            return "<rss><channel></channel></rss>"
+        if url == PIB_ALL_RELEASES_URL:
+            return "<html></html>"
         assert url == (
             "https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=2290212"
         )
@@ -97,6 +102,72 @@ def test_refresh_parses_only_canonical_current_pib_release_content():
     assert "This footer must not enter" not in rows[0]["fact_summary"]
     assert rows[0]["fact_version"].startswith("pib-2290212-2026-07-27-")
     assert len(validate_source_bundle(rows)) == 1
+
+
+def test_refresh_combines_every_official_pib_endpoint_for_broad_coverage():
+    primary_url = (
+        "https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=2290301"
+    )
+    secondary_url = (
+        "https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=2290302"
+    )
+    index_url = "https://www.pib.gov.in/PressReleseDetail.aspx?PRID=2290303"
+    rss = (
+        "<rss><channel><item><link>"
+        f"{primary_url.replace('&', '&amp;')}"
+        "</link></item></channel></rss>"
+    )
+    secondary_rss = (
+        "<rss><channel><item><link>"
+        f"{secondary_url.replace('&', '&amp;')}"
+        "</link></item></channel></rss>"
+    )
+    listing = f'<a href="{index_url}">Official release</a>'
+    release_html = {
+        "2290301": _release_html(
+            title="Cabinet announces a national policy decision",
+            body=_long_body("cabinet policy decision"),
+            ministry="Cabinet Secretariat",
+        ),
+        "2290302": _release_html(
+            title="ISRO confirms a satellite launch",
+            body=_long_body("ISRO satellite launch"),
+        ),
+        "2290303": _release_html(
+            title="Government launches an artificial intelligence programme",
+            body=_long_body("artificial intelligence semiconductor telecom"),
+        ),
+    }
+
+    def fetch(url: str) -> str:
+        if url == PIB_RSS_URL:
+            return rss
+        if url == PIB_SECONDARY_RSS_URL:
+            return secondary_rss
+        if url == PIB_ALL_RELEASES_URL:
+            return listing
+        prid = url.rsplit("=", 1)[-1]
+        return release_html[prid]
+
+    rows, stats = refresh_rows(
+        fetch_text=fetch,
+        now=datetime(2026, 7, 28, tzinfo=timezone.utc),
+        max_items=3,
+    )
+
+    assert stats.accepted == 3
+    assert {
+        row["fact_version"].split("-", 2)[1]
+        for row in rows
+    } == {"2290301", "2290302", "2290303"}
+    assert {
+        row["micro_topic_key"]
+        for row in rows
+    } == {
+        "current-affairs:national:t01",
+        "current-affairs:science-technology:t01",
+        "current-affairs:science-technology:t03",
+    }
 
 
 def test_release_url_guard_rejects_non_pib_hosts_and_non_release_paths():
