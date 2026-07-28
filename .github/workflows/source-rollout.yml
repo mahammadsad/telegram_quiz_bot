@@ -1,0 +1,105 @@
+name: Static Source Rollout
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Protected Supabase environment
+        required: true
+        default: staging
+        type: choice
+        options: [staging, production]
+      operation:
+        description: Validate locally or import reviewed rows
+        required: true
+        default: validate
+        type: choice
+        options: [validate, import]
+      safety_ack:
+        description: Required for import; copy the target-specific phrase from the rollout runbook
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: static-source-rollout-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  source-rollout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    environment: ${{ inputs.target }}
+    env:
+      TARGET: ${{ inputs.target }}
+      OPERATION: ${{ inputs.operation }}
+      SAFETY_ACK: ${{ inputs.safety_ack }}
+      EXPECTED_SUPABASE_PROJECT_REF: ${{ inputs.target == 'staging' && 'prdrabmcivgbygzjnmko' || 'tizxodkcpglmxgtwepor' }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install locked dependencies
+        run: pip install --disable-pip-version-check -r requirements.lock
+      - name: Fail-closed target and approval gate
+        run: |
+          python - <<'PY'
+          import os
+          from urllib.parse import urlparse
+
+          refs = {
+              "staging": "prdrabmcivgbygzjnmko",
+              "production": "tizxodkcpglmxgtwepor",
+          }
+          target = os.environ.get("TARGET", "")
+          operation = os.environ.get("OPERATION", "")
+          expected_ref = refs.get(target)
+          if not expected_ref or os.environ.get("EXPECTED_SUPABASE_PROJECT_REF") != expected_ref:
+              raise SystemExit("Refusing operation: target identity is not exact.")
+          if operation not in {"validate", "import"}:
+              raise SystemExit("Refusing operation: unsupported source mode.")
+          if operation == "import":
+              if urlparse(os.environ.get("SUPABASE_URL", "")).hostname != (
+                  f"{expected_ref}.supabase.co"
+              ):
+                  raise SystemExit("Refusing import: Supabase URL is not the selected target.")
+              if not os.environ.get("SUPABASE_SERVICE_KEY"):
+                  raise SystemExit("Refusing import: service configuration is incomplete.")
+              expected_ack = f"IMPORT REVIEWED SOURCES TO {target.upper()} {expected_ref}"
+              if os.environ.get("SAFETY_ACK") != expected_ack:
+                  raise SystemExit(
+                      "Refusing import: enter the exact reviewed-source acknowledgement."
+                  )
+          print("target_identity=true")
+          print(f"operation={operation}")
+          PY
+      - name: Validate exact selected static source coverage
+        run: python scripts/import_source_rollout.py --validate-only
+      - name: Read sanitized database contract before import
+        if: inputs.operation == 'import'
+        run: |
+          python - <<'PY'
+          from database.client import get_client
+
+          contract = get_client().rpc("get_application_schema_contract").execute().data
+          if (
+              not isinstance(contract, dict)
+              or contract.get("contract_key") != "telegram_quiz_api"
+              or contract.get("contract_version") != "2.2.0"
+              or contract.get("required_migration_version") != "20260724212939"
+          ):
+              raise SystemExit("Refusing import: database contract identity is not exact.")
+          print("database_contract_identity=true")
+          PY
+      - name: Import only reviewed selected static rows
+        if: inputs.operation == 'import'
+        run: python scripts/import_source_rollout.py --approve
+      - name: Read back every selected static chapter
+        if: inputs.operation == 'import'
+        run: python scripts/check_source_readiness.py --scope static

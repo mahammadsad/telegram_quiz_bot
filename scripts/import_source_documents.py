@@ -39,9 +39,30 @@ def main() -> int:
         print(json.dumps({"ok": True, "validated": len(clean_rows), "approved": False}))
         return 0
 
-    from database.client import get_client
+    imported = import_source_bundle(
+        clean_rows,
+        approve=args.approve,
+        dry_run=args.dry_run,
+    )
+    mode = "validated" if args.dry_run else "imported"
+    print(json.dumps({"ok": True, mode: len(imported), "approved": args.approve}))
+    return 0
 
-    client = get_client()
+
+def import_source_bundle(
+    clean_rows: list[dict],
+    *,
+    approve: bool,
+    dry_run: bool = False,
+    client=None,
+) -> list[dict]:
+    """Import already validated rows without exposing their fact payloads."""
+    if not clean_rows:
+        raise ValueError("At least one validated source row is required.")
+    if client is None:
+        from database.client import get_client
+
+        client = get_client()
     imported = []
     for index, clean in enumerate(clean_rows, start=1):
         chapter = _one(
@@ -53,7 +74,7 @@ def main() -> int:
             .execute().data,
             f"Unknown chapter at row {index}",
         )
-        micro_topic = _find_or_create_micro_topic(client, chapter, clean, args.dry_run)
+        micro_topic = _find_or_create_micro_topic(client, chapter, clean, dry_run)
         payload = {
             "micro_topic_id": micro_topic["id"],
             "source_url": clean["source_url"],
@@ -65,15 +86,15 @@ def main() -> int:
             "fact_summary": clean["fact_summary"],
             "fact_version": clean["fact_version"],
             "expires_at": clean["expires_at"],
-            "verification_status": "verified" if args.approve else "draft",
+            "verification_status": "verified" if approve else "draft",
             "verification_notes": clean.get("verification_notes") or (
-                "Operator approved validated import." if args.approve else "Awaiting operator approval."
+                "Operator approved validated import." if approve else "Awaiting operator approval."
             ),
-            "review_required": not args.approve,
-            "verified_at": datetime.now(timezone.utc).isoformat() if args.approve else None,
+            "review_required": not approve,
+            "verified_at": datetime.now(timezone.utc).isoformat() if approve else None,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
-        if args.dry_run:
+        if dry_run:
             imported.append({**payload, "micro_topic_key": micro_topic["key"]})
             continue
         result = client.table("source_documents").upsert(
@@ -82,16 +103,13 @@ def main() -> int:
         ).execute()
         imported.append(result.data[0])
 
-    if args.approve and not args.dry_run:
-        for subject_key in sorted({str(row["subject_key"]) for row in rows}):
+    if approve and not dry_run:
+        for subject_key in sorted({str(row["subject_key"]) for row in clean_rows}):
             client.rpc(
                 "cache_verified_source_resources",
                 {"p_subject_key": subject_key},
             ).execute()
-
-    mode = "validated" if args.dry_run else "imported"
-    print(json.dumps({"ok": True, mode: len(imported), "approved": args.approve}))
-    return 0
+    return imported
 
 
 def validate_source_bundle(rows: object) -> list[dict]:

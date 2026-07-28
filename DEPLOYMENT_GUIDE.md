@@ -131,6 +131,7 @@ TELEGRAM_BOT_USERNAME
 MINIAPP_SHORT_NAME
 QUESTION_VERIFICATION_MIN_CONFIDENCE=0.85
 CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS=45
+SOURCE_BACKED_ROTATION_ENABLED=false
 QUESTION_REPORT_THRESHOLD=3
 ```
 
@@ -214,9 +215,11 @@ value in the Render Dashboard. Do not add a Render database; Supabase remains
 the datastore.
 
 Check `GET /health/live`: it should return HTTP 200 even if dependencies are
-down. Check `GET /health/ready`: it must return HTTP 200, application `7.0.0`,
-migration `20260724212939`, contract `2.2.0`, and all checks true. `/api/health`
-is a strict compatibility alias. A 503 is a release blocker, not a warning.
+down. Check `GET /health/ready`: it must return HTTP 200, application `7.1.0`,
+required migration `20260724212939`, source-rollout migration
+`20260728040209`, contract `2.2.0`, and all checks true. When expansion is
+active, `sourceBackedRotationEnabled` must also be true. `/api/health` is a
+strict compatibility alias. A 503 is a release blocker, not a warning.
 
 ## 4. Configure forum topics and BotFather
 

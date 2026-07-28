@@ -109,6 +109,10 @@ QUESTION_VERIFICATION_MIN_CONFIDENCE = min(
 CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS = max(
     1, min(45, int(os.environ.get("CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS", "45")))
 )
+SOURCE_BACKED_ROTATION_ENABLED = os.environ.get(
+    "SOURCE_BACKED_ROTATION_ENABLED",
+    "false",
+).strip().lower() == "true"
 QUESTION_REPORT_THRESHOLD = max(
     2, int(os.environ.get("QUESTION_REPORT_THRESHOLD", "3"))
 )

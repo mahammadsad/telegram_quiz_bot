@@ -5,11 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from urllib.parse import urlparse
+from zoneinfo import ZoneInfo
 
-from config.settings import CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS
+from config.settings import APP_TIMEZONE, CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS
 from services.question_validation import QuizValidationError
 from storage import source_documents_repo
 from utils.source_validation import is_placeholder_source
+
+LOCAL_TIMEZONE = ZoneInfo(APP_TIMEZONE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -114,7 +117,7 @@ def _validated_document(row: dict, subject_key: str, target_date: date) -> Sourc
         if not published_at:
             raise QuizValidationError("Current-affairs sources must include a publication date.")
         oldest = target_date - timedelta(days=CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS)
-        published_date = _as_date(published_at)
+        published_date = _as_local_date(published_at)
         if published_date < oldest or published_date > target_date:
             raise QuizValidationError("Current-affairs source date is outside the allowed window.")
 
@@ -150,5 +153,15 @@ def _as_date(value: str) -> date:
         if "T" in text or "+" in text[10:]:
             return datetime.fromisoformat(text).astimezone(timezone.utc).date()
         return date.fromisoformat(text[:10])
+    except ValueError as exc:
+        raise QuizValidationError("Verified source contains an invalid date.") from exc
+
+
+def _as_local_date(value: str) -> date:
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            raise ValueError
+        return parsed.astimezone(LOCAL_TIMEZONE).date()
     except ValueError as exc:
         raise QuizValidationError("Verified source contains an invalid date.") from exc

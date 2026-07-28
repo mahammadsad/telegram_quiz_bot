@@ -6,6 +6,8 @@ import uuid
 import psycopg
 import pytest
 
+from database.contract import REQUIRED_MIGRATION_VERSION
+
 pytestmark = pytest.mark.database_integration
 
 
@@ -71,4 +73,4 @@ def test_durable_limiter_objects_are_private_and_contract_gated(
     assert row[0] is True
     assert row[1:4] == (False, False, False)
     assert row[4]["ready"] is True
-    assert row[4]["required_migration_version"] == "20260724212939"
+    assert row[4]["required_migration_version"] == REQUIRED_MIGRATION_VERSION

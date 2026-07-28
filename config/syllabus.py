@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from config.settings import SOURCE_BACKED_ROTATION_ENABLED
+from config.source_rollout import ROTATION_CHAPTER_KEYS
 from config.subjects import QUIZ_SUBJECT_KEYS
 from config.syllabus_catalog import CATALOGUE_ROWS, EXAM_TAGS, SUBJECT_EXAM_TAGS
 
@@ -44,7 +46,18 @@ def _build_catalogue() -> dict[str, tuple[ChapterConfig, ...]]:
     for subject_key, rows in CATALOGUE_ROWS.items():
         exam_tags = SUBJECT_EXAM_TAGS[subject_key]
         chapters = []
-        for display_order, (chapter_key, name, priority, rotation_enabled, topic_names) in enumerate(rows, 1):
+        approved_rotation = set(ROTATION_CHAPTER_KEYS[subject_key])
+        runtime_rotation = (
+            approved_rotation
+            if SOURCE_BACKED_ROTATION_ENABLED
+            else {
+                f"{subject_key}:{chapter_key}"
+                for chapter_key, _name, _priority, legacy_rotation, _topics in rows
+                if legacy_rotation
+            }
+        )
+        for display_order, (chapter_key, name, priority, _legacy_rotation, topic_names) in enumerate(rows, 1):
+            full_chapter_key = f"{subject_key}:{chapter_key}"
             topics = tuple(
                 MicroTopicConfig(
                     key=f"{subject_key}:{chapter_key}:t{topic_order:02d}",
@@ -58,12 +71,12 @@ def _build_catalogue() -> dict[str, tuple[ChapterConfig, ...]]:
                 for topic_order, topic_name in enumerate(topic_names, 1)
             )
             chapters.append(ChapterConfig(
-                key=f"{subject_key}:{chapter_key}",
+                key=full_chapter_key,
                 name=name,
                 display_order=display_order,
                 exam_relevance=exam_tags,
                 priority=priority,
-                rotation_enabled=rotation_enabled,
+                rotation_enabled=full_chapter_key in runtime_rotation,
                 micro_topics=topics,
             ))
         catalogue[subject_key] = tuple(chapters)
@@ -97,6 +110,8 @@ def validate_syllabus_catalogue() -> None:
         raise RuntimeError("Syllabus-v2 subjects must match the 13 canonical quiz subjects in schedule order.")
     if set(SUBJECT_EXAM_TAGS) != set(QUIZ_SUBJECT_KEYS):
         raise RuntimeError("Every canonical quiz subject must have exam relevance tags.")
+    if tuple(ROTATION_CHAPTER_KEYS) != QUIZ_SUBJECT_KEYS:
+        raise RuntimeError("The source-approved rotation must cover all 13 subjects in schedule order.")
 
     allowed_tags = set(EXAM_TAGS)
     chapter_keys: set[str] = set()
@@ -107,8 +122,30 @@ def validate_syllabus_catalogue() -> None:
 
     for subject_key, chapters in SYLLABUS.items():
         chapter_counts.add(len(chapters))
-        if len(CHAPTERS[subject_key]) < 2:
-            raise RuntimeError(f"{subject_key} must retain at least two source-gated rotation chapters.")
+        approved_keys = ROTATION_CHAPTER_KEYS[subject_key]
+        if len(approved_keys) < 2 or len(approved_keys) != len(set(approved_keys)):
+            raise RuntimeError(f"{subject_key} must have at least two unique source-approved chapters.")
+        catalogue_keys = tuple(chapter.key for chapter in chapters)
+        approved_in_order = tuple(
+            key for key in catalogue_keys if key in approved_keys
+        )
+        if approved_in_order != approved_keys:
+            raise RuntimeError(f"{subject_key} source-approved chapter order is invalid.")
+        actual_runtime_keys = tuple(
+            chapter.key for chapter in chapters if chapter.rotation_enabled
+        )
+        expected_runtime_keys = (
+            approved_keys
+            if SOURCE_BACKED_ROTATION_ENABLED
+            else tuple(
+                f"{subject_key}:{chapter_key}"
+                for chapter_key, _name, _priority, legacy_rotation, _topics
+                in CATALOGUE_ROWS[subject_key]
+                if legacy_rotation
+            )
+        )
+        if actual_runtime_keys != expected_runtime_keys:
+            raise RuntimeError(f"{subject_key} runtime chapter gate is invalid.")
         names: set[str] = set()
         for expected_order, chapter in enumerate(chapters, 1):
             total_chapters += 1

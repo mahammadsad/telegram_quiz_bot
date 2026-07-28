@@ -17,7 +17,9 @@ import psycopg
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from database.contract import REQUIRED_MIGRATION_VERSION  # noqa: E402
+from database.contract import (  # noqa: E402
+    SOURCE_ROLLOUT_MIGRATION_VERSION,
+)
 
 BOOTSTRAP = ROOT / "database" / "schema.sql"
 DATABASE_MIGRATIONS = ROOT / "database" / "migrations"
@@ -105,9 +107,9 @@ def rebuild(database_url: str) -> dict:
         path for path in reversed(files) if path.parent == SUPABASE_MIGRATIONS
     )
     identity = _migration_identity(latest_supabase)
-    if not identity or identity[0] != REQUIRED_MIGRATION_VERSION:
+    if not identity or identity[0] != SOURCE_ROLLOUT_MIGRATION_VERSION:
         raise RuntimeError(
-            "The application-required migration does not match the latest migration file."
+            "The source-rollout migration does not match the latest migration file."
         )
 
     with psycopg.connect(database_url, autocommit=True) as connection:
@@ -152,7 +154,8 @@ def main() -> int:
     print(
         "Disposable database ready: "
         f"contract={contract['contract_version']} "
-        f"migration={contract['required_migration_version']}"
+        f"migration={contract['required_migration_version']} "
+        f"source_rollout={contract['source_rollout_migration_version']}"
     )
     return 0
 

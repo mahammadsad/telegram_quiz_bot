@@ -31,23 +31,27 @@ Education source pilot already refer to them.
 ## Rotation and source gate
 
 `ALL_CHAPTERS` exposes the complete curriculum. `CHAPTERS` contains only the
-currently generation-enabled rotation chapters. The original seven chapters
-per subject remain in that generation view for backward compatibility; newly
-catalogued chapters start with `rotation_enabled = false`.
+currently generation-enabled rotation chapters. With
+`SOURCE_BACKED_ROTATION_ENABLED=false`, the legacy seven-chapter view remains
+available during cutover. With the flag true, the v1 allowlist contains the
+seven established Computer chapters and exactly two reviewed chapters for
+every other subject. The database migration disables every unapproved chapter
+in the 13 canonical subjects.
 
 This is deliberate. A new chapter must not enter daily generation merely
 because its title exists. It becomes eligible only after:
 
 1. its official or primary source bundle has been reviewed and imported;
 2. every intended micro-topic has reusable verified facts;
-3. its configuration and database `rotation_enabled` flag are enabled in an
-   idempotent migration;
+3. its configuration and database `rotation_enabled` flag are enabled in a
+   forward migration;
 4. a staging quiz passes generation, independent verification, delivery, and
    answer-review checks.
 
-The existing `get_grounding_bundle` function continues to ignore micro-topics
-without verified source documents, so the 648 new rows cannot weaken the
-fail-closed integrity policy.
+`get_grounding_bundle` continues to ignore micro-topics without verified source
+documents, so the 648 catalogue rows cannot weaken the fail-closed integrity
+policy. Current-affairs publication and expiry dates are evaluated in
+`Asia/Kolkata`.
 
 ## Computer Education expansion bundle
 
@@ -193,8 +197,14 @@ already-applied migration.
 
 ## Rollout order
 
-After this foundation is deployed, source coverage should be expanded one
-subject bundle at a time. The cached learning-resource foundation and Bengali
-`📚 আগে প্রস্তুতি নিন` entry point are tied to these micro-topic keys. Only
-active, operator-verified metadata is served; discovery remains a separate
-review queue and never runs on a learner click.
+The first controlled multi-subject rollout is defined in
+`config/source_rollout.py`. `scripts/import_source_rollout.py` filters the
+reviewed files to only that allowlist and proves coverage before writing.
+Current affairs is separate: `scripts/refresh_current_affairs_sources.py`
+accepts only canonical PIB release URLs, rejects stale or incomplete material,
+and requires coverage in both selected chapters before writing.
+
+The cached learning-resource foundation and Bengali `📚 আগে প্রস্তুতি নিন`
+entry point remain tied to the exact micro-topic keys. Only active,
+operator-verified metadata is served; discovery remains a separate review
+queue and never runs on a learner click.

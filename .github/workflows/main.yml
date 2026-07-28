@@ -141,6 +141,7 @@ jobs:
           EXPECTED_SUPABASE_PROJECT_REF: tizxodkcpglmxgtwepor
           QUESTION_VERIFICATION_MIN_CONFIDENCE: ${{ vars.QUESTION_VERIFICATION_MIN_CONFIDENCE || '0.85' }}
           CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS: ${{ vars.CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS || '45' }}
+          SOURCE_BACKED_ROTATION_ENABLED: ${{ vars.SOURCE_BACKED_ROTATION_ENABLED || 'false' }}
           QUESTION_REPORT_THRESHOLD: ${{ vars.QUESTION_REPORT_THRESHOLD || '3' }}
           WRITE_STATIC_QUIZ_JSON: ${{ needs.resolve_job.outputs.commit_fallbacks }}
         run: python bot.py --mode preflight

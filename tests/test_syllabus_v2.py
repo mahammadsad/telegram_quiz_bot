@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from config.source_rollout import ROTATION_CHAPTER_KEYS
 from config.subjects import QUIZ_SUBJECT_KEYS
 from config.syllabus import ALL_CHAPTERS, CHAPTERS, SYLLABUS
 from config.syllabus_catalog import EXAM_TAGS
@@ -23,9 +24,24 @@ def test_catalogue_has_subject_specific_depth_instead_of_fixed_seven_chapters():
     assert sum(len(chapter.micro_topics) for chapters in SYLLABUS.values() for chapter in chapters) == 648
 
 
-def test_legacy_rotation_is_preserved_while_new_coverage_is_source_gated():
-    assert all(len(CHAPTERS[key]) == 7 for key in QUIZ_SUBJECT_KEYS)
+def test_rotation_is_explicitly_limited_to_source_approved_chapters():
+    assert len(CHAPTERS["computer"]) == 7
+    assert all(
+        len(CHAPTERS[key]) == 2
+        for key in QUIZ_SUBJECT_KEYS
+        if key != "computer"
+    )
     assert all(len(ALL_CHAPTERS[key]) > len(CHAPTERS[key]) for key in QUIZ_SUBJECT_KEYS)
+    assert {
+        chapter.key
+        for subject_key, chapters in SYLLABUS.items()
+        for chapter in chapters
+        if chapter.rotation_enabled
+    } == {
+        key
+        for keys in ROTATION_CHAPTER_KEYS.values()
+        for key in keys
+    }
     assert CHAPTERS["computer"] == (
         "কম্পিউটারের মৌলিক ধারণা",
         "হার্ডওয়্যার ও সফটওয়্যার",
@@ -37,6 +53,10 @@ def test_legacy_rotation_is_preserved_while_new_coverage_is_source_gated():
     )
     assert "সংখ্যা পদ্ধতি ও ডেটা উপস্থাপন" in ALL_CHAPTERS["computer"]
     assert "সংখ্যা পদ্ধতি ও ডেটা উপস্থাপন" not in CHAPTERS["computer"]
+    assert CHAPTERS["current-affairs"] == (
+        "জাতীয় সাম্প্রতিক ঘটনা",
+        "বিজ্ঞান ও প্রযুক্তি",
+    )
 
 
 def test_every_micro_topic_has_stable_identity_exam_mapping_and_targets():

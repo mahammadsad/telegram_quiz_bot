@@ -1,6 +1,10 @@
 from __future__ import annotations
 
+import os
+
 import pytest
+
+os.environ.setdefault("SOURCE_BACKED_ROTATION_ENABLED", "true")
 
 
 @pytest.fixture

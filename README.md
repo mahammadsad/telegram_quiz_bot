@@ -37,7 +37,7 @@ an administrator approves it.
 | `index.html` | Telegram-theme-aware quiz UI with a clearly read-only static fallback |
 | `dashboard.html` | Private learner analytics, preferences, and privacy-safe leaderboard families |
 | `practice.html` | Authenticated wrong/due/bookmark/weak-topic practice with post-answer review |
-| `.github/workflows/` | Production recovery, staging-only smoke, PostgreSQL/Playwright CI, and resource maintenance |
+| `.github/workflows/` | Production recovery, guarded source refresh/import, staging smoke, PostgreSQL/Playwright CI, and resource maintenance |
 
 The browser never receives a Supabase service-role key. It talks only to
 FastAPI. FastAPI verifies signed Telegram `initData`; the trusted server and bot
@@ -119,6 +119,10 @@ fallback files in one batch. The schedule and subject identities live in
 `config/schedule.py` and `config/subjects.py`; the complete curriculum lives in
 `config/syllabus_catalog.py`. Workflow concurrency uses the logical date and
 subject, waits instead of cancelling an active run, and has no run-ID component.
+The expansion stays on the legacy runtime rotation until the repository
+variable `SOURCE_BACKED_ROTATION_ENABLED` is exactly `true`. When enabled, the
+reviewed v1 rotation uses seven established Computer chapters and exactly two
+source-covered chapters for each other subject.
 
 ## Configuration
 
@@ -156,6 +160,8 @@ Optional server settings:
 - `QUIZ_CLAIM_TIMEOUT_MINUTES` (minimum 5; default 20)
 - `QUESTION_VERIFICATION_MIN_CONFIDENCE` (default `0.85`)
 - `CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS` (default/database maximum `45`)
+- `SOURCE_BACKED_ROTATION_ENABLED` (default `false`; enable only after the
+  source-rollout migration and coverage gates pass)
 - `QUESTION_REPORT_THRESHOLD` (minimum `2`; default `3`)
 - `YOUTUBE_API_KEY` for optional, quota-bounded YouTube candidate discovery;
   discovered rows always require administrator review
@@ -178,6 +184,9 @@ disposable empty database. Never run it on staging or production. Hosted
 projects advance only through unapplied files in `supabase/migrations/`, in
 timestamp order. The authoritative required version is
 `20260724212939_durable_write_rate_limits.sql`, database contract `2.2.0`.
+The v7.1 source rollout additionally requires
+`20260728040209_source_backed_rotation_v1.sql`; it is reported separately so
+the v7.0 contract remains compatible during the controlled cutover.
 The application never applies DDL during startup.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,
@@ -197,16 +206,25 @@ The immutable-integrity, revision-report, and ranking runbook is
 forward migration and verification queries are documented in
 `docs/MIGRATION_20260724_DURABLE_RATE_LIMITS.md`.
 
-Before enabling scheduled generation, import approved source facts for every
-due chapter:
+Before enabling the source-backed rotation, validate and import only its
+selected static rows:
 
 ```bash
-python scripts/import_source_documents.py sources.json --validate-only
-python scripts/import_source_documents.py sources.json --dry-run
-python scripts/import_source_documents.py sources.json --approve
+python scripts/import_source_rollout.py --validate-only
+python scripts/import_source_rollout.py --dry-run
+python scripts/import_source_rollout.py --approve
 ```
 
-An approved import also mirrors safe title/link/publisher metadata into
+Refresh dynamic current-affairs rows only from the strict official PIB parser:
+
+```bash
+python scripts/refresh_current_affairs_sources.py \
+  --max-items 80 --minimum-per-chapter 4 --validate-only
+```
+
+The protected GitHub workflows perform approved environment writes only after
+an exact project-identity check. An approved import also mirrors safe
+title/link/publisher metadata into
 `learning_resources`. It does not copy `fact_summary` or publisher content.
 
 After applying, run Supabase security and performance advisors, then:
@@ -368,6 +386,6 @@ separation, Telegram evidence, mobile artifacts, and rollback procedures are in
 Use `docs/PRODUCTIONIZATION_CHECKLIST.md` as the evidence gate, not this README.
 Calculation rules are in `docs/STATISTICS_AND_RANKING_RULES.md`; a non-programmer
 walkthrough is in `docs/NON_PROGRAMMER_VERIFICATION.md`; release changes are in
-`docs/RELEASE_NOTES_7.0.0.md`. No inactive chapter is enabled by this release,
-and production is not considered fixed until staging and production readiness
-plus the documented Telegram flows have been observed.
+`docs/RELEASE_NOTES_7.1.0.md`. Version 7.0.0 evidence remains historical; the
+13-subject source-backed rollout is complete only after the v7.1 staging and
+production gates in `docs/MIGRATION_20260728_SOURCE_ROLLOUT.md` pass.
