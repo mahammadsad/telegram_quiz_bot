@@ -104,12 +104,12 @@ jobs:
         if: env.OPERATION == 'validate'
         run: >-
           python scripts/refresh_current_affairs_sources.py
-          --max-items 80 --minimum-per-chapter 4 --validate-only
+          --max-items 200 --minimum-per-chapter 4 --validate-only
       - name: Refresh verified official PIB source rows
         if: env.OPERATION == 'refresh'
         run: >-
           python scripts/refresh_current_affairs_sources.py
-          --max-items 80 --minimum-per-chapter 4 --approve
+          --max-items 200 --minimum-per-chapter 4 --approve
       - name: Read back every selected chapter
         if: env.OPERATION == 'refresh'
         run: python scripts/check_source_readiness.py --scope all
