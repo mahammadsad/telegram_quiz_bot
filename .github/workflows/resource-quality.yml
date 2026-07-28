@@ -56,7 +56,7 @@ jobs:
           PY
       - name: Check cached resource links
         if: env.MODE == 'both' || env.MODE == 'link-check'
-        run: python scripts/check_learning_resources.py --limit "$LIMIT"
+        run: python -m scripts.check_learning_resources --limit "$LIMIT"
       - name: Queue missing resources and discover candidates
         if: env.MODE == 'both' || env.MODE == 'discovery'
-        run: python scripts/discover_learning_resources.py --limit "$LIMIT"
+        run: python -m scripts.discover_learning_resources --limit "$LIMIT"
