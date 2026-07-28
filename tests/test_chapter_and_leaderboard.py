@@ -1,5 +1,6 @@
 from datetime import date, timedelta
 
+from services import chapter_selector
 from services.chapter_selector import select_chapter
 from storage import chapter_history_repo, stats_repo
 
@@ -15,13 +16,28 @@ def test_chapter_selector_avoids_immediate_repeat_after_catalogue_coverage():
     assert select_chapter("history", date(2026, 7, 10), history) != "প্রাচীন ভারত"
 
 
-def test_chapter_selector_uses_due_spaced_review_after_coverage():
+def test_chapter_selector_uses_due_spaced_review_after_coverage(monkeypatch):
     today = date(2026, 7, 10)
     chapters = ["প্রাচীন ভারত", "মধ্যযুগীয় ভারত", "আধুনিক ভারত", "বাংলার ইতিহাস", "ভারতের জাতীয় আন্দোলন", "গভর্নর জেনারেল ও ভাইসরয়", "সামাজিক-ধর্মীয় সংস্কার আন্দোলন"]
+    monkeypatch.setitem(chapter_selector.CHAPTERS, "history", tuple(chapters))
     history = [{"chapter": chapter, "selected_for": (today - timedelta(days=20 + index)).isoformat()} for index, chapter in enumerate(chapters)]
     history.insert(0, {"chapter": "প্রাচীন ভারত", "selected_for": (today - timedelta(days=1)).isoformat()})
     history.insert(1, {"chapter": "আধুনিক ভারত", "selected_for": (today - timedelta(days=3)).isoformat()})
     assert select_chapter("history", today, history) == "আধুনিক ভারত"
+
+
+def test_chapter_selector_ignores_legacy_history_outside_runtime_catalogue(monkeypatch):
+    today = date(2026, 7, 28)
+    approved = ("ব্যাংকিং ও RBI", "মুদ্রাস্ফীতি")
+    monkeypatch.setitem(chapter_selector.CHAPTERS, "economics", approved)
+    history = [
+        {"chapter": approved[0], "selected_for": (today - timedelta(days=1)).isoformat()},
+        {"chapter": approved[1], "selected_for": (today - timedelta(days=20)).isoformat()},
+        {"chapter": "কেন্দ্রীয় বাজেট", "selected_for": (today - timedelta(days=3)).isoformat()},
+    ]
+
+    assert select_chapter("economics", today, history) == approved[1]
+    assert select_chapter("economics", today, history) in approved
 
 
 def test_chapter_selector_keeps_latest_date_for_duplicate_history_rows():
