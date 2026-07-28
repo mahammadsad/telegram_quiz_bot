@@ -190,7 +190,7 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
 
     current_source = current_path.read_text(encoding="utf-8")
     assert current_source.index("get_application_schema_contract") < (
-        current_source.index("--max-items 80 --minimum-per-chapter 4 --approve")
+        current_source.index("--max-items 200 --minimum-per-chapter 4 --approve")
     )
     assert "REFRESH PIB SOURCES IN" in current_source
 
