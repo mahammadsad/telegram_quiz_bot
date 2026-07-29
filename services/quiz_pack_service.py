@@ -155,10 +155,22 @@ def record_quiz_pack(
     *,
     worker_id: str,
     replace: bool = False,
+    allowed_source_ids: set[str] | None = None,
+    allowed_source_topics: dict[str, tuple[str, str]] | None = None,
+    required_source_diversity: int = 1,
+    required_topic_diversity: int = 1,
 ) -> dict:
     subject_key = str(meta.get("subject_key") or meta.get("subject") or "").strip()
     chapter = str(meta.get("chapter") or "").strip()
-    clean_questions = validate_questions(raw_questions, subject_key, chapter)
+    clean_questions = validate_questions(
+        raw_questions,
+        subject_key,
+        chapter,
+        allowed_source_ids=allowed_source_ids,
+        allowed_source_topics=allowed_source_topics,
+        required_source_diversity=required_source_diversity,
+        required_topic_diversity=required_topic_diversity,
+    )
     question_rows = [_question_row_for_atomic_save(quiz_id, item, meta) for item in clean_questions]
     checksum = content_checksum(quiz_id, subject_key, chapter, clean_questions)
     save_result = quiz_packs_repo.save_atomic(

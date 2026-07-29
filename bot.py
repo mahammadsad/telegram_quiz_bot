@@ -629,6 +629,10 @@ def run_subject_quiz(
                 chat_id=_chat_id_as_int(TELEGRAM_CHAT_ID),
                 worker_id=worker_id,
                 replace=force_regenerate,
+                allowed_source_ids=grounding_bundle.source_ids,
+                allowed_source_topics=grounding_bundle.source_topics,
+                required_source_diversity=grounding_bundle.required_source_diversity,
+                required_topic_diversity=grounding_bundle.required_topic_diversity,
             )
             quiz_runs_repo.update_status(
                 quiz_id,

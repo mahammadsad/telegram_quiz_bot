@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from copy import deepcopy
 
 import pytest
 
@@ -176,6 +177,56 @@ def test_pack_save_uses_one_atomic_rpc_and_preserves_exact_reuse(monkeypatch, va
     assert result is saved_pack
     assert len(calls) == 1 and len(calls[0]["questions"]) == 10
     assert all(row["reuse_question_id"] == "existing-question" for row in calls[0]["questions"])
+
+
+def test_pack_save_preserves_the_grounded_multi_topic_contract(monkeypatch, valid_questions):
+    rows = deepcopy(valid_questions)
+    source_topics = {}
+    distribution = (0, 1, 2, 3, 0, 1, 2, 3, 0, 1)
+    for row, index in zip(rows, distribution, strict=True):
+        source_id = f"22222222-2222-4222-8222-{index + 1:012d}"
+        topic_id = f"11111111-1111-4111-8111-{index + 1:012d}"
+        topic_key = f"history:modern-india:topic-{index + 1}"
+        row["source_document_id"] = source_id
+        row["micro_topic_id"] = topic_id
+        row["micro_topic_key"] = topic_key
+        source_topics[source_id] = (topic_id, topic_key)
+
+    saved_pack = pack()
+    monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: saved_pack)
+    monkeypatch.setattr(
+        service.questions_repo,
+        "get_by_content_hash",
+        lambda *args, **kwargs: {
+            "id": "existing-question",
+            "subject": "history",
+            "topic": "আধুনিক ভারত",
+        },
+    )
+    monkeypatch.setattr(service, "content_checksum", lambda *args, **kwargs: "a" * 64)
+    monkeypatch.setattr(
+        service.quiz_packs_repo,
+        "save_atomic",
+        lambda **kwargs: {
+            "ready": True,
+            "question_count": 10,
+            "generated_checksum": "a" * 64,
+            "persisted_checksum": "a" * 64,
+        },
+    )
+
+    result = service.record_quiz_pack(
+        QUIZ_ID,
+        rows,
+        {"subject_key": "history", "chapter": "আধুনিক ভারত"},
+        worker_id="worker-1",
+        allowed_source_ids=set(source_topics),
+        allowed_source_topics=source_topics,
+        required_source_diversity=4,
+        required_topic_diversity=4,
+    )
+
+    assert result is saved_pack
 
 
 def test_near_duplicate_is_rejected_instead_of_substituted(monkeypatch, valid_questions):
