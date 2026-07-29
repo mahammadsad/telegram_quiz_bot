@@ -16,6 +16,7 @@ UNIQUE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718184505_remove_red
 ANALYTICS_MIGRATION = ROOT / "supabase" / "migrations" / "20260718185905_learning_analytics_leaderboards.sql"
 PRACTICE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718190639_personal_practice_answers.sql"
 SUBJECT_PROJECTION_MIGRATION = ROOT / "supabase" / "migrations" / "20260718192154_canonical_subject_learning_projections.sql"
+PROJECTION_HOTFIX_MIGRATION = ROOT / "supabase" / "migrations" / "20260729134221_personal_learning_projection_hotfix.sql"
 client = TestClient(api_module.app)
 
 
@@ -134,6 +135,32 @@ def test_learner_apis_translate_internal_subject_names_to_canonical_keys():
     assert "from public, anon, authenticated" in sql
     assert "to service_role" in sql
     assert "security definer" not in sql
+
+
+def test_subject_projection_hotfix_preserves_objects_and_nested_arrays():
+    sql = PROJECTION_HOTFIX_MIGRATION.read_text(encoding="utf-8").lower()
+    canonicalizer = sql.split(
+        "create or replace function public.canonicalize_subject_rows", 1
+    )[1].split(
+        "alter function public.get_application_schema_contract", 1
+    )[0]
+
+    assert "security invoker" in canonicalizer
+    assert "jsonb_typeof(p_rows)" in canonicalizer
+    assert "jsonb_array_elements(p_rows)" in canonicalizer
+    assert "jsonb_each(p_rows)" in canonicalizer
+    assert "public.canonicalize_subject_rows(value)" in canonicalizer
+    assert "key = 'subjectkey'" in canonicalizer
+    assert "'personal_learning_migration_version', '20260729134221'" in sql
+    assert "'personal_learning_projection_ready'" in sql
+    assert (
+        "revoke execute on function public.canonicalize_subject_rows(jsonb)"
+        in sql
+    )
+    assert (
+        "grant execute on function public.canonicalize_subject_rows(jsonb)"
+        in sql
+    )
 
 
 def test_dashboard_endpoint_requires_telegram_header(monkeypatch):

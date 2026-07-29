@@ -1,8 +1,7 @@
-"""Workflow cadence and UTC reference mapping derived from subject settings."""
+"""Workflow cadence and immutable UTC-to-subject schedule mapping."""
 
 from config.subjects import QUIZ_SUBJECTS
 
-HOURLY_CRON = "30 1-13 * * *"
 RECOVERY_CRON = "0 15 * * *"
 
 
@@ -17,13 +16,14 @@ CRON_TO_SUBJECT = {
     for subject in QUIZ_SUBJECTS
     if subject.scheduled_time_ist
 }
+SUBJECT_CRONS = tuple(CRON_TO_SUBJECT)
 
 if set(CRON_TO_SUBJECT.values()) != {subject.key for subject in QUIZ_SUBJECTS}:
     raise RuntimeError("Cron mapping must cover every quiz subject exactly once.")
 
 
 def scheduled_action(cron: str) -> tuple[str, str | None]:
-    if cron in {HOURLY_CRON, RECOVERY_CRON}:
+    if cron == RECOVERY_CRON:
         return "recover-missed-quizzes", None
     try:
         return "subject-quiz", CRON_TO_SUBJECT[cron]

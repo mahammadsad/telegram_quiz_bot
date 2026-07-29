@@ -2,7 +2,12 @@ from datetime import date
 
 import pytest
 
-from config.schedule import CRON_TO_SUBJECT, HOURLY_CRON, RECOVERY_CRON, scheduled_action
+from config.schedule import (
+    CRON_TO_SUBJECT,
+    RECOVERY_CRON,
+    SUBJECT_CRONS,
+    scheduled_action,
+)
 from config.subjects import QUIZ_SUBJECTS, SUBJECTS
 from telegram.routing import ForumRouter, ForumRoutingError
 from utils.quiz_ids import build_quiz_id, parse_quiz_id
@@ -83,10 +88,12 @@ def test_quiz_ids_are_subject_scoped_and_legacy_readable():
 
 def test_every_cron_maps_to_immutable_subject_and_recovery_only():
     assert len(CRON_TO_SUBJECT) == 13
+    assert SUBJECT_CRONS == tuple(CRON_TO_SUBJECT)
     for cron, subject in CRON_TO_SUBJECT.items():
         assert scheduled_action(cron) == ("subject-quiz", subject)
     assert scheduled_action(RECOVERY_CRON) == ("recover-missed-quizzes", None)
-    assert scheduled_action(HOURLY_CRON) == ("recover-missed-quizzes", None)
+    with pytest.raises(ValueError, match="Unknown scheduled cron"):
+        scheduled_action("30 1-13 * * *")
     expected = {
         f"{(int(row.scheduled_time_ist.split(':')[1]) + 30) % 60} "
         f"{(int(row.scheduled_time_ist.split(':')[0]) - 6) % 24} * * *": row.key

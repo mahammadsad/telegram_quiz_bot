@@ -112,10 +112,10 @@ The canonical subjects run hourly from 07:00 through 19:00 IST in this order:
 `polity`, `geography`, `science`, `economics`, `history`, `environment`, and
 `current-affairs`. Recovery runs at 20:30 IST. `general` is announcement-only.
 
-GitHub invokes one hourly recovery job; the due-subject calculation still comes
-from each subject's canonical IST time, so a delayed run catches up safely.
-The final recovery exports every checksum-valid pack and commits all public
-fallback files in one batch. The schedule and subject identities live in
+GitHub invokes thirteen exact subject crons, and every normal run resolves to
+one immutable subject. A separate 20:30 IST recovery catches genuinely missed
+subjects and exports every checksum-valid pack in one public-fallback batch.
+The schedule and subject identities live in
 `config/schedule.py` and `config/subjects.py`; the complete curriculum lives in
 `config/syllabus_catalog.py`. Workflow concurrency uses the logical date and
 subject, waits instead of cancelling an active run, and has no run-ID component.
@@ -386,7 +386,7 @@ separation, Telegram evidence, mobile artifacts, and rollback procedures are in
 Use `docs/PRODUCTIONIZATION_CHECKLIST.md` as the evidence gate, not this README.
 Calculation rules are in `docs/STATISTICS_AND_RANKING_RULES.md`; a non-programmer
 walkthrough is in `docs/NON_PROGRAMMER_VERIFICATION.md`; release changes are in
-`docs/RELEASE_NOTES_7.2.0.md`. Version 7.1.0 and 7.0.0 evidence remains
+`docs/RELEASE_NOTES_7.2.1.md`. Version 7.2.0, 7.1.0, and 7.0.0 evidence remains
 historical; the
 13-subject source-backed rollout is complete only after the v7.1 staging and
 production gates in `docs/MIGRATION_20260728_SOURCE_ROLLOUT.md` pass.

@@ -26,6 +26,7 @@ from database.contract import (
     APPLICATION_VERSION,
     DATABASE_CONTRACT_KEY,
     DATABASE_CONTRACT_VERSION,
+    PERSONAL_LEARNING_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
@@ -55,6 +56,9 @@ class Readiness:
             "requiredMigrationVersion": REQUIRED_MIGRATION_VERSION,
             "sourceRolloutMigrationVersion": SOURCE_ROLLOUT_MIGRATION_VERSION,
             "quizQualityMigrationVersion": QUIZ_QUALITY_MIGRATION_VERSION,
+            "personalLearningMigrationVersion": (
+                PERSONAL_LEARNING_MIGRATION_VERSION
+            ),
             "sourceBackedRotationEnabled": SOURCE_BACKED_ROTATION_ENABLED,
             "databaseContractVersion": DATABASE_CONTRACT_VERSION,
         }
@@ -145,6 +149,12 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and contract.get("diverse_grounding_ready") is True
                 and contract.get("negative_marking_ready") is True
             )
+            personal_learning_ready = bool(
+                contract.get("personal_learning_migration_version")
+                == PERSONAL_LEARNING_MIGRATION_VERSION
+                and contract.get("personal_learning_migration_applied") is True
+                and contract.get("personal_learning_projection_ready") is True
+            )
             checks["databaseContract"] = bool(
                 contract.get("ready")
                 and contract.get("contract_key") == DATABASE_CONTRACT_KEY
@@ -155,6 +165,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                     not SOURCE_BACKED_ROTATION_ENABLED
                     or (source_rollout_ready and quiz_quality_ready)
                 )
+                and personal_learning_ready
                 and float(contract.get("verification_threshold") or 0)
                 == QUESTION_VERIFICATION_MIN_CONFIDENCE
             )

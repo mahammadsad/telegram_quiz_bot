@@ -8,8 +8,10 @@ from pathlib import Path
 
 import yaml
 
+from config.schedule import RECOVERY_CRON, SUBJECT_CRONS
 from database.contract import (
     APPLICATION_VERSION,
+    PERSONAL_LEARNING_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
 )
@@ -18,6 +20,8 @@ ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_DIR = ROOT / ".github" / "workflows"
 PRODUCTION_PROJECT_REF = "tizxodkcpglmxgtwepor"
 STAGING_PROJECT_REF = "prdrabmcivgbygzjnmko"
+PRODUCTION_SUPABASE_URL = f"https://{PRODUCTION_PROJECT_REF}.supabase.co"
+STAGING_SUPABASE_URL = f"https://{STAGING_PROJECT_REF}.supabase.co"
 
 
 def _load_yaml(path: Path) -> dict:
@@ -82,6 +86,17 @@ def test_workflows_have_minimum_permissions_timeouts_and_environment_guards() ->
     assert run_bot["timeout-minutes"] == 45
     assert run_bot["environment"] == "production"
     assert run_bot["concurrency"]["cancel-in-progress"] is False
+    main_trigger = main.get("on") or main.get(True)
+    assert main_trigger["schedule"] == [
+        *({"cron": cron} for cron in SUBJECT_CRONS),
+        {"cron": RECOVERY_CRON},
+    ]
+    bot_preflight = next(
+        step
+        for step in run_bot["steps"]
+        if step.get("name") == "Sanitized configuration preflight"
+    )
+    assert bot_preflight["env"]["SUPABASE_URL"] == PRODUCTION_SUPABASE_URL
     main_source = (WORKFLOW_DIR / "main.yml").read_text(encoding="utf-8")
     assert (
         "SOURCE_BACKED_ROTATION_ENABLED: "
@@ -93,6 +108,7 @@ def test_workflows_have_minimum_permissions_timeouts_and_environment_guards() ->
     assert maintenance["timeout-minutes"] == 20
     assert maintenance["environment"] == "production"
     assert maintenance["env"]["EXPECTED_SUPABASE_PROJECT_REF"] == PRODUCTION_PROJECT_REF
+    assert maintenance["env"]["SUPABASE_URL"] == PRODUCTION_SUPABASE_URL
     assert resources["concurrency"]["cancel-in-progress"] is False
 
 
@@ -120,10 +136,12 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert job["env"]["WRITE_STATIC_QUIZ_JSON"] == "false"
     assert job["env"]["APP_TIMEZONE"] == "Asia/Kolkata"
     assert job["env"]["SOURCE_BACKED_ROTATION_ENABLED"] == "true"
+    assert job["env"]["SUPABASE_URL"] == STAGING_SUPABASE_URL
 
     source = path.read_text(encoding="utf-8")
     assert PRODUCTION_PROJECT_REF not in source
-    assert f"{STAGING_PROJECT_REF}.supabase.co" not in source
+    assert STAGING_SUPABASE_URL in source
+    assert "secrets.SUPABASE_URL" not in source
     assert 'expected_host = f"{expected_ref}.supabase.co"' in source
     assert "ALLOW FORCE ON STAGING {expected_ref}" in source
     assert "recover-missed-quizzes" not in source
@@ -136,14 +154,15 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert "from database.contract import (" in source
     assert "body.get(\"applicationVersion\") != APPLICATION_VERSION" in source
     assert "body.get(\"databaseContractVersion\") != DATABASE_CONTRACT_VERSION" in source
+    assert "body.get(\"personalLearningMigrationVersion\")" in source
     assert '"7.1.0"' not in source
 
 
 def test_staging_workflow_uses_only_staging_secret_expressions() -> None:
     staging = _load_yaml(WORKFLOW_DIR / "staging-smoke.yml")
     env = staging["jobs"]["staging-smoke"]["env"]
+    assert env["SUPABASE_URL"] == STAGING_SUPABASE_URL
     for name in (
-        "SUPABASE_URL",
         "SUPABASE_SERVICE_KEY",
         "TELEGRAM_BOT_TOKEN",
         "TELEGRAM_CHAT_ID",
@@ -181,6 +200,9 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
         source = path.read_text(encoding="utf-8")
         assert PRODUCTION_PROJECT_REF in source
         assert STAGING_PROJECT_REF in source
+        assert PRODUCTION_SUPABASE_URL in source
+        assert STAGING_SUPABASE_URL in source
+        assert "secrets.SUPABASE_URL" not in source
         assert "TELEGRAM_" not in source
         assert "GEMINI_" not in source
         assert "get_application_schema_contract" in source
@@ -202,7 +224,13 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
 def test_authoritative_migration_version_is_latest_filename() -> None:
     migrations = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
     assert migrations
-    assert migrations[-1].name.startswith(f"{QUIZ_QUALITY_MIGRATION_VERSION}_")
+    assert migrations[-1].name.startswith(
+        f"{PERSONAL_LEARNING_MIGRATION_VERSION}_"
+    )
+    assert any(
+        path.name.startswith(f"{QUIZ_QUALITY_MIGRATION_VERSION}_")
+        for path in migrations
+    )
     assert any(
         path.name.startswith(f"{REQUIRED_MIGRATION_VERSION}_")
         for path in migrations
@@ -213,7 +241,7 @@ def test_python_and_browser_packages_share_the_release_version() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
 
-    assert APPLICATION_VERSION == "7.2.0"
+    assert APPLICATION_VERSION == "7.2.1"
     assert package["version"] == APPLICATION_VERSION
     assert lock["version"] == APPLICATION_VERSION
     assert lock["packages"][""]["version"] == APPLICATION_VERSION
