@@ -1,9 +1,6 @@
 name: Staging Quiz Smoke
 
 on:
-  push:
-    branches:
-      - agent/diverse-quizzes-negative-marking
   workflow_dispatch:
     inputs:
       operation:
@@ -62,9 +59,6 @@ concurrency:
 
 jobs:
   staging-smoke:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      github.event.head_commit.message == 'Validate grounded pack persistence on staging'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     environment: staging
@@ -88,10 +82,10 @@ jobs:
       WRITE_STATIC_QUIZ_JSON: "false"
       SOURCE_BACKED_ROTATION_ENABLED: "true"
       RENDER_STAGING_URL: https://telegram-quiz-bot-staging.onrender.com
-      INPUT_OPERATION: ${{ github.event_name == 'push' && 'subject-quiz' || inputs.operation }}
-      INPUT_SUBJECT: ${{ github.event_name == 'push' && 'geography' || inputs.subject }}
-      INPUT_FORCE_POST: ${{ github.event_name == 'push' && 'false' || inputs.force_post }}
-      INPUT_FORCE_REGENERATE: ${{ github.event_name == 'push' && 'false' || inputs.force_regenerate }}
+      INPUT_OPERATION: ${{ inputs.operation }}
+      INPUT_SUBJECT: ${{ inputs.subject }}
+      INPUT_FORCE_POST: ${{ inputs.force_post }}
+      INPUT_FORCE_REGENERATE: ${{ inputs.force_regenerate }}
       INPUT_SAFETY_ACK: ${{ inputs.safety_ack }}
 
     steps:
@@ -190,7 +184,7 @@ jobs:
           python bot.py "${args[@]}"
 
       - name: Read sanitized staging health
-        if: ${{ github.event_name == 'push' || inputs.verify_status }}
+        if: ${{ inputs.verify_status }}
         run: |
           python - <<'PY'
           import json
