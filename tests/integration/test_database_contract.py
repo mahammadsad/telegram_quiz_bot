@@ -15,6 +15,7 @@ from psycopg.types.json import Jsonb
 from config.source_rollout import ROTATION_CHAPTER_KEYS
 from database.contract import (
     DATABASE_CONTRACT_VERSION,
+    PERSONAL_LEARNING_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
@@ -291,6 +292,12 @@ def test_exact_database_contract_and_permissions(database_url: str) -> None:
     assert contract["quiz_quality_migration_applied"] is True
     assert contract["diverse_grounding_ready"] is True
     assert contract["negative_marking_ready"] is True
+    assert (
+        contract["personal_learning_migration_version"]
+        == PERSONAL_LEARNING_MIGRATION_VERSION
+    )
+    assert contract["personal_learning_migration_applied"] is True
+    assert contract["personal_learning_projection_ready"] is True
     for key in (
         "missing_tables",
         "missing_columns",
@@ -358,6 +365,58 @@ def test_service_role_can_execute_the_authoritative_contract(database_url: str) 
         finally:
             connection.execute("reset role")
     assert contract["ready"] is True
+
+
+def test_dashboard_and_due_reviews_preserve_object_response_shape(
+    database_url: str,
+    versioned_quizzes: dict,
+) -> None:
+    del versioned_quizzes
+    with connect(database_url) as connection:
+        user_id = connection.execute(
+            """
+            insert into public.users (telegram_id, first_name)
+            values (%s, 'Projection test') returning id
+            """,
+            (9_000_000_000 + uuid.uuid4().int % 8_000_000_000,),
+        ).fetchone()["id"]
+        question_id = connection.execute(
+            """
+            select question_id
+            from public.quiz_questions
+            where quiz_id = '20260602-history'
+            order by question_order
+            limit 1
+            """
+        ).fetchone()["question_id"]
+        connection.execute(
+            """
+            select public.advance_personal_review_schedule_v2(
+                %s, %s, false, 'quiz', 12, false
+            )
+            """,
+            (user_id, question_id),
+        )
+        dashboard = connection.execute(
+            "select public.get_user_learning_dashboard(%s) as payload",
+            (user_id,),
+        ).fetchone()["payload"]
+        due = connection.execute(
+            "select public.get_user_due_reviews(%s, 100, 0) as payload",
+            (user_id,),
+        ).fetchone()["payload"]
+        connection.rollback()
+
+    assert isinstance(dashboard, dict)
+    assert dashboard["revisionDueToday"] == 1
+    assert isinstance(dashboard["subjectPerformance"], list)
+    assert isinstance(dashboard["subjectRevisionCounts"], list)
+    assert dashboard["subjectRevisionCounts"][0]["subjectKey"] == "history"
+    assert isinstance(due, dict)
+    assert due["mode"] == "revision"
+    assert due["sourceType"] == "due"
+    assert due["total"] >= 1
+    assert due["rows"][0]["subjectKey"] == "history"
 
 
 def test_same_stem_versions_and_identical_reuse(

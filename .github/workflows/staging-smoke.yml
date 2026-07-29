@@ -65,7 +65,7 @@ jobs:
     env:
       APP_TIMEZONE: Asia/Kolkata
       EXPECTED_SUPABASE_PROJECT_REF: prdrabmcivgbygzjnmko
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_URL: https://prdrabmcivgbygzjnmko.supabase.co
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
@@ -195,6 +195,7 @@ jobs:
           from database.contract import (
               APPLICATION_VERSION,
               DATABASE_CONTRACT_VERSION,
+              PERSONAL_LEARNING_MIGRATION_VERSION,
               REQUIRED_MIGRATION_VERSION,
               SOURCE_ROLLOUT_MIGRATION_VERSION,
           )
@@ -218,6 +219,9 @@ jobs:
                   "sourceRolloutMigrationVersion": body.get(
                       "sourceRolloutMigrationVersion"
                   ),
+                  "personalLearningMigrationVersion": body.get(
+                      "personalLearningMigrationVersion"
+                  ),
                   "sourceBackedRotationEnabled": body.get(
                       "sourceBackedRotationEnabled"
                   ),
@@ -238,6 +242,11 @@ jobs:
                   raise SystemExit("Staging database contract version mismatch.")
               if body.get("requiredMigrationVersion") != REQUIRED_MIGRATION_VERSION:
                   raise SystemExit("Staging migration version mismatch.")
+              if (
+                  body.get("personalLearningMigrationVersion")
+                  != PERSONAL_LEARNING_MIGRATION_VERSION
+              ):
+                  raise SystemExit("Staging personal-learning migration mismatch.")
               if (
                   body.get("sourceRolloutMigrationVersion")
                   != SOURCE_ROLLOUT_MIGRATION_VERSION

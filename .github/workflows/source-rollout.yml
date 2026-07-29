@@ -37,7 +37,7 @@ jobs:
       OPERATION: ${{ inputs.operation }}
       SAFETY_ACK: ${{ inputs.safety_ack }}
       EXPECTED_SUPABASE_PROJECT_REF: ${{ inputs.target == 'staging' && 'prdrabmcivgbygzjnmko' || 'tizxodkcpglmxgtwepor' }}
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_URL: ${{ inputs.target == 'staging' && 'https://prdrabmcivgbygzjnmko.supabase.co' || 'https://tizxodkcpglmxgtwepor.supabase.co' }}
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
 
     steps:

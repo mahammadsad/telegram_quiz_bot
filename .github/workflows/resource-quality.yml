@@ -30,7 +30,7 @@ jobs:
     timeout-minutes: 20
     environment: production
     env:
-      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_URL: https://tizxodkcpglmxgtwepor.supabase.co
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
       EXPECTED_SUPABASE_PROJECT_REF: tizxodkcpglmxgtwepor
       YOUTUBE_API_KEY: ${{ secrets.YOUTUBE_API_KEY }}

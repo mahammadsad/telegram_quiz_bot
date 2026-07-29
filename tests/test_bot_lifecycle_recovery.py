@@ -606,6 +606,11 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
             "contract_key": bot.DATABASE_CONTRACT_KEY,
             "contract_version": bot.DATABASE_CONTRACT_VERSION,
             "required_migration_version": bot.REQUIRED_MIGRATION_VERSION,
+            "personal_learning_migration_version": (
+                bot.PERSONAL_LEARNING_MIGRATION_VERSION
+            ),
+            "personal_learning_migration_applied": True,
+            "personal_learning_projection_ready": True,
             "source_rollout_migration_version": (
                 bot.SOURCE_ROLLOUT_MIGRATION_VERSION
             ),

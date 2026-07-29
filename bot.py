@@ -35,6 +35,7 @@ from config.subjects import QUIZ_SUBJECTS, get_subject
 from database.contract import (
     DATABASE_CONTRACT_KEY,
     DATABASE_CONTRACT_VERSION,
+    PERSONAL_LEARNING_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
@@ -873,6 +874,10 @@ def validate_database_schema() -> None:
         and contract.get("contract_key") == DATABASE_CONTRACT_KEY
         and contract.get("contract_version") == DATABASE_CONTRACT_VERSION
         and contract.get("required_migration_version") == REQUIRED_MIGRATION_VERSION
+        and contract.get("personal_learning_migration_version")
+        == PERSONAL_LEARNING_MIGRATION_VERSION
+        and contract.get("personal_learning_migration_applied") is True
+        and contract.get("personal_learning_projection_ready") is True
         and (
             not SOURCE_BACKED_ROTATION_ENABLED
             or (
