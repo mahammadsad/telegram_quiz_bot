@@ -244,10 +244,16 @@ def public_quiz_payload(pack: dict) -> dict:
 
 
 def _marking_scheme(penalty: object) -> dict[str, int | float | bool]:
-    try:
-        incorrect_penalty = max(0.0, min(1.0, float(penalty)))
-    except (TypeError, ValueError):
+    if isinstance(penalty, bool) or not isinstance(
+        penalty,
+        (int, float, str),
+    ):
         incorrect_penalty = 0.0
+    else:
+        try:
+            incorrect_penalty = max(0.0, min(1.0, float(penalty)))
+        except ValueError:
+            incorrect_penalty = 0.0
     return {
         "rightMarks": QUIZ_CORRECT_MARKS,
         "wrongPenalty": incorrect_penalty,
