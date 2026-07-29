@@ -14,7 +14,7 @@ test("personal dashboard keeps bookmark questions in Practice and omits a bookma
   page,
 }, testInfo) => {
   await installTelegramMock(page);
-  const api = await installApiMocks(page);
+  await installApiMocks(page);
   await page.goto("/dashboard.html");
 
   await expect(page.locator("#identity-card")).toBeVisible();
@@ -35,18 +35,11 @@ test("personal dashboard keeps bookmark questions in Practice and omits a bookma
     "practice.html?source=due",
   );
 
-  await page.locator("#settings-card summary").click();
-  await expect(page.locator("#revision-sound")).toBeChecked();
-  await page.locator("#revision-sound").uncheck();
-  await page.locator("#test-sound").click();
-  await expect(page.locator("#sound-message")).toContainText("শব্দ বাজানো হয়েছে");
-  const audioState = await page.evaluate(() => window.__mobileQa);
-  expect(audioState.audioStarts).toBeGreaterThan(0);
-
-  await page.locator("#settings-submit").click();
-  await expect(page.locator("#settings-message")).toContainText("সংরক্ষিত হয়েছে");
-  expect(api.preferenceSaves).toHaveLength(1);
-  expect(api.preferenceSaves[0].revisionSoundEnabled).toBe(false);
+  await expect(page.locator("#settings-card")).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "সেটিংস" })).toHaveAttribute(
+    "href",
+    "settings.html",
+  );
 
   await page.keyboard.press("Tab");
   const focus = await page.evaluate(() => {

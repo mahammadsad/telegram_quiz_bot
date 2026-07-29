@@ -1,6 +1,6 @@
 {
   "name": "telegram-quiz-platform-browser-tests",
-  "version": "7.2.1",
+  "version": "7.2.2",
   "private": true,
   "description": "Deterministic mobile browser tests for the Telegram quiz platform",
   "scripts": {

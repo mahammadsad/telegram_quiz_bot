@@ -386,7 +386,7 @@ separation, Telegram evidence, mobile artifacts, and rollback procedures are in
 Use `docs/PRODUCTIONIZATION_CHECKLIST.md` as the evidence gate, not this README.
 Calculation rules are in `docs/STATISTICS_AND_RANKING_RULES.md`; a non-programmer
 walkthrough is in `docs/NON_PROGRAMMER_VERIFICATION.md`; release changes are in
-`docs/RELEASE_NOTES_7.2.1.md`. Version 7.2.0, 7.1.0, and 7.0.0 evidence remains
-historical; the
+`docs/RELEASE_NOTES_7.2.2.md`. Version 7.2.1, 7.2.0, 7.1.0, and 7.0.0 evidence
+remains historical; the
 13-subject source-backed rollout is complete only after the v7.1 staging and
 production gates in `docs/MIGRATION_20260728_SOURCE_ROLLOUT.md` pass.

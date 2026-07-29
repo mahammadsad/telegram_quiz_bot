@@ -5,6 +5,7 @@ ROOT = Path(__file__).resolve().parents[1]
 INDEX = (ROOT / "index.html").read_text(encoding="utf-8")
 PRACTICE = (ROOT / "practice.html").read_text(encoding="utf-8")
 DASHBOARD = (ROOT / "dashboard.html").read_text(encoding="utf-8")
+SETTINGS = (ROOT / "settings.html").read_text(encoding="utf-8")
 
 
 def test_quiz_ui_autosaves_resumes_navigates_and_confirms_submission():
@@ -62,18 +63,43 @@ def test_practice_ui_keeps_answers_hidden_until_authenticated_post():
     assert "rows[index].correctIndex" not in PRACTICE
 
 
-def test_personal_dashboard_uses_private_sql_analytics_and_preference_apis():
+def test_personal_dashboard_uses_private_sql_analytics_without_settings_controls():
     assert '"/api/me/dashboard"' in DASHBOARD
-    assert '"/api/me/preferences"' in DASHBOARD
+    assert '"/api/me/preferences"' not in DASHBOARD
     assert '"/api/leaderboards/"' in DASHBOARD
     assert "subjectPerformance" in DASHBOARD
     assert "progressOverTime" in DASHBOARD
-    assert 'id="daily-target"' in DASHBOARD
-    assert 'id="quiz-mode"' in DASHBOARD
+    assert 'id="settings-card"' not in DASHBOARD
+    assert 'id="daily-target"' not in DASHBOARD
+    assert 'id="quiz-mode"' not in DASHBOARD
     assert "--tg-theme-bg-color" in DASHBOARD
     assert "prefers-reduced-motion" in DASHBOARD
     assert '"miscellaneous":"বিবিধ সাধারণ জ্ঞান"' in DASHBOARD
     assert '"static-gk"' not in DASHBOARD
+
+
+def test_preferences_and_privacy_have_a_dedicated_settings_page():
+    for contract in (
+        "<title>পছন্দ ও গোপনীয়তা</title>",
+        'href="settings.html" aria-current="page"',
+        '"/api/me/preferences"',
+        'id="daily-target"',
+        'id="quiz-mode"',
+        'id="leaderboard-visible"',
+        'id="username-visible"',
+        'id="revision-sound"',
+        'id="revision-vibration"',
+        'id="test-sound"',
+        'localPreference("revisionSoundEnabled"',
+        "--tg-theme-bg-color",
+        "prefers-reduced-motion",
+    ):
+        assert contract in SETTINGS
+    assert 'class="active"' in SETTINGS
+    assert "পছন্দ ও গোপনীয়তা" in SETTINGS
+    assert "settings.html" in INDEX
+    assert "settings.html" in DASHBOARD
+    assert "settings.html" in PRACTICE
 
 
 def test_revision_feedback_is_explicitly_server_mode_only_and_idempotent():
@@ -97,13 +123,16 @@ def test_current_user_and_revision_preferences_are_visible_and_persisted():
         'badge.textContent="আপনি"',
         "data.currentUser",
         "data.separatorRequired",
+        '<option value="overall_rank">সামগ্রিক র‍্যাঙ্ক</option>',
+    ):
+        assert contract in DASHBOARD
+    for contract in (
         'id="revision-sound"',
         'id="revision-vibration"',
         'id="test-sound"',
         'localPreference("revisionSoundEnabled"',
-        '<option value="overall_rank">সামগ্রিক র‍্যাঙ্ক</option>',
     ):
-        assert contract in DASHBOARD
+        assert contract in SETTINGS
     assert 'id="weak-practice"' in DASHBOARD
     assert 'source=weak_topic&subject=' in DASHBOARD
     assert 'el("page-title").textContent="কুইজ ড্যাশবোর্ড"' in DASHBOARD
@@ -141,20 +170,22 @@ def test_mini_app_navigation_uses_live_routes_and_marks_revision_active():
     assert 'href="index.html"' not in INDEX
     assert 'href="index.html"' not in DASHBOARD
     assert 'href="index.html"' not in PRACTICE
+    assert 'href="index.html"' not in SETTINGS
     assert 'id="nav-quiz" href="/"' in INDEX
     assert 'id="empty-quiz-link" href="/"' in PRACTICE
     assert 'el("page-link").href=quizHomeUrl' in DASHBOARD
     assert 'link.href=quizHomeUrl' in DASHBOARD
     assert 'el("nav-practice").classList.toggle("active",requestedSource!=="due")' in PRACTICE
     assert 'el("nav-revision").classList.toggle("active",requestedSource==="due")' in PRACTICE
-    for source in (INDEX, DASHBOARD, PRACTICE):
+    for source in (INDEX, DASHBOARD, PRACTICE, SETTINGS):
         assert "tgWebAppData=" in source
         assert "telegramLaunchHash" in source
         assert "installTelegramNavigation()" in source
         assert "url.hash=telegramLaunchHash" in source.replace(" ", "")
+        assert 'href="settings.html"' in source
         assert 'searchParams.set("tgWebAppData"' not in source
         assert "sessionStorage.setItem" not in source.split("telegramLaunchHash", 1)[1].split(
-            "function authHeaders", 1
+            "function check", 1
         )[0]
     assert 'requestedSection==="analytics"' in DASHBOARD
 
@@ -182,6 +213,7 @@ def test_every_static_button_and_link_has_a_real_navigation_or_handler_contract(
         ("index.html", INDEX),
         ("dashboard.html", DASHBOARD),
         ("practice.html", PRACTICE),
+        ("settings.html", SETTINGS),
     ):
         for tag in re.findall(r"<button\b[^>]*>", source):
             match = re.search(r'\bid="([^"]+)"', tag)

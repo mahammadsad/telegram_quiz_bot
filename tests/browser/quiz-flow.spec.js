@@ -241,7 +241,7 @@ test("cross-page navigation preserves Telegram authentication and personal dashb
   await expect(page.locator("#error")).toBeHidden();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe(launchHash);
 
-  await page.locator(".bottom").getByRole("link", { name: "হোম" }).click();
+  await page.locator(".bottom").getByRole("link", { name: "পরিসংখ্যান" }).click();
   await expect(page.locator("#identity-card")).toBeVisible();
   await expect(page.locator("#bookmarks-card")).toHaveCount(0);
   await expect(page.locator("#bookmark-practice")).toBeVisible();
@@ -254,12 +254,8 @@ test("cross-page navigation preserves Telegram authentication and personal dashb
   await expect(page.locator("#nav-revision")).not.toHaveClass(/active/);
   await expect.poll(() => page.evaluate(() => location.hash)).toBe(launchHash);
 
-  await page.locator(".bottom").getByRole("link", { name: "হোম" }).click();
-  await expect(page.locator("#identity-card")).toBeVisible();
   await page.locator(".bottom").getByRole("link", { name: "পরিসংখ্যান" }).click();
-  await expect
-    .poll(() => page.evaluate(() => new URLSearchParams(location.search).get("section")))
-    .toBe("analytics");
+  await expect(page.locator("#identity-card")).toBeVisible();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe(launchHash);
   await expect(page.locator("#analytics")).toBeVisible();
 });
