@@ -192,6 +192,13 @@ jobs:
           from urllib.error import HTTPError
           from urllib.request import urlopen
 
+          from database.contract import (
+              APPLICATION_VERSION,
+              DATABASE_CONTRACT_VERSION,
+              REQUIRED_MIGRATION_VERSION,
+              SOURCE_ROLLOUT_MIGRATION_VERSION,
+          )
+
           base = os.environ["RENDER_STAGING_URL"].rstrip("/")
           operation = os.environ["INPUT_OPERATION"]
           for path in ("/health/live", "/health/ready"):
@@ -220,18 +227,21 @@ jobs:
               }
               print(json.dumps(safe, sort_keys=True))
 
-              if body.get("applicationVersion") != "7.1.0":
+              if body.get("applicationVersion") != APPLICATION_VERSION:
                   raise SystemExit("Staging application version is not the release candidate.")
               if path == "/health/live":
                   if status != 200:
                       raise SystemExit("Staging liveness is not HTTP 200.")
                   continue
 
-              if body.get("databaseContractVersion") != "2.2.0":
+              if body.get("databaseContractVersion") != DATABASE_CONTRACT_VERSION:
                   raise SystemExit("Staging database contract version mismatch.")
-              if body.get("requiredMigrationVersion") != "20260724212939":
+              if body.get("requiredMigrationVersion") != REQUIRED_MIGRATION_VERSION:
                   raise SystemExit("Staging migration version mismatch.")
-              if body.get("sourceRolloutMigrationVersion") != "20260728040209":
+              if (
+                  body.get("sourceRolloutMigrationVersion")
+                  != SOURCE_ROLLOUT_MIGRATION_VERSION
+              ):
                   raise SystemExit("Staging source-rollout migration mismatch.")
               if body.get("sourceBackedRotationEnabled") is not True:
                   raise SystemExit("Staging source-backed rotation is not enabled.")

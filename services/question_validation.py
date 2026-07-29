@@ -108,6 +108,9 @@ def validate_questions(
     micro_topic_id: str | None = None,
     micro_topic_key: str | None = None,
     allowed_source_ids: set[str] | None = None,
+    allowed_source_topics: dict[str, tuple[str, str]] | None = None,
+    required_source_diversity: int = 1,
+    required_topic_diversity: int = 1,
     require_verification: bool = True,
 ) -> list[dict]:
     if not isinstance(raw_questions, list) or len(raw_questions) != QUESTION_COUNT:
@@ -169,16 +172,32 @@ def validate_questions(
             raise QuizValidationError(f"Question {number} must contain a normalized micro-topic id.")
         if not raw_micro_topic_key:
             raise QuizValidationError(f"Question {number} must contain a reusable micro-topic key.")
-        if not expected_topic_id:
-            expected_topic_id = raw_micro_topic_id
-        if not expected_topic_key:
-            expected_topic_key = raw_micro_topic_key
-        if raw_micro_topic_id != expected_topic_id or raw_micro_topic_key != expected_topic_key:
-            raise QuizValidationError(f"Question {number} belongs to another micro-topic.")
         if not source_document_id or not _is_uuid(source_document_id):
             raise QuizValidationError(f"Question {number} must cite a verified source document.")
         if allowed_source_ids is not None and source_document_id not in allowed_source_ids:
             raise QuizValidationError(f"Question {number} cites a source outside the grounding bundle.")
+        if allowed_source_topics is not None:
+            source_topic = allowed_source_topics.get(source_document_id)
+            if source_topic is None:
+                raise QuizValidationError(
+                    f"Question {number} cites a source outside the grounding bundle."
+                )
+            if (raw_micro_topic_id, raw_micro_topic_key) != source_topic:
+                raise QuizValidationError(
+                    f"Question {number} has a micro-topic that does not match its source."
+                )
+        else:
+            if not expected_topic_id:
+                expected_topic_id = raw_micro_topic_id
+            if not expected_topic_key:
+                expected_topic_key = raw_micro_topic_key
+            if (
+                raw_micro_topic_id != expected_topic_id
+                or raw_micro_topic_key != expected_topic_key
+            ):
+                raise QuizValidationError(
+                    f"Question {number} belongs to another micro-topic."
+                )
         if difficulty not in _DIFFICULTIES:
             raise QuizValidationError(f"Question {number} has an invalid difficulty.")
         if language not in {"bn", "en", "bn-en"}:
@@ -257,9 +276,57 @@ def validate_questions(
             raise QuizValidationError(f"Question {number} has invalid version metadata.") from exc
         clean_row["question_id"] = _text(raw.get("question_id")) or clean_row["content_hash"]
         clean.append(clean_row)
+    _validate_grounding_diversity(
+        clean,
+        required_source_diversity=required_source_diversity,
+        required_topic_diversity=required_topic_diversity,
+    )
     if enforce_composition:
         _validate_quiz_composition(clean)
     return clean
+
+
+def _validate_grounding_diversity(
+    questions: list[dict],
+    *,
+    required_source_diversity: int,
+    required_topic_diversity: int,
+) -> None:
+    required_sources = max(1, min(QUESTION_COUNT, required_source_diversity))
+    required_topics = max(1, min(QUESTION_COUNT, required_topic_diversity))
+    source_counts = Counter(item["source_document_id"] for item in questions)
+    topic_counts = Counter(item["micro_topic_key"] for item in questions)
+    source_answer_counts = Counter(
+        (
+            item["source_document_id"],
+            normalize_text(item["options"][item["correct_index"]]),
+        )
+        for item in questions
+    )
+
+    if len(source_counts) < required_sources:
+        raise QuizValidationError(
+            "Quiz source diversity is below the grounded-pack requirement."
+        )
+    if len(topic_counts) < required_topics:
+        raise QuizValidationError(
+            "Quiz micro-topic diversity is below the grounded-pack requirement."
+        )
+
+    maximum_source_reuse = (QUESTION_COUNT + required_sources - 1) // required_sources
+    if required_sources > 1 and max(source_counts.values()) > maximum_source_reuse:
+        raise QuizValidationError(
+            "Quiz source facts are not balanced across the grounded pack."
+        )
+    maximum_topic_reuse = (QUESTION_COUNT + required_topics - 1) // required_topics
+    if required_topics > 1 and max(topic_counts.values()) > maximum_topic_reuse:
+        raise QuizValidationError(
+            "Quiz micro-topics are not balanced across the grounded pack."
+        )
+    if max(source_answer_counts.values()) > 1:
+        raise QuizValidationError(
+            "Quiz repeats a question-answer relationship from the same source fact."
+        )
 
 
 def _validate_quiz_composition(questions: list[dict]) -> None:

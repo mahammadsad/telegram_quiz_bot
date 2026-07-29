@@ -82,6 +82,8 @@ test("quiz leaderboard highlights a current user who is outside the top ten", as
   await expect(page.locator("#board .row.me .you")).toHaveText("আপনি");
   await expect(page.locator("#your-rank")).toContainText("আপনার র‍্যাঙ্ক");
   await expect(page.locator("#your-rank")).toContainText("#২৭");
+  await expect(page.locator("#your-rank")).toContainText("৬.২৫/১০");
+  await expect(page.locator("#rank-help")).toContainText("০.২৫ নম্বর কাটা হয়");
 
   await capture(page, testInfo, "quiz-leaderboard-outside-top-ten");
   await assertNoHorizontalOverflow(page);

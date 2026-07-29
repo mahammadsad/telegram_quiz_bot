@@ -110,7 +110,7 @@
   }
   .meta-grid{
     display:grid;
-    grid-template-columns:repeat(3,minmax(0,1fr));
+    grid-template-columns:repeat(4,minmax(0,1fr));
     gap:8px;
     margin:16px 0;
   }
@@ -393,6 +393,7 @@
       <div class="meta"><b>বিষয়</b><span id="intro-subject">-</span></div>
       <div class="meta"><b>প্রশ্ন</b><span id="intro-count" class="num">-</span></div>
       <div class="meta"><b>সময়</b><span id="intro-time" class="num">-</span></div>
+      <div class="meta"><b>মার্কিং</b><span id="intro-marking" class="num">-</span></div>
     </div>
     <div class="actions" id="intro-actions">
       <button class="btn btn-secondary" id="btn-prepare">📚 আগে প্রস্তুতি নিন</button>
@@ -461,7 +462,7 @@
       </div>
     </div>
     <div class="result-metrics" id="result-metrics">
-      <div class="result-metric"><b>সঠিকতা</b><span id="result-accuracy">০%</span></div><div class="result-metric"><b>সময়</b><span id="result-time">০:০০</span></div><div class="result-metric"><b>প্রতি প্রশ্ন</b><span id="result-average">০ সেকেন্ড</span></div><div class="result-metric"><b>উত্তরহীন</b><span id="result-unanswered">০</span></div>
+      <div class="result-metric"><b>সঠিক</b><span id="result-correct">০</span></div><div class="result-metric"><b>ভুল</b><span id="result-incorrect">০</span></div><div class="result-metric"><b>কাটা নম্বর</b><span id="result-negative">০</span></div><div class="result-metric"><b>সঠিকতা</b><span id="result-accuracy">০%</span></div><div class="result-metric"><b>সময়</b><span id="result-time">০:০০</span></div><div class="result-metric"><b>প্রতি প্রশ্ন</b><span id="result-average">০ সেকেন্ড</span></div><div class="result-metric"><b>উত্তরহীন</b><span id="result-unanswered">০</span></div>
     </div>
     <div class="actions">
       <button class="btn btn-secondary" id="btn-wrong-practice">ভুল প্রশ্ন অনুশীলন</button><button class="btn btn-secondary" id="btn-revise">পুনরাবৃত্তি করুন</button><button class="btn btn-secondary" id="btn-retake">পুনরায় পরীক্ষা</button><button class="btn btn-primary" id="btn-dashboard">কুইজ র‍্যাঙ্কিং</button><button class="btn btn-secondary" id="btn-personal-dashboard">আমার ড্যাশবোর্ড</button>
@@ -583,6 +584,20 @@
 
   function byId(id){ return document.getElementById(id); }
   function bn(value){ return String(value).replace(/[0-9]/g, function(d){ return BN[+d]; }); }
+  function formatScore(value){
+    var number = Number(value);
+    if (!Number.isFinite(number)) number = 0;
+    return (Math.round(number * 100) / 100).toFixed(2).replace(/\.?0+$/, "");
+  }
+  function markingScheme(){
+    var marking = quiz && quiz.capabilities && quiz.capabilities.marking;
+    return marking || {
+      rightMarks:1,
+      wrongPenalty:0,
+      blankMarks:0,
+      negativeMarking:false
+    };
+  }
   function pad2(n){ return n < 10 ? "0" + n : "" + n; }
   function api(path){ return API_BASE + path; }
   function telegramUrl(path){
@@ -811,10 +826,14 @@
 
   function renderIntro(){
     var meta = quiz.meta || {};
+    var marking = markingScheme();
     byId("intro-title").textContent = meta.chapter || "আজকের মক টেস্ট";
     byId("intro-subject").textContent = meta.subject || "মক টেস্ট";
     byId("intro-count").textContent = bn(quiz.qs.length) + "টি";
     byId("intro-time").textContent = quizMode === "practice" ? "সময়সীমাহীন অনুশীলন" : bn(Math.max(5, quiz.qs.length)) + " মিনিট";
+    byId("intro-marking").textContent = marking.negativeMarking
+      ? "+" + bn(formatScore(marking.rightMarks)) + " / −" + bn(formatScore(marking.wrongPenalty))
+      : "নেগেটিভ নেই";
     byId("fallback-box").classList.toggle("hidden", !legacyLocal);
     byId("btn-start").classList.toggle("hidden", legacyLocal);
     byId("btn-prepare").classList.toggle("hidden", legacyLocal);
@@ -1007,7 +1026,13 @@
   function prepareQuizHeader(){
     byId("quiz-subject").textContent = (quiz.meta && quiz.meta.subject) || "মক টেস্ট";
     byId("quiz-chapter").textContent = (quiz.meta && quiz.meta.chapter) || "";
-    byId("mode-label").textContent = quizMode === "practice" ? "অনুশীলন মোড · সময়সীমা নেই" : "সময়বদ্ধ মোড";
+    var marking = markingScheme();
+    var mode = quizMode === "practice" ? "অনুশীলন মোড · সময়সীমা নেই" : "সময়বদ্ধ মোড";
+    byId("mode-label").textContent = mode + (
+      marking.negativeMarking
+        ? " · ভুলে −" + bn(formatScore(marking.wrongPenalty))
+        : ""
+    );
   }
 
   function renderQuestion(){
@@ -1173,10 +1198,14 @@
     var answered = answers.filter(function(value){ return value !== null; }).length;
     var unanswered = answers.length - answered;
     var marked = markedForReview.filter(Boolean).length;
+    var marking = markingScheme();
     byId("submit-summary").textContent =
       "আপনি " + bn(answered) + "টি প্রশ্নের উত্তর দিয়েছেন। " +
       bn(unanswered) + "টি প্রশ্ন এখনও বাকি। " +
-      bn(marked) + "টি প্রশ্ন রিভিউয়ের জন্য চিহ্নিত।";
+      bn(marked) + "টি প্রশ্ন রিভিউয়ের জন্য চিহ্নিত।" +
+      (marking.negativeMarking
+        ? " প্রতিটি ভুল উত্তরে " + bn(formatScore(marking.wrongPenalty)) + " নম্বর কাটা হবে।"
+        : "");
     byId("submit-modal").classList.remove("hidden");
     byId("btn-submit-back").focus();
   }
@@ -1217,22 +1246,42 @@
     var durationValue = result.duration_seconds === undefined ? result.durationSeconds : result.duration_seconds;
     var attemptNumber = result.attempt_number === undefined ? result.attemptNumber : result.attempt_number;
     var bestScore = result.best_score === undefined ? result.bestScore : result.best_score;
-    var pct = result.total ? Math.round(result.score / result.total * 100) : 0;
+    var bestNetScore = result.best_net_score === undefined ? result.bestNetScore : result.best_net_score;
+    var correct = Number(result.correct === undefined ? result.score : result.correct) || 0;
+    var answered = Number(result.answered) || 0;
+    var incorrect = Number(result.incorrect === undefined ? answered - correct : result.incorrect) || 0;
+    var netScore = Number(result.net_score === undefined ? result.netScore : result.net_score);
+    if (!Number.isFinite(netScore)) netScore = Number(result.score) || 0;
+    var negativeMarks = Number(
+      result.negative_marks === undefined ? result.negativeMarks : result.negative_marks
+    );
+    if (!Number.isFinite(negativeMarks)) negativeMarks = Math.max(0, correct - netScore);
+    var pct = result.total ? Math.round(correct / result.total * 100) : 0;
+    var netPct = result.total
+      ? Math.max(0, Math.min(100, netScore / result.total * 100))
+      : 0;
     var duration = durationValue === null || durationValue === undefined
       ? Math.max(0, Math.round((Date.now() - startedAt) / 1000))
       : durationValue;
-    byId("score-ring").style.setProperty("--score-deg", (pct * 3.6) + "deg");
-    byId("score-text").textContent = bn(result.score) + "/" + bn(result.total);
+    byId("score-ring").style.setProperty("--score-deg", (netPct * 3.6) + "deg");
+    byId("score-text").textContent = bn(formatScore(netScore)) + "/" + bn(result.total);
     byId("result-title").textContent = resultTitle(pct);
     byId("result-subtitle").textContent =
-      "চেষ্টা " + bn(attemptNumber || 1) + ": " + bn(result.score) + "/" + bn(result.total) +
-      "। আপনার সেরা স্কোর " + bn(bestScore === undefined ? result.score : bestScore) +
+      "চেষ্টা " + bn(attemptNumber || 1) + ": নেট স্কোর " +
+      bn(formatScore(netScore)) + "/" + bn(result.total) +
+      "। আপনার সেরা নেট স্কোর " +
+      bn(formatScore(bestNetScore === undefined ? (
+        bestScore === undefined ? netScore : bestScore
+      ) : bestNetScore)) +
       "/" + bn(result.total) + "; র‍্যাঙ্ক: " + bn(result.rank || "-") + " / " +
       bn(result.participants || 0) + "। ড্যাশবোর্ডে সর্বশেষ চেষ্টার স্কোর দেখাবে। আবার পরীক্ষা দিতে পারেন।";
+    byId("result-correct").textContent = bn(correct);
+    byId("result-incorrect").textContent = bn(incorrect);
+    byId("result-negative").textContent = "−" + bn(formatScore(negativeMarks));
     byId("result-accuracy").textContent = bn(pct) + "%";
     byId("result-time").textContent = bn(Math.floor(duration / 60) + ":" + pad2(duration % 60));
     byId("result-average").textContent = bn(result.total ? Math.round(duration / result.total) : 0) + " সেকেন্ড";
-    byId("result-unanswered").textContent = bn(Math.max(0, result.total - (result.answered || 0)));
+    byId("result-unanswered").textContent = bn(Math.max(0, result.total - answered));
 
     var list = byId("review-list");
     list.innerHTML = "";

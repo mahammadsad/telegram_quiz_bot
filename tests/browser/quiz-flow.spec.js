@@ -16,6 +16,7 @@ async function openIntro(page, options = {}) {
   const api = await installApiMocks(page, options);
   await page.goto(`/index.html?quiz=${QUIZ_ID}`);
   await expect(page.locator("#screen-intro")).toBeVisible();
+  await expect(page.locator("#intro-marking")).toContainText("−০.২৫");
   return api;
 }
 
@@ -117,7 +118,7 @@ test("complete quiz lifecycle hides answers until submission and recovers the re
   const submissionCount = api.quizSubmissions.length;
   await page.reload();
   await expect(page.locator("#screen-result")).toBeVisible();
-  await expect(page.locator("#score-text")).toContainText("৭/১০");
+  await expect(page.locator("#score-text")).toContainText("৬.২৫/১০");
   expect(api.quizSubmissions).toHaveLength(submissionCount);
 
   await page.locator("#btn-retake").click();

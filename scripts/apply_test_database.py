@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from database.contract import (  # noqa: E402
-    SOURCE_ROLLOUT_MIGRATION_VERSION,
+    QUIZ_QUALITY_MIGRATION_VERSION,
 )
 
 BOOTSTRAP = ROOT / "database" / "schema.sql"
@@ -107,9 +107,9 @@ def rebuild(database_url: str) -> dict:
         path for path in reversed(files) if path.parent == SUPABASE_MIGRATIONS
     )
     identity = _migration_identity(latest_supabase)
-    if not identity or identity[0] != SOURCE_ROLLOUT_MIGRATION_VERSION:
+    if not identity or identity[0] != QUIZ_QUALITY_MIGRATION_VERSION:
         raise RuntimeError(
-            "The source-rollout migration does not match the latest migration file."
+            "The quiz-quality migration does not match the latest migration file."
         )
 
     with psycopg.connect(database_url, autocommit=True) as connection:
@@ -155,7 +155,8 @@ def main() -> int:
         "Disposable database ready: "
         f"contract={contract['contract_version']} "
         f"migration={contract['required_migration_version']} "
-        f"source_rollout={contract['source_rollout_migration_version']}"
+        f"source_rollout={contract['source_rollout_migration_version']} "
+        f"quiz_quality={contract['quiz_quality_migration_version']}"
     )
     return 0
 

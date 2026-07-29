@@ -26,6 +26,7 @@ from database.contract import (
     APPLICATION_VERSION,
     DATABASE_CONTRACT_KEY,
     DATABASE_CONTRACT_VERSION,
+    QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
 )
@@ -53,6 +54,7 @@ class Readiness:
             "applicationVersion": APPLICATION_VERSION,
             "requiredMigrationVersion": REQUIRED_MIGRATION_VERSION,
             "sourceRolloutMigrationVersion": SOURCE_ROLLOUT_MIGRATION_VERSION,
+            "quizQualityMigrationVersion": QUIZ_QUALITY_MIGRATION_VERSION,
             "sourceBackedRotationEnabled": SOURCE_BACKED_ROTATION_ENABLED,
             "databaseContractVersion": DATABASE_CONTRACT_VERSION,
         }
@@ -136,6 +138,13 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and contract.get("source_backed_rotation_ready") is True
                 and contract.get("source_coverage_ready") is True
             )
+            quiz_quality_ready = bool(
+                contract.get("quiz_quality_migration_version")
+                == QUIZ_QUALITY_MIGRATION_VERSION
+                and contract.get("quiz_quality_migration_applied") is True
+                and contract.get("diverse_grounding_ready") is True
+                and contract.get("negative_marking_ready") is True
+            )
             checks["databaseContract"] = bool(
                 contract.get("ready")
                 and contract.get("contract_key") == DATABASE_CONTRACT_KEY
@@ -144,7 +153,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 == REQUIRED_MIGRATION_VERSION
                 and (
                     not SOURCE_BACKED_ROTATION_ENABLED
-                    or source_rollout_ready
+                    or (source_rollout_ready and quiz_quality_ready)
                 )
                 and float(contract.get("verification_threshold") or 0)
                 == QUESTION_VERIFICATION_MIN_CONFIDENCE

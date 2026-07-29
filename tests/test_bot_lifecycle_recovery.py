@@ -111,7 +111,7 @@ def setup_run(monkeypatch, valid_questions, existing_run=None):
     )
     monkeypatch.setattr(bot.chapter_history_repo, "record", lambda *args: events.append(("chapter", args)))
     monkeypatch.setattr(bot, "generate_mcqs", lambda *args, **kwargs: (valid_questions, {"provider": "primary", "model": "model", "attempts": 1}))
-    monkeypatch.setattr(bot.quiz_pack_service, "record_quiz_pack", lambda *args, **kwargs: events.append(("save_pack", None)) or generated_pack)
+    monkeypatch.setattr(bot.quiz_pack_service, "record_quiz_pack", lambda *args, **kwargs: events.append(("save_pack", kwargs)) or generated_pack)
     monkeypatch.setattr(bot, "export_static_quiz_json", lambda pack: events.append(("export", None)))
     monkeypatch.setattr(bot.quiz_pack_service, "mark_pack_posted", lambda pack: events.append(("mark_used", None)))
     monkeypatch.setattr(bot, "telegram_api", lambda method, payload: events.append(("telegram", payload)) or {"ok": True, "result": {"message_id": 55, "message_thread_id": payload["message_thread_id"], "chat": {"id": -100}}})
@@ -127,6 +127,21 @@ def test_save_export_and_ready_state_precede_telegram(monkeypatch, valid_questio
     telegram_payload = next(event[1] for event in events if event[0] == "telegram")
     assert isinstance(telegram_payload["message_thread_id"], int)
     assert telegram_payload["message_thread_id"] == router().for_subject("history")
+
+
+def test_generation_forwards_grounding_contract_to_pack_save(monkeypatch, valid_questions):
+    events, _ = setup_run(monkeypatch, valid_questions)
+    assert bot.run_subject_quiz(
+        "history",
+        target_date=date(2026, 7, 10),
+    ) == "generated_and_posted"
+
+    save_kwargs = next(event[1] for event in events if event[0] == "save_pack")
+    bundle = grounding_bundle()
+    assert save_kwargs["allowed_source_ids"] == bundle.source_ids
+    assert save_kwargs["allowed_source_topics"] == bundle.source_topics
+    assert save_kwargs["required_source_diversity"] == bundle.required_source_diversity
+    assert save_kwargs["required_topic_diversity"] == bundle.required_topic_diversity
 
 
 def test_force_post_reuses_saved_pack_without_gemini(monkeypatch, valid_questions):
@@ -597,6 +612,12 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
             "source_rollout_migration_applied": True,
             "source_backed_rotation_ready": True,
             "source_coverage_ready": True,
+            "quiz_quality_migration_version": (
+                bot.QUIZ_QUALITY_MIGRATION_VERSION
+            ),
+            "quiz_quality_migration_applied": True,
+            "diverse_grounding_ready": True,
+            "negative_marking_ready": True,
             "function_permission_failures": [],
             "table_permission_failures": [],
         },

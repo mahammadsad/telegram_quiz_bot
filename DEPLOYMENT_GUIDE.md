@@ -215,7 +215,7 @@ value in the Render Dashboard. Do not add a Render database; Supabase remains
 the datastore.
 
 Check `GET /health/live`: it should return HTTP 200 even if dependencies are
-down. Check `GET /health/ready`: it must return HTTP 200, application `7.1.0`,
+down. Check `GET /health/ready`: it must return HTTP 200, application `7.2.0`,
 required migration `20260724212939`, source-rollout migration
 `20260728040209`, contract `2.2.0`, and all checks true. When expansion is
 active, `sourceBackedRotationEnabled` must also be true. `/api/health` is a

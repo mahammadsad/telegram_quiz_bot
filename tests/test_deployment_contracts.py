@@ -10,8 +10,8 @@ import yaml
 
 from database.contract import (
     APPLICATION_VERSION,
+    QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
-    SOURCE_ROLLOUT_MIGRATION_VERSION,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -133,6 +133,10 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert "except HTTPError as exc" in source
     assert 'failures != ["active_quiz_retrieval"]' in source
     assert "Staging readiness must be HTTP 200 after quiz creation." in source
+    assert "from database.contract import (" in source
+    assert "body.get(\"applicationVersion\") != APPLICATION_VERSION" in source
+    assert "body.get(\"databaseContractVersion\") != DATABASE_CONTRACT_VERSION" in source
+    assert '"7.1.0"' not in source
 
 
 def test_staging_workflow_uses_only_staging_secret_expressions() -> None:
@@ -198,7 +202,7 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
 def test_authoritative_migration_version_is_latest_filename() -> None:
     migrations = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
     assert migrations
-    assert migrations[-1].name.startswith(f"{SOURCE_ROLLOUT_MIGRATION_VERSION}_")
+    assert migrations[-1].name.startswith(f"{QUIZ_QUALITY_MIGRATION_VERSION}_")
     assert any(
         path.name.startswith(f"{REQUIRED_MIGRATION_VERSION}_")
         for path in migrations
@@ -209,7 +213,7 @@ def test_python_and_browser_packages_share_the_release_version() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
 
-    assert APPLICATION_VERSION == "7.1.0"
+    assert APPLICATION_VERSION == "7.2.0"
     assert package["version"] == APPLICATION_VERSION
     assert lock["version"] == APPLICATION_VERSION
     assert lock["packages"][""]["version"] == APPLICATION_VERSION
