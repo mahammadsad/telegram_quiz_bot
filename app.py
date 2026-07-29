@@ -253,6 +253,12 @@ def practice() -> FileResponse:
     return FileResponse(ROOT / "practice.html")
 
 
+@app.get("/settings")
+@app.get("/settings.html")
+def settings() -> FileResponse:
+    return FileResponse(ROOT / "settings.html")
+
+
 @app.get("/quizzes/{quiz_file}")
 def legacy_quiz_file(quiz_file: str) -> JSONResponse:
     if not quiz_file.endswith(".json"):
