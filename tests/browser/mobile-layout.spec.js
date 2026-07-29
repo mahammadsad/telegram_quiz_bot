@@ -14,7 +14,7 @@ test("quiz loading, keyboard navigation, reduced motion, and mobile layout are a
 }) => {
   await page.emulateMedia({ reducedMotion: "reduce" });
   await installTelegramMock(page);
-  await installApiMocks(page, { quizLoadDelayMs: 250 });
+  await installApiMocks(page, { quizLoadDelayMs: 1000 });
 
   const navigation = page.goto(`/index.html?quiz=${QUIZ_ID}`);
   await expect(page.locator("#screen-loading")).toBeVisible();
