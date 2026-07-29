@@ -133,6 +133,10 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert "except HTTPError as exc" in source
     assert 'failures != ["active_quiz_retrieval"]' in source
     assert "Staging readiness must be HTTP 200 after quiz creation." in source
+    assert "from database.contract import (" in source
+    assert "body.get(\"applicationVersion\") != APPLICATION_VERSION" in source
+    assert "body.get(\"databaseContractVersion\") != DATABASE_CONTRACT_VERSION" in source
+    assert '"7.1.0"' not in source
 
 
 def test_staging_workflow_uses_only_staging_secret_expressions() -> None:
