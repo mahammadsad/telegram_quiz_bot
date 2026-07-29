@@ -17,7 +17,16 @@ function quizPayload() {
       chapter: "আধুনিক ভারতের স্বাধীনতা আন্দোলন ও সাংবিধানিক বিকাশ",
       date: "2026-07-25",
     },
-    capabilities: { submission: true, source: "api" },
+    capabilities: {
+      submission: true,
+      source: "api",
+      marking: {
+        rightMarks: 1,
+        wrongPenalty: 0.25,
+        blankMarks: 0,
+        negativeMarking: true,
+      },
+    },
     qs: Array.from({ length: 10 }, (_, index) => ({
       q:
         index === 0
@@ -40,6 +49,11 @@ function resultPayload(attemptId = ATTEMPT_ONE, attemptNumber = 1) {
   return {
     attemptId,
     score: 7,
+    netScore: 6.25,
+    bestNetScore: 7.5,
+    negativeMarks: 0.75,
+    correct: 7,
+    incorrect: 3,
     total: 10,
     answered: 10,
     rank: 27,
@@ -143,6 +157,7 @@ function dashboardPayload() {
         attemptNumber: 1,
         durationSeconds: 142,
         score: 7,
+        netScore: 6.25,
         total: 10,
       },
     ],
@@ -155,6 +170,7 @@ function quizLeaderboardPayload() {
     displayName: `শিক্ষার্থী ${index + 1}`,
     initials: `শ${index + 1}`,
     score: 10 - Math.floor(index / 3),
+    netScore: 10 - Math.floor(index / 3),
     total: 10,
     accuracy: 100 - index * 3,
     durationSeconds: 90 + index,
@@ -163,12 +179,20 @@ function quizLeaderboardPayload() {
   return {
     quizId: QUIZ_ID,
     participants: 48,
+    markingScheme: {
+      rightMarks: 1,
+      wrongPenalty: 0.25,
+      blankMarks: 0,
+      negativeMarking: true,
+    },
     rows,
     currentUser: {
       rank: 27,
       displayName: "মোবাইল পরীক্ষার্থী",
       initials: "মপ",
       score: 7,
+      netScore: 6.25,
+      negativeMarks: 0.75,
       total: 10,
       accuracy: 70,
       correct: 7,

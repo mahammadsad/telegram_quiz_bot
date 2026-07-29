@@ -172,6 +172,8 @@ SESSION_TYPE = "mock_test"
 # --------------------------------------------------------------------------
 QUESTIONS_PER_RUN = 10
 QUIZ_DIFFICULTY_DISTRIBUTION = {"easy": 3, "medium": 5, "hard": 2}
+QUIZ_CORRECT_MARKS = 1
+QUIZ_INCORRECT_PENALTY = 0.25
 QUIZ_CLAIM_TIMEOUT_MINUTES = max(
     5, int(os.environ.get("QUIZ_CLAIM_TIMEOUT_MINUTES", "20"))
 )

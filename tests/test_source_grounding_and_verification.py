@@ -110,6 +110,39 @@ def test_grounding_fails_closed_without_verified_source_rows(monkeypatch):
         source_grounding.load_grounding_bundle("history", "আধুনিক ভারত", date(2026, 7, 18))
 
 
+def test_grounding_preserves_diverse_verified_topics(monkeypatch):
+    rows = [
+        source_row(
+            source_document_id=f"22222222-2222-4222-8222-{index:012d}",
+            micro_topic_id=f"11111111-1111-4111-8111-{index:012d}",
+            micro_topic_key=f"current-affairs:national:topic-{index}",
+            micro_topic_name=f"জাতীয় বিষয় {index}",
+            source_url=f"https://pib.gov.in/PressReleasePage.aspx?PRID={index}",
+            fact_version=f"2026-07-{index:02d}",
+        )
+        for index in range(1, 5)
+    ]
+    monkeypatch.setattr(
+        source_grounding.source_documents_repo,
+        "list_grounding_bundle",
+        lambda *args, **kwargs: rows,
+    )
+
+    loaded = source_grounding.load_grounding_bundle(
+        "current-affairs",
+        "জাতীয় সাম্প্রতিক ঘটনা",
+        date(2026, 7, 18),
+    )
+
+    assert len(loaded.documents) == 4
+    assert len(loaded.topic_keys) == 4
+    assert loaded.required_source_diversity == 4
+    assert loaded.required_topic_diversity == 4
+    assert {
+        row["micro_topic_key"] for row in loaded.prompt_facts()
+    } == loaded.topic_keys
+
+
 def test_grounding_rejects_placeholder_source_metadata(monkeypatch):
     monkeypatch.setattr(
         source_grounding.source_documents_repo,

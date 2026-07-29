@@ -79,6 +79,88 @@ def test_wrong_micro_topic_and_unapproved_source_are_rejected(valid_questions):
         )
 
 
+def test_grounded_pack_requires_balanced_source_and_topic_diversity(valid_questions):
+    rows = deepcopy(valid_questions)
+    source_topics = {}
+    distribution = (0, 1, 2, 3, 0, 1, 2, 3, 0, 1)
+    for row, index in zip(rows, distribution, strict=True):
+        source_id = f"22222222-2222-4222-8222-{index + 1:012d}"
+        topic_id = f"11111111-1111-4111-8111-{index + 1:012d}"
+        topic_key = f"history:modern-india:topic-{index + 1}"
+        row["source_document_id"] = source_id
+        row["micro_topic_id"] = topic_id
+        row["micro_topic_key"] = topic_key
+        source_topics[source_id] = (topic_id, topic_key)
+
+    clean = validate_questions(
+        rows,
+        "history",
+        "আধুনিক ভারত",
+        allowed_source_ids=set(source_topics),
+        allowed_source_topics=source_topics,
+        required_source_diversity=4,
+        required_topic_diversity=4,
+    )
+    assert len({row["source_document_id"] for row in clean}) == 4
+    assert len({row["micro_topic_key"] for row in clean}) == 4
+
+    repetitive = deepcopy(rows)
+    for row in repetitive:
+        row["source_document_id"] = rows[0]["source_document_id"]
+        row["micro_topic_id"] = rows[0]["micro_topic_id"]
+        row["micro_topic_key"] = rows[0]["micro_topic_key"]
+    with pytest.raises(QuizValidationError, match="source diversity"):
+        validate_questions(
+            repetitive,
+            "history",
+            "আধুনিক ভারত",
+            allowed_source_ids=set(source_topics),
+            allowed_source_topics=source_topics,
+            required_source_diversity=4,
+            required_topic_diversity=4,
+        )
+
+
+def test_grounded_pack_rejects_one_overused_fact(valid_questions):
+    rows = deepcopy(valid_questions)
+    source_topics = {}
+    distribution = (0, 0, 0, 0, 1, 1, 2, 2, 3, 3)
+    for row, index in zip(rows, distribution, strict=True):
+        source_id = f"22222222-2222-4222-8222-{index + 1:012d}"
+        topic_id = f"11111111-1111-4111-8111-{index + 1:012d}"
+        topic_key = f"history:modern-india:topic-{index + 1}"
+        row["source_document_id"] = source_id
+        row["micro_topic_id"] = topic_id
+        row["micro_topic_key"] = topic_key
+        source_topics[source_id] = (topic_id, topic_key)
+
+    with pytest.raises(QuizValidationError, match="source facts are not balanced"):
+        validate_questions(
+            rows,
+            "history",
+            "আধুনিক ভারত",
+            allowed_source_ids=set(source_topics),
+            allowed_source_topics=source_topics,
+            required_source_diversity=4,
+            required_topic_diversity=4,
+        )
+
+
+def test_grounded_pack_rejects_rephrased_question_with_same_source_answer(
+    valid_questions,
+):
+    rows = deepcopy(valid_questions)
+    rows[1]["question"] = (
+        "একই যাচাইকৃত তথ্যটি অন্যভাবে জানতে চাওয়া হয়েছে কোন বিকল্পে?"
+    )
+    rows[1]["options"][rows[1]["correct_index"]] = rows[0]["options"][
+        rows[0]["correct_index"]
+    ]
+
+    with pytest.raises(QuizValidationError, match="question-answer relationship"):
+        validate_questions(rows, "history", "আধুনিক ভারত")
+
+
 def test_unverified_question_is_rejected(valid_questions):
     rows = deepcopy(valid_questions)
     rows[0]["verification_status"] = "generated"

@@ -128,7 +128,14 @@ def test_submission_rejects_an_uncertified_pack_before_user_write(monkeypatch):
 
 def test_public_quiz_payload_declares_submission_capability():
     payload = service.public_quiz_payload(pack())
-    assert payload["capabilities"] == {"submission": True, "source": "api"}
+    assert payload["capabilities"]["submission"] is True
+    assert payload["capabilities"]["source"] == "api"
+    assert payload["capabilities"]["marking"] == {
+        "rightMarks": 1,
+        "wrongPenalty": 0.25,
+        "blankMarks": 0,
+        "negativeMarking": True,
+    }
     assert payload["qs"][0]["subjectKey"] == "history"
     assert payload["qs"][0]["chapter"] == "আধুনিক ভারত"
     assert payload["qs"][0]["microTopicKey"] == "history:modern-india:core"

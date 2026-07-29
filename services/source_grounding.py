@@ -27,6 +27,9 @@ class SourceDocument:
     fact_summary: str
     fact_version: str
     expires_at: str | None
+    micro_topic_id: str = ""
+    micro_topic_key: str = ""
+    micro_topic_name: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,10 +45,34 @@ class GroundingBundle:
     def source_ids(self) -> set[str]:
         return {row.id for row in self.documents}
 
+    @property
+    def source_topics(self) -> dict[str, tuple[str, str]]:
+        return {
+            row.id: (
+                row.micro_topic_id or self.micro_topic_id,
+                row.micro_topic_key or self.micro_topic_key,
+            )
+            for row in self.documents
+        }
+
+    @property
+    def topic_keys(self) -> set[str]:
+        return {topic_key for _, topic_key in self.source_topics.values()}
+
+    @property
+    def required_source_diversity(self) -> int:
+        return min(4, len(self.source_ids))
+
+    @property
+    def required_topic_diversity(self) -> int:
+        return min(4, len(self.topic_keys))
+
     def prompt_facts(self) -> list[dict]:
         return [
             {
                 "source_document_id": row.id,
+                "micro_topic_key": row.micro_topic_key or self.micro_topic_key,
+                "micro_topic_name": row.micro_topic_name or self.micro_topic_name,
                 "source_title": row.title,
                 "source_domain": row.domain,
                 "source_kind": row.kind,
@@ -73,8 +100,10 @@ def load_grounding_bundle(
         )
 
     first_topic_id = str(rows[0].get("micro_topic_id") or "")
-    same_topic = [row for row in rows if str(row.get("micro_topic_id") or "") == first_topic_id]
-    documents = tuple(_validated_document(row, subject_key, target_date) for row in same_topic)
+    documents = tuple(
+        _validated_document(row, subject_key, target_date)
+        for row in rows
+    )
     if not first_topic_id or not documents:
         raise QuizValidationError("The grounding bundle has no reusable micro-topic or source facts.")
     return GroundingBundle(
@@ -132,6 +161,9 @@ def _validated_document(row: dict, subject_key: str, target_date: date) -> Sourc
         fact_summary=fact_summary,
         fact_version=fact_version,
         expires_at=expires_at,
+        micro_topic_id=_required(row, "micro_topic_id"),
+        micro_topic_key=_required(row, "micro_topic_key"),
+        micro_topic_name=_required(row, "micro_topic_name"),
     )
 
 

@@ -11,6 +11,8 @@ from config.settings import (
     BOT_TYPE,
     GEMINI_MODEL,
     QUESTION_REPORT_THRESHOLD,
+    QUIZ_CORRECT_MARKS,
+    QUIZ_INCORRECT_PENALTY,
     QUIZ_PACK_SOURCE_PREFIX,
     SCHEDULER_MAX_REUSE_GAP_DAYS,
     SCHEDULER_MIN_REUSE_GAP_DAYS,
@@ -117,6 +119,9 @@ def get_ready_quiz_pack(quiz_id: str) -> dict | None:
     if checksum_for_pack(pack) != run["persisted_checksum"]:
         LOG.error("QUIZ_READ_BLOCKED checksum_mismatch quiz_id=%s", quiz_id)
         return None
+    pack["marking_scheme"] = _marking_scheme(
+        run.get("negative_mark_penalty"),
+    )
     return pack
 
 
@@ -214,7 +219,12 @@ def mark_pack_posted(pack: dict) -> None:
 def public_quiz_payload(pack: dict) -> dict:
     return {
         "meta": pack["meta"],
-        "capabilities": {"submission": True, "source": "api"},
+        "capabilities": {
+            "submission": True,
+            "source": "api",
+            "marking": pack.get("marking_scheme")
+            or _marking_scheme(QUIZ_INCORRECT_PENALTY),
+        },
         "qs": [
             {
                 "q": item["question"]["question_text"],
@@ -230,6 +240,19 @@ def public_quiz_payload(pack: dict) -> dict:
             }
             for item in pack["items"]
         ],
+    }
+
+
+def _marking_scheme(penalty: object) -> dict[str, int | float | bool]:
+    try:
+        incorrect_penalty = max(0.0, min(1.0, float(penalty)))
+    except (TypeError, ValueError):
+        incorrect_penalty = 0.0
+    return {
+        "rightMarks": QUIZ_CORRECT_MARKS,
+        "wrongPenalty": incorrect_penalty,
+        "blankMarks": 0,
+        "negativeMarking": incorrect_penalty > 0,
     }
 
 

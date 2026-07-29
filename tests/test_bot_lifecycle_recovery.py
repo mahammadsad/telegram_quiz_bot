@@ -597,6 +597,12 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
             "source_rollout_migration_applied": True,
             "source_backed_rotation_ready": True,
             "source_coverage_ready": True,
+            "quiz_quality_migration_version": (
+                bot.QUIZ_QUALITY_MIGRATION_VERSION
+            ),
+            "quiz_quality_migration_applied": True,
+            "diverse_grounding_ready": True,
+            "negative_marking_ready": True,
             "function_permission_failures": [],
             "table_permission_failures": [],
         },

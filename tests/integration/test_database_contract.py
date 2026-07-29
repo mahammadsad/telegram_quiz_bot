@@ -15,6 +15,7 @@ from psycopg.types.json import Jsonb
 from config.source_rollout import ROTATION_CHAPTER_KEYS
 from database.contract import (
     DATABASE_CONTRACT_VERSION,
+    QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
 )
@@ -283,6 +284,13 @@ def test_exact_database_contract_and_permissions(database_url: str) -> None:
     assert contract["source_rollout_migration_applied"] is True
     assert contract["source_backed_rotation_ready"] is True
     assert isinstance(contract["source_coverage_ready"], bool)
+    assert (
+        contract["quiz_quality_migration_version"]
+        == QUIZ_QUALITY_MIGRATION_VERSION
+    )
+    assert contract["quiz_quality_migration_applied"] is True
+    assert contract["diverse_grounding_ready"] is True
+    assert contract["negative_marking_ready"] is True
     for key in (
         "missing_tables",
         "missing_columns",
@@ -499,6 +507,18 @@ def test_attempt_result_recovery_is_scoped_to_the_authenticated_owner(
     assert owned["attemptId"] == str(ATTEMPT_ID)
     assert owned["quizId"] == attempted_quiz["quizId"]
     assert len(owned["review"]) == 10
+    assert float(owned["netScore"]) == pytest.approx(
+        owned["score"] - owned["incorrect"] * 0.25
+    )
+    assert float(owned["negativeMarks"]) == pytest.approx(
+        owned["incorrect"] * 0.25
+    )
+    assert owned["markingScheme"] == {
+        "rightMarks": 1,
+        "wrongPenalty": 0.25,
+        "blankMarks": 0,
+        "negativeMarking": True,
+    }
     assert not_owned is None
 
 
@@ -551,7 +571,13 @@ def test_retakes_are_new_but_do_not_replace_official_rank(
     assert other_user["attemptNumber"] == 1
     assert board["rankingScope"] == "first_attempt_only"
     assert board["retakesAffectOfficialRank"] is False
+    assert board["markingScheme"]["negativeMarking"] is True
+    assert float(board["markingScheme"]["wrongPenalty"]) == pytest.approx(0.25)
     assert board["currentUser"]["isCurrentUser"] is True
+    assert float(board["currentUser"]["netScore"]) == pytest.approx(
+        board["currentUser"]["score"]
+        - board["currentUser"]["incorrect"] * 0.25
+    )
     assert board["currentUser"]["rank"] == 2
     assert board["separatorRequired"] is True
     assert weekly["rankingScope"] == "official_first_attempt_only"
