@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from database.contract import (  # noqa: E402
-    PERSONAL_LEARNING_MIGRATION_VERSION,
+    LEADERBOARD_PRIVACY_MIGRATION_VERSION,
 )
 
 BOOTSTRAP = ROOT / "database" / "schema.sql"
@@ -107,9 +107,10 @@ def rebuild(database_url: str) -> dict:
         path for path in reversed(files) if path.parent == SUPABASE_MIGRATIONS
     )
     identity = _migration_identity(latest_supabase)
-    if not identity or identity[0] != PERSONAL_LEARNING_MIGRATION_VERSION:
+    if not identity or identity[0] != LEADERBOARD_PRIVACY_MIGRATION_VERSION:
         raise RuntimeError(
-            "The personal-learning migration does not match the latest migration file."
+            "The leaderboard-privacy migration does not match the latest "
+            "migration file."
         )
 
     with psycopg.connect(database_url, autocommit=True) as connection:
@@ -137,6 +138,14 @@ def rebuild(database_url: str) -> dict:
         ).fetchone()[0]
         if not contract.get("ready"):
             raise RuntimeError("Disposable database contract is not ready after migrations.")
+        privacy_contract = connection.execute(
+            "select public.get_leaderboard_privacy_contract()"
+        ).fetchone()[0]
+        if not privacy_contract.get("ready"):
+            raise RuntimeError(
+                "Disposable leaderboard privacy contract is not ready after migrations."
+            )
+        contract.update(privacy_contract)
         return contract
 
 
@@ -157,7 +166,9 @@ def main() -> int:
         f"migration={contract['required_migration_version']} "
         f"source_rollout={contract['source_rollout_migration_version']} "
         f"quiz_quality={contract['quiz_quality_migration_version']} "
-        f"personal_learning={contract['personal_learning_migration_version']}"
+        f"personal_learning={contract['personal_learning_migration_version']} "
+        "leaderboard_privacy="
+        f"{contract['leaderboard_privacy_migration_version']}"
     )
     return 0
 

@@ -19,6 +19,10 @@ test("personal dashboard keeps bookmark questions in Practice and omits a bookma
 
   await expect(page.locator("#identity-card")).toBeVisible();
   await expect(page.locator("#identity-name")).toHaveText("মোবাইল পরীক্ষার্থী");
+  await expect(page.locator("#identity-avatar img")).toHaveAttribute(
+    "src",
+    "https://example.invalid/private-dashboard.jpg",
+  );
   await expect(page.locator("#identity-label")).toContainText("আপনার ড্যাশবোর্ড");
   await expect(page.locator("#x-reports")).toHaveText("২");
   await expect(page.locator("#x-bookmarks")).toHaveText("১");
@@ -71,7 +75,15 @@ test("quiz leaderboard highlights a current user who is outside the top ten", as
   await expect(page.locator("#board")).toBeVisible();
   await expect(page.locator("#board .row")).toHaveCount(11);
   await expect(page.locator("#board .separator")).toBeVisible();
-  await expect(page.locator("#board .row.me")).toContainText("মোবাইল পরীক্ষার্থী");
+  await expect(page.locator("#board .row.me")).toContainText(
+    "শিক্ষার্থী ABCDEF012345",
+  );
+  await expect(page.locator("#board")).toContainText("স্বেচ্ছায় দেওয়া নাম");
+  await expect(page.locator("#board")).toContainText("@public_user");
+  await expect(page.locator("#board")).toContainText(
+    "<img src=x onerror=alert(1)>",
+  );
+  await expect(page.locator("#board img")).toHaveCount(0);
   await expect(page.locator("#board .row.me .you")).toHaveText("আপনি");
   await expect(page.locator("#your-rank")).toContainText("আপনার র‍্যাঙ্ক");
   await expect(page.locator("#your-rank")).toContainText("#২৭");

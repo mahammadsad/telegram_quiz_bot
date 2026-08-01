@@ -195,6 +195,7 @@ jobs:
           from database.contract import (
               APPLICATION_VERSION,
               DATABASE_CONTRACT_VERSION,
+              LEADERBOARD_PRIVACY_MIGRATION_VERSION,
               PERSONAL_LEARNING_MIGRATION_VERSION,
               REQUIRED_MIGRATION_VERSION,
               SOURCE_ROLLOUT_MIGRATION_VERSION,
@@ -222,6 +223,9 @@ jobs:
                   "personalLearningMigrationVersion": body.get(
                       "personalLearningMigrationVersion"
                   ),
+                  "leaderboardPrivacyMigrationVersion": body.get(
+                      "leaderboardPrivacyMigrationVersion"
+                  ),
                   "sourceBackedRotationEnabled": body.get(
                       "sourceBackedRotationEnabled"
                   ),
@@ -247,6 +251,13 @@ jobs:
                   != PERSONAL_LEARNING_MIGRATION_VERSION
               ):
                   raise SystemExit("Staging personal-learning migration mismatch.")
+              if (
+                  body.get("leaderboardPrivacyMigrationVersion")
+                  != LEADERBOARD_PRIVACY_MIGRATION_VERSION
+              ):
+                  raise SystemExit("Staging leaderboard-privacy migration mismatch.")
+              if body.get("checks", {}).get("leaderboardPrivacy") is not True:
+                  raise SystemExit("Staging leaderboard privacy is not ready.")
               if (
                   body.get("sourceRolloutMigrationVersion")
                   != SOURCE_ROLLOUT_MIGRATION_VERSION

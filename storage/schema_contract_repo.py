@@ -11,6 +11,11 @@ def get_contract() -> Row:
     return as_row(result.data, "application schema contract")
 
 
+def get_leaderboard_privacy_contract() -> Row:
+    result = get_client().rpc("get_leaderboard_privacy_contract", {}).execute()
+    return as_row(result.data, "leaderboard privacy contract")
+
+
 def active_quiz_probe() -> Row | None:
     result = (
         get_client()

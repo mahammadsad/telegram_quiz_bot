@@ -84,7 +84,7 @@ function preferencesPayload() {
     difficultyPreference: "adaptive",
     quizMode: "timed",
     leaderboardVisible: true,
-    publicDisplayName: "মোবাইল পরীক্ষার্থী",
+    publicDisplayName: null,
     usernameVisible: false,
     dailyReminderEnabled: false,
     revisionSoundEnabled: true,
@@ -98,6 +98,7 @@ function dashboardPayload() {
       displayName: "মোবাইল পরীক্ষার্থী",
       username: "@mobile_learner",
       initials: "মপ",
+      profilePhotoUrl: "https://example.invalid/private-dashboard.jpg",
       isCurrentUser: true,
       label: "এটি আপনার ড্যাশবোর্ড",
     },
@@ -164,11 +165,18 @@ function dashboardPayload() {
   };
 }
 
-function quizLeaderboardPayload() {
+function quizLeaderboardPayload(currentIdentity) {
   const rows = Array.from({ length: 10 }, (_, index) => ({
     rank: index + 1,
-    displayName: `শিক্ষার্থী ${index + 1}`,
-    initials: `শ${index + 1}`,
+    displayName:
+      index === 1
+        ? "স্বেচ্ছায় দেওয়া নাম"
+        : index === 2
+          ? "@public_user"
+          : index === 3
+            ? "<img src=x onerror=alert(1)>"
+            : `শিক্ষার্থী ${String(index + 1).padStart(12, "0")}`,
+    initials: index === 0 ? "শি" : "প",
     score: 10 - Math.floor(index / 3),
     netScore: 10 - Math.floor(index / 3),
     total: 10,
@@ -188,8 +196,8 @@ function quizLeaderboardPayload() {
     rows,
     currentUser: {
       rank: 27,
-      displayName: "মোবাইল পরীক্ষার্থী",
-      initials: "মপ",
+      displayName: currentIdentity.displayName,
+      initials: currentIdentity.initials,
       score: 7,
       netScore: 6.25,
       negativeMarks: 0.75,
@@ -207,24 +215,40 @@ function quizLeaderboardPayload() {
   };
 }
 
-function typedLeaderboardPayload() {
+function typedLeaderboardPayload(currentIdentity) {
   return {
     type: "weekly_accuracy",
-    participants: 2,
+    participants: 4,
     offset: 0,
     rows: [
       {
         rank: 1,
-        displayName: "সাপ্তাহিক প্রথম",
-        initials: "সপ",
+        displayName: "শিক্ষার্থী 0123456789AB",
+        initials: "শি",
         value: 91,
         totalAnswered: 42,
         isCurrentUser: false,
       },
       {
         rank: 2,
-        displayName: "মোবাইল পরীক্ষার্থী",
-        initials: "মপ",
+        displayName: "স্বেচ্ছায় দেওয়া নাম",
+        initials: "স",
+        value: 84,
+        totalAnswered: 40,
+        isCurrentUser: false,
+      },
+      {
+        rank: 3,
+        displayName: "@public_user",
+        initials: "P",
+        value: 78,
+        totalAnswered: 38,
+        isCurrentUser: false,
+      },
+      {
+        rank: 4,
+        displayName: currentIdentity.displayName,
+        initials: currentIdentity.initials,
         value: 72,
         totalAnswered: 35,
         isCurrentUser: true,
@@ -405,8 +429,20 @@ async function installApiMocks(page, options = {}) {
     bookmarks: [],
     preferenceSaves: [],
     quizSubmissionCount: 0,
+    preferences: {
+      ...preferencesPayload(),
+      ...(options.preferences || {}),
+    },
   };
   const source = options.practiceSource || "due";
+  const publicIdentity = () => {
+    const publicName = String(state.preferences.publicDisplayName || "").trim();
+    if (publicName) return { displayName: publicName, initials: publicName[0] };
+    if (state.preferences.usernameVisible) {
+      return { displayName: "@mobile_learner", initials: "M" };
+    }
+    return { displayName: "শিক্ষার্থী ABCDEF012345", initials: "শি" };
+  };
 
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -475,26 +511,24 @@ async function installApiMocks(page, options = {}) {
           separatorRequired: false,
         });
       }
-      return json(quizLeaderboardPayload());
+      return json(quizLeaderboardPayload(publicIdentity()));
     }
     if (path.startsWith("/api/leaderboards/") && method === "GET") {
       if (options.emptyLeaderboard) {
         return json({ type: "weekly_accuracy", participants: 0, offset: 0, rows: [] });
       }
-      return json(typedLeaderboardPayload());
+      return json(typedLeaderboardPayload(publicIdentity()));
     }
     if (path === "/api/me/dashboard" && method === "GET") {
       return json(options.emptyDashboard ? {} : dashboardPayload());
     }
     if (path === "/api/me/preferences" && method === "GET") {
-      return json({
-        ...preferencesPayload(),
-        ...(options.preferences || {}),
-      });
+      return json(state.preferences);
     }
     if (path === "/api/me/preferences" && method === "PUT") {
       const body = request.postDataJSON();
       state.preferenceSaves.push(body);
+      state.preferences = { ...state.preferences, ...body };
       return json(body);
     }
     if (path === "/api/me/bookmarks" && method === "GET") {
