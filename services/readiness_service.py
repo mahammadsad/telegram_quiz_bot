@@ -26,6 +26,7 @@ from database.contract import (
     APPLICATION_VERSION,
     DATABASE_CONTRACT_KEY,
     DATABASE_CONTRACT_VERSION,
+    LEADERBOARD_PRIVACY_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
@@ -59,6 +60,9 @@ class Readiness:
             "personalLearningMigrationVersion": (
                 PERSONAL_LEARNING_MIGRATION_VERSION
             ),
+            "leaderboardPrivacyMigrationVersion": (
+                LEADERBOARD_PRIVACY_MIGRATION_VERSION
+            ),
             "sourceBackedRotationEnabled": SOURCE_BACKED_ROTATION_ENABLED,
             "databaseContractVersion": DATABASE_CONTRACT_VERSION,
         }
@@ -78,6 +82,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
         "supabaseConnectivity": False,
         "databaseContract": False,
         "databasePermissions": False,
+        "leaderboardPrivacy": False,
         "activeQuizRetrieval": False,
     }
     failures: list[str] = []
@@ -131,10 +136,38 @@ def assess(*, use_cache: bool = True) -> Readiness:
         try:
             contract = schema_contract_repo.get_contract()
             checks["supabaseConnectivity"] = True
+            try:
+                privacy_contract = (
+                    schema_contract_repo.get_leaderboard_privacy_contract()
+                )
+            except Exception as exc:
+                privacy_contract = {}
+                LOG.warning(
+                    "READINESS_LEADERBOARD_PRIVACY_FAILURE category=%s",
+                    type(exc).__name__,
+                )
             permission_failures = (
                 contract.get("function_permission_failures") or []
-            ) + (contract.get("table_permission_failures") or [])
+            ) + (contract.get("table_permission_failures") or []) + (
+                privacy_contract.get("function_permission_failures") or []
+            )
             checks["databasePermissions"] = not permission_failures
+            checks["leaderboardPrivacy"] = bool(
+                privacy_contract.get("ready") is True
+                and privacy_contract.get(
+                    "leaderboard_privacy_migration_version"
+                )
+                == LEADERBOARD_PRIVACY_MIGRATION_VERSION
+                and privacy_contract.get(
+                    "leaderboard_privacy_migration_applied"
+                )
+                is True
+                and privacy_contract.get("identity_projection_ready") is True
+                and not privacy_contract.get("missing_functions")
+                and not privacy_contract.get("unsafe_function_definitions")
+                and not privacy_contract.get("function_configuration_failures")
+                and not privacy_contract.get("function_permission_failures")
+            )
             source_rollout_ready = bool(
                 contract.get("source_rollout_migration_version")
                 == SOURCE_ROLLOUT_MIGRATION_VERSION
@@ -187,6 +220,8 @@ def assess(*, use_cache: bool = True) -> Readiness:
         failures.append("database_connectivity")
     elif not checks["databaseContract"]:
         failures.append("database_contract")
+    if not checks["leaderboardPrivacy"]:
+        failures.append("leaderboard_privacy")
     if not checks["databasePermissions"]:
         failures.append("database_permissions")
     if not checks["activeQuizRetrieval"]:

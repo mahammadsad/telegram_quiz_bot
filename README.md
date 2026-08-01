@@ -188,6 +188,9 @@ The v7.1 source rollout additionally requires
 `20260728040209_source_backed_rotation_v1.sql`; it is reported separately so
 the v7.0 contract remains compatible during the controlled cutover.
 The application never applies DDL during startup.
+The v7.2.3 privacy gate additionally requires
+`20260801045552_leaderboard_privacy_hotfix.sql`; readiness remains closed until
+its safe leaderboard definitions and service-role-only grants are verified.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,
 and locks tables, legacy views, and private functions to the service role. Full
@@ -204,7 +207,9 @@ and rollback are covered by
 The immutable-integrity, revision-report, and ranking runbook is
 `docs/MIGRATION_20260722_PRODUCTION_CONTRACT.md`; the current durable-write
 forward migration and verification queries are documented in
-`docs/MIGRATION_20260724_DURABLE_RATE_LIMITS.md`.
+`docs/MIGRATION_20260724_DURABLE_RATE_LIMITS.md`. The public leaderboard
+identity and cache-safety rollout is documented in
+`docs/MIGRATION_20260801_LEADERBOARD_PRIVACY.md`.
 
 Before enabling the source-backed rotation, validate and import only its
 selected static rows:
@@ -386,7 +391,7 @@ separation, Telegram evidence, mobile artifacts, and rollback procedures are in
 Use `docs/PRODUCTIONIZATION_CHECKLIST.md` as the evidence gate, not this README.
 Calculation rules are in `docs/STATISTICS_AND_RANKING_RULES.md`; a non-programmer
 walkthrough is in `docs/NON_PROGRAMMER_VERIFICATION.md`; release changes are in
-`docs/RELEASE_NOTES_7.2.2.md`. Version 7.2.1, 7.2.0, 7.1.0, and 7.0.0 evidence
-remains historical; the
+`docs/RELEASE_NOTES_7.2.3.md`. Version 7.2.2, 7.2.1, 7.2.0, 7.1.0, and 7.0.0
+evidence remains historical; the
 13-subject source-backed rollout is complete only after the v7.1 staging and
 production gates in `docs/MIGRATION_20260728_SOURCE_ROLLOUT.md` pass.

@@ -289,3 +289,42 @@ def test_current_user_typed_leaderboard_uses_exact_rpc(monkeypatch):
             },
         )
     ]
+
+
+def test_current_user_quiz_leaderboard_uses_offset_aware_privacy_rpc(monkeypatch):
+    calls = []
+
+    class Result:
+        data = {
+            "participants": 101,
+            "rows": [],
+            "currentUser": {"rank": 101},
+        }
+
+    class Client:
+        def rpc(self, name, payload):
+            calls.append((name, payload))
+            return self
+
+        def execute(self):
+            return Result()
+
+    monkeypatch.setattr(stats_repo, "get_client", lambda: Client())
+    board = stats_repo.quiz_leaderboard_for_user(
+        "20260710-history",
+        user_id="aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+        limit=10,
+        offset=20,
+    )
+    assert board["currentUser"]["rank"] == 101
+    assert calls == [
+        (
+            "get_quiz_leaderboard_for_user_page",
+            {
+                "p_quiz_id": "20260710-history",
+                "p_user_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+                "p_limit": 10,
+                "p_offset": 20,
+            },
+        )
+    ]

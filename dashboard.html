@@ -234,9 +234,10 @@
   function loadBoard(){
     if(boardLoading)return;boardLoading=true;el("board-load").disabled=true;el("board-load").textContent="লোড হচ্ছে...";updateBoardPager();
     var type=el("board-type").value,subject=el("board-subject").value;
-    var path=quizId?"/api/quiz/"+encodeURIComponent(quizId)+"/leaderboard?limit=10":"/api/leaderboards/"+type+"?limit="+boardLimit+"&offset="+boardOffset+(type==="subject_accuracy"?"&subject="+encodeURIComponent(subject):"");
+    var path=quizId?"/api/quiz/"+encodeURIComponent(quizId)+"/leaderboard?limit=10&offset=0":"/api/leaderboards/"+type+"?limit="+boardLimit+"&offset="+boardOffset+(type==="subject_accuracy"?"&subject="+encodeURIComponent(subject):"");
+    path+="&privacyRelease=20260801045552";
     el("board").classList.add("hidden");el("your-rank").classList.add("hidden");el("board-state").classList.remove("hidden");el("board-state").textContent="তালিকা লোড হচ্ছে...";
-    fetch(api(path),{headers:authHeaders()}).then(check).then(renderBoard).catch(function(){el("board-state").textContent="র‍্যাঙ্কিং এখন পাওয়া যাচ্ছে না। আবার চেষ্টা করুন।"}).finally(function(){boardLoading=false;el("board-load").disabled=false;el("board-load").textContent="দেখুন";updateBoardPager()});
+    fetch(api(path),{headers:authHeaders(),cache:"no-store"}).then(check).then(renderBoard).catch(function(){el("board-state").textContent="র‍্যাঙ্কিং এখন পাওয়া যাচ্ছে না। আবার চেষ্টা করুন।"}).finally(function(){boardLoading=false;el("board-load").disabled=false;el("board-load").textContent="দেখুন";updateBoardPager()});
   }
 
   function renderBoard(data){
@@ -261,7 +262,7 @@
   function boardRow(data,item){
     var row=document.createElement("article"),rank=document.createElement("div"),who=document.createElement("div"),name=document.createElement("div"),meta=document.createElement("div"),value=document.createElement("div");
     row.className="row"+(item.isCurrentUser?" me":"");rank.className="rank";rank.textContent=bn(item.rank||"—");name.className="name";
-    if(item.profilePhotoUrl&&/^https:\/\//i.test(item.profilePhotoUrl)){var photo=document.createElement("img");photo.className="mini-avatar";photo.src=item.profilePhotoUrl;photo.alt="";name.appendChild(photo)}else{var initials=document.createElement("span");initials.className="mini-avatar";initials.textContent=item.initials||String(item.displayName||item.display_name||"শি").slice(0,1);initials.setAttribute("aria-hidden","true");name.appendChild(initials)}
+    var initials=document.createElement("span");initials.className="mini-avatar";initials.textContent=item.initials||"শি";initials.setAttribute("aria-hidden","true");name.appendChild(initials);
     name.appendChild(document.createTextNode(item.displayName||item.display_name||"শিক্ষার্থী"));
     if(item.isCurrentUser){var badge=document.createElement("span");badge.className="you";badge.textContent="আপনি";name.appendChild(badge)}
     meta.className="meta";meta.textContent=quizId?"সঠিকতা "+bn(item.accuracy||0)+"% · "+formatDuration(item.durationSeconds):bn(item.total_answered||item.totalAnswered||0)+"টি উত্তর";

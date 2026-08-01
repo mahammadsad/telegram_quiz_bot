@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -15,6 +16,7 @@ from psycopg.types.json import Jsonb
 from config.source_rollout import ROTATION_CHAPTER_KEYS
 from database.contract import (
     DATABASE_CONTRACT_VERSION,
+    LEADERBOARD_PRIVACY_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
@@ -28,6 +30,7 @@ pytestmark = pytest.mark.database_integration
 SOURCE_ID = uuid.UUID("22222222-2222-4222-8222-222222222222")
 UPDATED_SOURCE_ID = uuid.UUID("33333333-3333-4333-8333-333333333333")
 ATTEMPT_ID = uuid.UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+ANONYMOUS_LEADER_ALIAS = re.compile(r"^শিক্ষার্থী [0-9A-F]{12}$")
 
 
 @dataclass(frozen=True)
@@ -275,6 +278,9 @@ def test_exact_database_contract_and_permissions(database_url: str) -> None:
         contract = connection.execute(
             "select public.get_application_schema_contract() as contract"
         ).fetchone()["contract"]
+        privacy_contract = connection.execute(
+            "select public.get_leaderboard_privacy_contract() as contract"
+        ).fetchone()["contract"]
     assert contract["ready"] is True
     assert contract["contract_version"] == DATABASE_CONTRACT_VERSION
     assert contract["required_migration_version"] == REQUIRED_MIGRATION_VERSION
@@ -311,6 +317,19 @@ def test_exact_database_contract_and_permissions(database_url: str) -> None:
         "table_permission_failures",
     ):
         assert contract[key] == []
+    assert privacy_contract["ready"] is True
+    assert privacy_contract["leaderboard_privacy_migration_version"] == (
+        LEADERBOARD_PRIVACY_MIGRATION_VERSION
+    )
+    assert privacy_contract["leaderboard_privacy_migration_applied"] is True
+    for key in (
+        "missing_functions",
+        "unsafe_function_definitions",
+        "missing_identity_markers",
+        "function_configuration_failures",
+        "function_permission_failures",
+    ):
+        assert privacy_contract[key] == []
 
 
 def test_database_rotation_is_exactly_the_reviewed_source_allowlist(
@@ -647,6 +666,379 @@ def test_retakes_are_new_but_do_not_replace_official_rank(
     assert weekly["separatorRequired"] is True
     assert float(overall["currentUser"]["value"]) == first_score
     assert overall["currentUser"]["rank"] == 2
+
+
+def test_public_leaderboards_enforce_reversible_identity_consent(
+    database_url: str,
+    versioned_quizzes: dict,
+) -> None:
+    del versioned_quizzes
+    connection = connect(database_url)
+    quiz_id = "20260603-history"
+    private_values: set[str] = set()
+
+    def submit(
+        user_id: uuid.UUID,
+        answers: list[int],
+        duration_seconds: int,
+    ) -> dict:
+        return connection.execute(
+            """
+            select public.submit_quiz_attempt_atomic(
+                %s, %s, %s, %s, %s, null, null
+            ) as result
+            """,
+            (
+                quiz_id,
+                user_id,
+                uuid.uuid4(),
+                Jsonb(answers),
+                duration_seconds,
+            ),
+        ).fetchone()["result"]
+
+    def scalar_values(value: object) -> set[str]:
+        if isinstance(value, dict):
+            return {
+                item for child in value.values() for item in scalar_values(child)
+            }
+        if isinstance(value, list):
+            return {item for child in value for item in scalar_values(child)}
+        if value is None or isinstance(value, bool):
+            return set()
+        return {str(value)}
+
+    def keys(value: object) -> set[str]:
+        if isinstance(value, dict):
+            return set(value) | {
+                item for child in value.values() for item in keys(child)
+            }
+        if isinstance(value, list):
+            return {item for child in value for item in keys(child)}
+        return set()
+
+    try:
+        correct_rows = connection.execute(
+            """
+            select q.correct_option
+            from public.quiz_questions qq
+            join public.questions q on q.id = qq.question_id
+            where qq.quiz_id = %s
+            order by qq.question_order
+            """,
+            (quiz_id,),
+        ).fetchall()
+        correct = ["ABCD".index(row["correct_option"]) for row in correct_rows]
+        assert len(correct) == 10
+
+        user_specs = [
+            {
+                "key": "anonymous",
+                "telegram_id": 9_100_000_001,
+                "first_name": "PrivateAlpha",
+                "last_name": "HiddenAlpha",
+                "username": "private_alpha",
+                "photo_url": "https://example.invalid/private-alpha.jpg",
+                "public_display_name": None,
+                "username_visible": False,
+                "leaderboard_visible": True,
+            },
+            {
+                "key": "display",
+                "telegram_id": 9_100_000_002,
+                "first_name": "PrivateBeta",
+                "last_name": "HiddenBeta",
+                "username": "private_beta",
+                "photo_url": "https://example.invalid/private-beta.jpg",
+                "public_display_name": "স্বেচ্ছায় দেওয়া নাম",
+                "username_visible": False,
+                "leaderboard_visible": True,
+            },
+            {
+                "key": "username",
+                "telegram_id": 9_100_000_003,
+                "first_name": "PrivateGamma",
+                "last_name": "HiddenGamma",
+                "username": "chosen_user",
+                "photo_url": "https://example.invalid/private-gamma.jpg",
+                "public_display_name": None,
+                "username_visible": True,
+                "leaderboard_visible": True,
+            },
+            {
+                "key": "hidden",
+                "telegram_id": 9_100_000_004,
+                "first_name": "PrivateDelta",
+                "last_name": "HiddenDelta",
+                "username": "private_delta",
+                "photo_url": "https://example.invalid/private-delta.jpg",
+                "public_display_name": "তালিকা থেকে বাদ",
+                "username_visible": True,
+                "leaderboard_visible": False,
+            },
+            {
+                "key": "withdrawn",
+                "telegram_id": 9_100_000_005,
+                "first_name": "PrivateEpsilon",
+                "last_name": "HiddenEpsilon",
+                "username": "withdraw_user",
+                "photo_url": "https://example.invalid/private-epsilon.jpg",
+                "public_display_name": "আগের প্রকাশ্য নাম",
+                "username_visible": True,
+                "leaderboard_visible": True,
+            },
+        ]
+        users: dict[str, uuid.UUID] = {}
+        for spec in user_specs:
+            user_id = connection.execute(
+                """
+                insert into public.users (
+                    telegram_id, first_name, last_name, username, photo_url,
+                    public_display_name, username_visible, leaderboard_visible
+                ) values (%s, %s, %s, %s, %s, %s, %s, %s)
+                returning id
+                """,
+                (
+                    spec["telegram_id"],
+                    spec["first_name"],
+                    spec["last_name"],
+                    spec["username"],
+                    spec["photo_url"],
+                    spec["public_display_name"],
+                    spec["username_visible"],
+                    spec["leaderboard_visible"],
+                ),
+            ).fetchone()["id"]
+            users[str(spec["key"])] = user_id
+            private_values.update(
+                {
+                    str(spec["first_name"]),
+                    str(spec["last_name"]),
+                    f"{spec['first_name']} {spec['last_name']}",
+                    str(spec["photo_url"]),
+                    str(user_id),
+                    str(spec["telegram_id"]),
+                }
+            )
+            if not spec["username_visible"]:
+                private_values.add("@" + str(spec["username"]))
+
+        answer_sets = {
+            "anonymous": correct,
+            "display": [
+                (answer + 1) % 4 if index == 0 else answer
+                for index, answer in enumerate(correct)
+            ],
+            "username": [
+                (answer + 1) % 4 if index == 0 else answer
+                for index, answer in enumerate(correct)
+            ],
+            "hidden": correct,
+            "withdrawn": [
+                (answer + 1) % 4 if index < 2 else answer
+                for index, answer in enumerate(correct)
+            ],
+        }
+        durations = {
+            "anonymous": 180,
+            "display": 200,
+            "username": 100,
+            "hidden": 60,
+            "withdrawn": 150,
+        }
+        for key, user_id in users.items():
+            first = submit(user_id, answer_sets[key], durations[key])
+            assert first["attemptNumber"] == 1
+            second = submit(user_id, correct, durations[key] + 20)
+            assert second["attemptNumber"] == 2
+
+        before_withdrawal = connection.execute(
+            """
+            select public.get_quiz_leaderboard_for_user_page(
+                %s, %s, 10, 0
+            ) as board
+            """,
+            (quiz_id, users["withdrawn"]),
+        ).fetchone()["board"]
+        assert before_withdrawal["currentUser"]["displayName"] == (
+            "আগের প্রকাশ্য নাম"
+        )
+        assert before_withdrawal["currentUser"]["identitySource"] == (
+            "public_display_name"
+        )
+
+        connection.execute(
+            """
+            update public.users
+            set public_display_name = null, username_visible = false
+            where id = %s
+            """,
+            (users["withdrawn"],),
+        )
+        private_values.add("@withdraw_user")
+
+        quiz_board = connection.execute(
+            """
+            select public.get_quiz_leaderboard_for_user_page(
+                %s, %s, 2, 1
+            ) as board
+            """,
+            (quiz_id, users["anonymous"]),
+        ).fetchone()["board"]
+        quiz_board_again = connection.execute(
+            """
+            select public.get_quiz_leaderboard_for_user(
+                %s, %s, 10
+            ) as board
+            """,
+            (quiz_id, users["anonymous"]),
+        ).fetchone()["board"]
+        legacy_quiz_page = connection.execute(
+            """
+            select public.get_quiz_leaderboard_page(%s, 10, 0) as board
+            """,
+            (quiz_id,),
+        ).fetchone()["board"]
+
+        assert quiz_board["participants"] == 4
+        assert quiz_board["limit"] == 2
+        assert quiz_board["offset"] == 1
+        assert [row["rank"] for row in quiz_board["rows"]] == [2, 3]
+        assert quiz_board["currentUser"]["rank"] == 1
+        assert quiz_board["separatorRequired"] is True
+        assert quiz_board["markingScheme"] == {
+            "rightMarks": 1,
+            "wrongPenalty": 0.25,
+            "blankMarks": 0,
+            "negativeMarking": True,
+        }
+        assert float(quiz_board["rows"][0]["netScore"]) == pytest.approx(8.75)
+        assert quiz_board["rows"][0]["displayName"] == "@chosen_user"
+        assert quiz_board["rows"][1]["displayName"] == "স্বেচ্ছায় দেওয়া নাম"
+        assert quiz_board_again["currentUser"]["displayName"] == (
+            quiz_board["currentUser"]["displayName"]
+        )
+        assert ANONYMOUS_LEADER_ALIAS.fullmatch(
+            quiz_board["currentUser"]["displayName"]
+        )
+        assert quiz_board["currentUser"]["initials"] == "শি"
+        withdrawn_row = next(
+            row
+            for row in quiz_board_again["rows"]
+            if row["rank"] == 4
+        )
+        assert withdrawn_row["identitySource"] == "anonymous"
+        assert ANONYMOUS_LEADER_ALIAS.fullmatch(withdrawn_row["displayName"])
+        assert withdrawn_row["initials"] == "শি"
+        assert legacy_quiz_page["participants"] == 4
+
+        board_types = (
+            "overall_rank",
+            "daily_accuracy",
+            "weekly_accuracy",
+            "monthly_accuracy",
+            "subject_accuracy",
+            "improvement",
+            "consistency",
+            "revision_completion",
+        )
+        typed_boards = []
+        for board_type in board_types:
+            board = connection.execute(
+                """
+                select public.get_leaderboard_for_user(
+                    %s, %s, %s, 2, 0
+                ) as board
+                """,
+                (
+                    board_type,
+                    "history" if board_type == "subject_accuracy" else None,
+                    users["anonymous"],
+                ),
+            ).fetchone()["board"]
+            typed_boards.append(board)
+            assert board["type"] == board_type
+            assert board["participants"] == 4
+            assert board["limit"] == 2
+            assert board["offset"] == 0
+            assert board["currentUser"]["isCurrentUser"] is True
+            assert ANONYMOUS_LEADER_ALIAS.fullmatch(
+                board["currentUser"]["displayName"]
+            )
+
+        global_page = connection.execute(
+            "select public.get_global_leaderboard_page(2, 1) as board"
+        ).fetchone()["board"]
+        assert global_page["participants"] == 4
+        assert global_page["limit"] == 2
+        assert global_page["offset"] == 1
+
+        all_payloads = [
+            quiz_board,
+            quiz_board_again,
+            legacy_quiz_page,
+            global_page,
+            *typed_boards,
+        ]
+        exposed_keys = {
+            item for payload in all_payloads for item in keys(payload)
+        }
+        assert not exposed_keys.intersection(
+            {
+                "telegram_id",
+                "telegramId",
+                "user_id",
+                "userId",
+                "first_name",
+                "firstName",
+                "last_name",
+                "lastName",
+                "username",
+                "photo_url",
+                "profilePhotoUrl",
+            }
+        )
+        exposed_values = {
+            item for payload in all_payloads for item in scalar_values(payload)
+        }
+        assert not exposed_values.intersection(private_values)
+
+        privacy_contract = connection.execute(
+            "select public.get_leaderboard_privacy_contract() as contract"
+        ).fetchone()["contract"]
+        assert privacy_contract["ready"] is True
+        assert privacy_contract["leaderboard_privacy_migration_version"] == (
+            LEADERBOARD_PRIVACY_MIGRATION_VERSION
+        )
+        assert privacy_contract["missing_functions"] == []
+        assert privacy_contract["unsafe_function_definitions"] == []
+        assert privacy_contract["missing_identity_markers"] == []
+        assert privacy_contract["function_configuration_failures"] == []
+        assert privacy_contract["function_permission_failures"] == []
+    finally:
+        connection.rollback()
+        connection.close()
+
+
+@pytest.mark.parametrize("role", ["anon", "authenticated"])
+def test_public_roles_cannot_execute_leaderboard_privacy_rpcs(
+    database_url: str,
+    role: str,
+) -> None:
+    calls = (
+        "select public.get_public_leaderboard_identity(null)",
+        "select public.get_leaderboard_for_user('overall_rank', null, null, 1, 0)",
+        "select public.get_quiz_leaderboard_for_user_page('test', null, 1, 0)",
+        "select public.get_leaderboard_privacy_contract()",
+    )
+    for query in calls:
+        with psycopg.connect(database_url, autocommit=True) as connection:
+            connection.execute(f"set role {role}")
+            try:
+                with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                    connection.execute(query)
+            finally:
+                connection.execute("reset role")
 
 
 def test_revision_schedule_and_idempotent_answer(

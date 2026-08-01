@@ -162,15 +162,36 @@ def test_missing_get_returns_404_without_generation(monkeypatch):
 
 
 def test_quiz_specific_leaderboard_endpoint(monkeypatch):
-    expected = {"quizId": QUIZ_ID, "participants": 1, "rows": [{"rank": 1, "score": 10}]}
+    expected = {
+        "quizId": QUIZ_ID,
+        "participants": 1,
+        "limit": 10,
+        "offset": 0,
+        "rows": [
+            {
+                "rank": 1,
+                "score": 10,
+                "displayName": "শিক্ষার্থী 0123456789AB",
+                "identitySource": "anonymous",
+            }
+        ],
+    }
     monkeypatch.setattr(
         api_module.stats_repo,
         "quiz_leaderboard_for_user",
-        lambda quiz_id, user_id, limit: expected,
+        lambda quiz_id, user_id, limit, offset: expected,
     )
     response = client.get(f"/api/quiz/{QUIZ_ID}/leaderboard")
     assert response.status_code == 200
-    assert response.json() == {**expected, "requestedOffset": 0}
+    assert response.json()["rows"] == [
+        {
+            "rank": 1,
+            "score": 10,
+            "displayName": "শিক্ষার্থী 0123456789AB",
+            "initials": "শি",
+        }
+    ]
+    assert response.json()["currentUser"] is None
 
 
 def test_quiz_leaderboard_projects_the_authenticated_current_user(monkeypatch):
@@ -189,8 +210,13 @@ def test_quiz_leaderboard_projects_the_authenticated_current_user(monkeypatch):
     )
     captured = {}
 
-    def leaderboard(quiz_id, user_id, limit):
-        captured.update(quiz_id=quiz_id, user_id=user_id, limit=limit)
+    def leaderboard(quiz_id, user_id, limit, offset):
+        captured.update(
+            quiz_id=quiz_id,
+            user_id=user_id,
+            limit=limit,
+            offset=offset,
+        )
         return expected
 
     monkeypatch.setattr(api_module.stats_repo, "quiz_leaderboard_for_user", leaderboard)
@@ -204,6 +230,7 @@ def test_quiz_leaderboard_projects_the_authenticated_current_user(monkeypatch):
         "quiz_id": QUIZ_ID,
         "user_id": "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
         "limit": 10,
+        "offset": 0,
     }
 
 
@@ -216,7 +243,11 @@ def test_typed_leaderboard_endpoint_validates_and_delegates(monkeypatch):
     )
     response = client.get("/api/leaderboards/subject_accuracy?subject=computer&limit=40&offset=3")
     assert response.status_code == 200
-    assert response.json() == {**expected, "unavailable": False}
+    assert response.json() == {
+        **expected,
+        "currentUser": None,
+        "unavailable": False,
+    }
     assert client.get("/api/leaderboards/subject_accuracy?subject=unknown").status_code == 400
 
 

@@ -25,6 +25,7 @@ from config.subjects import SUBJECTS
 from database.contract import APPLICATION_VERSION, REQUIRED_MIGRATION_VERSION
 from models.user import User
 from services import (
+    leaderboard_privacy,
     learning_resources_service,
     personal_learning_service,
     quiz_pack_service,
@@ -72,7 +73,15 @@ async def security_and_privacy_headers(request: Request, call_next):
     forwarded_proto = request.headers.get("x-forwarded-proto", "")
     if request.url.scheme == "https" or forwarded_proto == "https":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    if (
+    if _is_leaderboard_path(request.url.path):
+        response.headers["Cache-Control"] = (
+            "no-store, private, max-age=0, must-revalidate"
+        )
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
+        response.headers["Surrogate-Control"] = "no-store"
+        _merge_vary_header(response.headers, "X-Telegram-Init-Data")
+    elif (
         request.url.path.startswith("/api/me/")
         or request.url.path.startswith("/api/admin/")
         or bool(request.headers.get("x-telegram-init-data"))
@@ -80,6 +89,25 @@ async def security_and_privacy_headers(request: Request, call_next):
     ):
         response.headers["Cache-Control"] = "no-store, private"
     return response
+
+
+def _is_leaderboard_path(path: str) -> bool:
+    return bool(
+        path == "/api/leaderboard"
+        or path.startswith("/api/leaderboards/")
+        or (
+            path.startswith("/api/quiz/")
+            and path.endswith("/leaderboard")
+        )
+    )
+
+
+def _merge_vary_header(headers: Any, value: str) -> None:
+    existing = [part.strip() for part in headers.get("Vary", "").split(",")]
+    values = [part for part in existing if part]
+    if value.casefold() not in {part.casefold() for part in values}:
+        values.append(value)
+    headers["Vary"] = ", ".join(values)
 
 
 class SubmitQuizRequest(BaseModel):
@@ -689,32 +717,46 @@ def quiz_leaderboard(
             clean_quiz_id,
             user_id=user_id,
             limit=max(1, min(limit, 50)),
+            offset=max(0, offset),
         )
-        result["requestedOffset"] = max(0, offset)
-        return result
+        return leaderboard_privacy.project_quiz_leaderboard(result)
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=503, detail="Leaderboard সাময়িকভাবে পাওয়া যাচ্ছে না।") from exc
+        raise HTTPException(
+            status_code=503,
+            detail=leaderboard_privacy.PRIVACY_MAINTENANCE_MESSAGE,
+        ) from exc
 
 
 @app.get("/api/leaderboard")
-def leaderboard(limit: int = 20, offset: int = 0) -> dict:
+def leaderboard(
+    limit: int = 20,
+    offset: int = 0,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
     try:
+        user_id = None
+        if init_data:
+            telegram_user = _telegram_user_from_init_data(init_data)
+            user_id = str(users_repo.upsert_user(User.from_telegram(telegram_user))["id"])
+        result = stats_repo.typed_leaderboard_for_user(
+            "overall_rank",
+            subject_key=None,
+            user_id=user_id,
+            limit=max(1, min(limit, 100)),
+            offset=max(0, offset),
+        )
         return {
-            **stats_repo.typed_leaderboard_for_user(
-                "overall_rank",
-                subject_key=None,
-                user_id=None,
-                limit=max(1, min(limit, 100)),
-                offset=max(0, offset),
-            ),
+            **leaderboard_privacy.project_typed_leaderboard(result),
             "unavailable": False,
         }
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(
             status_code=503,
-            detail="সামগ্রিক র‍্যাঙ্কিং সাময়িকভাবে পাওয়া যাচ্ছে না।",
+            detail=leaderboard_privacy.PRIVACY_MAINTENANCE_MESSAGE,
         ) from exc
 
 
@@ -733,14 +775,15 @@ def typed_leaderboard(
         if init_data:
             telegram_user = _telegram_user_from_init_data(init_data)
             user_id = str(users_repo.upsert_user(User.from_telegram(telegram_user))["id"])
+        result = stats_repo.typed_leaderboard_for_user(
+            board_type,
+            subject_key=subject,
+            user_id=user_id,
+            limit=max(1, min(limit, 100)),
+            offset=max(0, offset),
+        )
         return {
-            **stats_repo.typed_leaderboard_for_user(
-                board_type,
-                subject_key=subject,
-                user_id=user_id,
-                limit=max(1, min(limit, 100)),
-                offset=max(0, offset),
-            ),
+            **leaderboard_privacy.project_typed_leaderboard(result),
             "unavailable": False,
         }
     except TelegramAuthError as exc:
@@ -748,7 +791,10 @@ def typed_leaderboard(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except Exception as exc:
-        raise HTTPException(status_code=503, detail="Leaderboard সাময়িকভাবে পাওয়া যাচ্ছে না।") from exc
+        raise HTTPException(
+            status_code=503,
+            detail=leaderboard_privacy.PRIVACY_MAINTENANCE_MESSAGE,
+        ) from exc
 
 
 def _write_user_from_payload(

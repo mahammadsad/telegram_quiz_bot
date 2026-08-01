@@ -48,13 +48,15 @@ def quiz_leaderboard_for_user(
     *,
     user_id: str | None,
     limit: int = 10,
+    offset: int = 0,
 ) -> Row:
     result = get_client().rpc(
-        "get_quiz_leaderboard_for_user",
+        "get_quiz_leaderboard_for_user_page",
         {
             "p_quiz_id": quiz_id,
             "p_user_id": user_id,
             "p_limit": limit,
+            "p_offset": offset,
         },
     ).execute()
     return as_row(result.data, "current-user quiz leaderboard")
@@ -83,12 +85,12 @@ def typed_leaderboard(
     ).execute()
     if result.data is None:
         return {
-        "type": clean_type,
-        "subjectKey": subject_key,
-        "participants": 0,
-        "rows": [],
-        "limit": limit,
-        "offset": offset,
+            "type": clean_type,
+            "subjectKey": subject_key,
+            "participants": 0,
+            "rows": [],
+            "limit": limit,
+            "offset": offset,
         }
     return as_row(result.data, "typed leaderboard")
 

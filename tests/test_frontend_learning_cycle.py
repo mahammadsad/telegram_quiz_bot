@@ -206,6 +206,12 @@ def test_dashboard_filters_and_leaderboard_pagination_are_wired():
     assert "boardOffset+=boardLimit" in DASHBOARD
     assert "disabled=boardLoading||boardOffset<=0" in DASHBOARD
     assert 'el("board-controls").classList.add("hidden")' in DASHBOARD
+    assert 'cache:"no-store"' in DASHBOARD
+    assert "privacyRelease=20260801045552" in DASHBOARD
+    assert "document.createTextNode(item.displayName" in DASHBOARD
+    assert "item.profilePhotoUrl" not in DASHBOARD.split(
+        "function boardRow", 1
+    )[1].split("function renderYourRank", 1)[0]
 
 
 def test_every_static_button_and_link_has_a_real_navigation_or_handler_contract():
