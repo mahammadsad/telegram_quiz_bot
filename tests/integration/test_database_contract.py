@@ -731,6 +731,34 @@ def test_public_leaderboards_enforce_reversible_identity_consent(
         correct = ["ABCD".index(row["correct_option"]) for row in correct_rows]
         assert len(correct) == 10
 
+        board_types = (
+            "overall_rank",
+            "daily_accuracy",
+            "weekly_accuracy",
+            "monthly_accuracy",
+            "subject_accuracy",
+            "improvement",
+            "consistency",
+            "revision_completion",
+        )
+        baseline_typed_participants = {
+            board_type: connection.execute(
+                """
+                select public.get_leaderboard_for_user(
+                    %s, %s, null, 1, 0
+                ) as board
+                """,
+                (
+                    board_type,
+                    "history" if board_type == "subject_accuracy" else None,
+                ),
+            ).fetchone()["board"]["participants"]
+            for board_type in board_types
+        }
+        baseline_global_participants = connection.execute(
+            "select public.get_global_leaderboard_page(1, 0) as board"
+        ).fetchone()["board"]["participants"]
+
         user_specs = [
             {
                 "key": "anonymous",
@@ -932,16 +960,6 @@ def test_public_leaderboards_enforce_reversible_identity_consent(
         assert withdrawn_row["initials"] == "শি"
         assert legacy_quiz_page["participants"] == 4
 
-        board_types = (
-            "overall_rank",
-            "daily_accuracy",
-            "weekly_accuracy",
-            "monthly_accuracy",
-            "subject_accuracy",
-            "improvement",
-            "consistency",
-            "revision_completion",
-        )
         typed_boards = []
         for board_type in board_types:
             board = connection.execute(
@@ -958,7 +976,9 @@ def test_public_leaderboards_enforce_reversible_identity_consent(
             ).fetchone()["board"]
             typed_boards.append(board)
             assert board["type"] == board_type
-            assert board["participants"] == 4
+            assert board["participants"] == (
+                baseline_typed_participants[board_type] + 4
+            )
             assert board["limit"] == 2
             assert board["offset"] == 0
             assert board["currentUser"]["isCurrentUser"] is True
@@ -969,7 +989,7 @@ def test_public_leaderboards_enforce_reversible_identity_consent(
         global_page = connection.execute(
             "select public.get_global_leaderboard_page(2, 1) as board"
         ).fetchone()["board"]
-        assert global_page["participants"] == 4
+        assert global_page["participants"] == baseline_global_participants + 4
         assert global_page["limit"] == 2
         assert global_page["offset"] == 1
 
