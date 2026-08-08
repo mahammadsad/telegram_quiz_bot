@@ -130,9 +130,9 @@ def get_recoverable_quiz_pack(quiz_id: str, run: dict | None) -> dict | None:
     if not pack or len(pack.get("items") or []) != QUESTION_COUNT:
         return None
     try:
-        _validate_saved_pack_source_contract(pack)
+        _validate_saved_pack_contract(pack)
     except (ValueError, TypeError):
-        LOG.warning("QUIZ_READ_BLOCKED invalid_saved_source_contract quiz_id=%s", quiz_id)
+        LOG.warning("QUIZ_READ_BLOCKED invalid_saved_pack_contract quiz_id=%s", quiz_id)
         return None
     if checksum_for_pack(pack) != run["persisted_checksum"]:
         LOG.error("QUIZ_READ_BLOCKED checksum_mismatch quiz_id=%s", quiz_id)
@@ -143,7 +143,18 @@ def get_recoverable_quiz_pack(quiz_id: str, run: dict | None) -> dict | None:
     return pack
 
 
-def _validate_saved_pack_source_contract(pack: dict) -> None:
+def _validate_saved_pack_contract(pack: dict) -> None:
+    questions = [item.get("question") or {} for item in pack.get("items") or []]
+    source_presence = {bool(str(question.get("source_document_id") or "").strip()) for question in questions}
+    if len(source_presence) != 1:
+        raise ValueError("A persisted quiz cannot mix source-backed and source-less questions.")
+    if source_presence == {False}:
+        _validate_saved_model_contract(pack)
+        return
+    _validate_saved_source_contract(pack)
+
+
+def _validate_saved_source_contract(pack: dict) -> None:
     meta = pack.get("meta") or {}
     subject_key = str(meta.get("subject_key") or meta.get("subject") or "")
     chapter = str(meta.get("chapter") or "")
@@ -201,9 +212,114 @@ def _validate_saved_pack_source_contract(pack: dict) -> None:
         enforce_composition=False,
         allowed_source_ids=set(allowed_source_topics),
         allowed_source_topics=allowed_source_topics,
-        required_source_diversity=len(allowed_source_topics),
-        required_topic_diversity=len(set(allowed_source_topics.values())),
+        # The atomic save and checksum certify the generation-time diversity
+        # contract. Reconstructing that minimum from the *observed* sources
+        # strengthens the contract on read (for example 5 observed sources
+        # can be valid for a 4-source minimum) and can reject a valid pack.
+        required_source_diversity=1,
+        required_topic_diversity=1,
     )
+
+
+def _validate_saved_model_contract(pack: dict) -> None:
+    meta = pack.get("meta") or {}
+    subject_key = str(meta.get("subject_key") or meta.get("subject") or "")
+    chapter = str(meta.get("chapter") or "")
+    raw: list[dict] = []
+    allowed_micro_topics: dict[str, str] = {}
+    for item in pack.get("items") or []:
+        question = item.get("question") or {}
+        knowledge = _embedded_one(question.get("knowledge_points"))
+        verification = _latest_model_verification(question.get("question_verifications"))
+        micro_topic_id = str(question.get("micro_topic_id") or "")
+        micro_topic_key = str(question.get("micro_topic_key") or "")
+        if (
+            not question.get("knowledge_point_id")
+            or str(knowledge.get("id") or "") != str(question.get("knowledge_point_id"))
+            or knowledge.get("subject_key") != subject_key
+            or str(knowledge.get("micro_topic_id") or "") != micro_topic_id
+            or knowledge.get("time_scope") != "timeless"
+            or knowledge.get("status") != "active"
+            or knowledge.get("syllabus_status") != "mapped"
+            or question.get("review_required") is True
+            or question.get("verification_status") != "verified"
+        ):
+            raise ValueError("A source-less question is missing its certified knowledge identity.")
+        prior_id = allowed_micro_topics.setdefault(micro_topic_key, micro_topic_id)
+        if prior_id != micro_topic_id:
+            raise ValueError("One persisted micro-topic key cannot identify multiple topics.")
+        checks = verification.get("checks")
+        if (
+            verification.get("verdict") != "verified"
+            or verification.get("verification_basis") != "independent_model"
+            or verification.get("source_document_id")
+            or not isinstance(checks, dict)
+            or checks.get("independent_model") is not True
+            or checks.get("source_grounded") is not False
+        ):
+            raise ValueError("A source-less question lacks independent-model verification evidence.")
+        raw.append(
+            {
+                "question": question.get("question_text"),
+                "options": [
+                    question.get("option_a"),
+                    question.get("option_b"),
+                    question.get("option_c"),
+                    question.get("option_d"),
+                ],
+                "correct_index": OPTION_LETTERS.find(str(question.get("correct_option") or "")),
+                "explanation": question.get("explanation"),
+                "detailed_explanation": question.get("detailed_explanation"),
+                "subject_key": subject_key,
+                "chapter": chapter,
+                "micro_topic_id": micro_topic_id,
+                "micro_topic_key": micro_topic_key,
+                "source_document_id": None,
+                "difficulty": question.get("difficulty"),
+                "language": question.get("language"),
+                "verification_status": question.get("verification_status"),
+                "verification_score": verification.get("confidence"),
+                "verification_notes": verification.get("notes"),
+                "verification_checks": checks,
+                "verified_at": verification.get("checked_at"),
+                "verification_model": verification.get("verifier_model"),
+                "canonical_claim": knowledge.get("canonical_claim"),
+                "knowledge_entity": knowledge.get("entity_key"),
+                "knowledge_relation": knowledge.get("relation_key"),
+                "knowledge_answer_value": knowledge.get("answer_value"),
+                "knowledge_time_scope": knowledge.get("time_scope"),
+            }
+        )
+    validate_questions(
+        raw,
+        subject_key,
+        chapter,
+        enforce_composition=False,
+        source_required=False,
+        allowed_micro_topics=allowed_micro_topics,
+        required_source_diversity=1,
+        required_topic_diversity=1,
+    )
+
+
+def _embedded_one(value: Any) -> dict:
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, list) and len(value) == 1 and isinstance(value[0], dict):
+        return value[0]
+    return {}
+
+
+def _latest_model_verification(value: Any) -> dict:
+    rows = value if isinstance(value, list) else [value] if isinstance(value, dict) else []
+    eligible = [
+        row
+        for row in rows
+        if isinstance(row, dict) and row.get("verification_basis") == "independent_model"
+    ]
+    if not eligible:
+        return {}
+    return max(eligible, key=lambda row: str(row.get("checked_at") or ""))
 
 
 def _pack_from_items(quiz_id: str, items: list[dict], session_id: str | None = None) -> dict:

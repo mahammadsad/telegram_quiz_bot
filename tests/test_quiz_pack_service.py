@@ -35,6 +35,42 @@ def pack():
     }
 
 
+def persisted_pack(rows):
+    items = []
+    for index, row in enumerate(rows):
+        question = {
+            "id": f"question-{index}",
+            "question_text": row["question"],
+            "option_a": row["options"][0],
+            "option_b": row["options"][1],
+            "option_c": row["options"][2],
+            "option_d": row["options"][3],
+            "correct_option": "ABCD"[row["correct_index"]],
+            "explanation": row["explanation"],
+            "detailed_explanation": row["detailed_explanation"],
+            "subject": "history",
+            "topic": "আধুনিক ভারত",
+            **{key: value for key, value in row.items() if key not in {"question", "options", "correct_index"}},
+        }
+        items.append({"mapping": {"question_order": index + 1}, "question": question})
+    return {
+        "quiz_id": QUIZ_ID,
+        "items": items,
+        "meta": {"quiz_id": QUIZ_ID, "subject_key": "history", "chapter": "আধুনিক ভারত"},
+    }
+
+
+def certified_run():
+    return {
+        "status": "posted",
+        "question_count": 10,
+        "integrity_verified": True,
+        "checksum_contract_version": 2,
+        "generated_checksum": "checksum",
+        "persisted_checksum": "checksum",
+    }
+
+
 def setup_common(monkeypatch):
     monkeypatch.setattr(service, "get_ready_quiz_pack", lambda quiz_id: pack())
     monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
@@ -227,6 +263,82 @@ def test_pack_save_preserves_the_grounded_multi_topic_contract(monkeypatch, vali
     )
 
     assert result is saved_pack
+
+
+def test_recovery_does_not_infer_a_stricter_diversity_contract(monkeypatch, valid_questions):
+    rows = deepcopy(valid_questions)
+    distribution = (0, 0, 0, 1, 1, 2, 2, 3, 3, 4)
+    for index, (row, group) in enumerate(zip(rows, distribution, strict=True)):
+        row["source_document_id"] = f"22222222-2222-4222-8222-{group + 1:012d}"
+        row["source_url"] = f"https://ncert.nic.in/history/source-{group}"
+        row["micro_topic_id"] = f"11111111-1111-4111-8111-{group + 1:012d}"
+        row["micro_topic_key"] = f"history:modern-india:topic-{group}"
+        row["correct_index"] = index % 4
+    saved = persisted_pack(rows)
+    monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: saved)
+    monkeypatch.setattr(service, "checksum_for_pack", lambda value: "checksum")
+
+    assert service.get_recoverable_quiz_pack(QUIZ_ID, certified_run()) is saved
+
+
+def test_recovery_accepts_certified_source_less_model_verified_pack(monkeypatch, valid_questions):
+    rows = deepcopy(valid_questions)
+    for index, row in enumerate(rows):
+        row.update({
+            "source_document_id": None,
+            "source_url": None,
+            "source_title": None,
+            "source_domain": None,
+            "source_kind": None,
+            "source_published_at": None,
+            "source_accessed_at": None,
+            "evidence_summary": None,
+            "fact_version": None,
+            "knowledge_point_id": f"aaaaaaaa-aaaa-4aaa-8aaa-{index + 1:012d}",
+            "micro_topic_id": f"11111111-1111-4111-8111-{index + 1:012d}",
+            "micro_topic_key": f"history:modern-india:topic-{index}",
+            "verification_status": "verified",
+            "review_required": False,
+        })
+    saved = persisted_pack(rows)
+    for index, item in enumerate(saved["items"]):
+        question = item["question"]
+        question["knowledge_points"] = {
+            "id": question["knowledge_point_id"],
+            "subject_key": "history",
+            "micro_topic_id": question["micro_topic_id"],
+            "canonical_claim": f"ঐতিহাসিক দাবি {index}",
+            "entity_key": f"entity-{index}",
+            "relation_key": "has-answer",
+            "answer_value": f"answer-{index}",
+            "time_scope": "timeless",
+            "syllabus_status": "mapped",
+            "status": "active",
+        }
+        question["question_verifications"] = [{
+            "source_document_id": None,
+            "verifier_model": "gemini-verifier",
+            "verdict": "verified",
+            "confidence": 0.95,
+            "checks": {"independent_model": True, "source_grounded": False},
+            "notes": "Independent verification passed.",
+            "checked_at": "2026-08-08T10:00:00+00:00",
+            "verification_basis": "independent_model",
+        }]
+    monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: saved)
+    monkeypatch.setattr(service, "checksum_for_pack", lambda value: "checksum")
+
+    assert service.get_recoverable_quiz_pack(QUIZ_ID, certified_run()) is saved
+
+
+def test_recovery_rejects_a_mixed_source_contract(monkeypatch, valid_questions):
+    rows = deepcopy(valid_questions)
+    rows[0]["source_document_id"] = None
+    saved = persisted_pack(rows)
+    monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: saved)
+    monkeypatch.setattr(service, "checksum_for_pack", lambda value: "checksum")
+
+    assert service.get_recoverable_quiz_pack(QUIZ_ID, certified_run()) is None
 
 
 def test_near_duplicate_is_rejected_instead_of_substituted(monkeypatch, valid_questions):

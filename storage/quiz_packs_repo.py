@@ -11,7 +11,10 @@ def list_questions(quiz_id: str) -> list[Row]:
     result = (
         get_client()
         .table("quiz_questions")
-        .select("id,quiz_id,question_id,question_order,created_at,questions(*)")
+        .select(
+            "id,quiz_id,question_id,question_order,created_at,"
+            "questions(*,knowledge_points(*),question_verifications(*))"
+        )
         .eq("quiz_id", quiz_id)
         .order("question_order")
         .execute()
