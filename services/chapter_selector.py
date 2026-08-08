@@ -48,6 +48,22 @@ def select_chapter(subject_key: str, target_date: date, history: list[dict] | No
     return min(candidates, key=lambda chapter: previous_dates.get(chapter, date.min))
 
 
+def select_alternate_chapter(
+    subject_key: str,
+    target_date: date,
+    current_chapter: str,
+    history: list[dict] | None = None,
+) -> str:
+    """Choose another catalogue chapter after a generated-content collision."""
+    rows = (
+        chapter_history_repo.list_for_subject(subject_key)
+        if history is None
+        else list(history)
+    )
+    rows.append({"chapter": current_chapter, "selected_for": target_date.isoformat()})
+    return select_chapter(subject_key, target_date, rows)
+
+
 def _as_date(value) -> date | None:
     if isinstance(value, date):
         return value
