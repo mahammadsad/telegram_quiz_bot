@@ -587,6 +587,7 @@ def test_phase_d_current_affairs_event_claim_and_pool_contract(database_url: str
             from public.quiz_micro_topics topic
             join public.quiz_chapters chapter on chapter.id = topic.chapter_id
             where chapter.subject_key = 'current-affairs'
+              and chapter.name = 'জাতীয় সাম্প্রতিক ঘটনা'
             order by topic.key
             limit 1
             """
