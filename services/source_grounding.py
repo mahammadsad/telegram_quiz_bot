@@ -8,6 +8,10 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from config.settings import APP_TIMEZONE, CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS
+from services.current_affairs_pipeline import (
+    EVENT_POLICY_VERSION,
+    authoritative_source_domain,
+)
 from services.question_validation import QuizValidationError
 from storage import source_documents_repo
 from utils.source_validation import is_placeholder_source
@@ -30,6 +34,9 @@ class SourceDocument:
     micro_topic_id: str = ""
     micro_topic_key: str = ""
     micro_topic_name: str = ""
+    current_affairs_event_date: str | None = None
+    current_affairs_practice_pool: str | None = None
+    current_affairs_verification_policy: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -79,6 +86,11 @@ class GroundingBundle:
                 "source_published_at": row.published_at,
                 "fact_version": row.fact_version,
                 "verified_facts": row.fact_summary,
+                "current_affairs_event_date": row.current_affairs_event_date,
+                "current_affairs_practice_pool": row.current_affairs_practice_pool,
+                "current_affairs_verification_policy": (
+                    row.current_affairs_verification_policy
+                ),
             }
             for row in self.documents
         ]
@@ -145,10 +157,30 @@ def _validated_document(row: dict, subject_key: str, target_date: date) -> Sourc
             raise QuizValidationError("Current-affairs grounding must use official or primary sources.")
         if not published_at:
             raise QuizValidationError("Current-affairs sources must include a publication date.")
-        oldest = target_date - timedelta(days=CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS)
-        published_date = _as_local_date(published_at)
-        if published_date < oldest or published_date > target_date:
-            raise QuizValidationError("Current-affairs source date is outside the allowed window.")
+        event_policy = _optional(row.get("current_affairs_verification_policy"))
+        event_date = _optional(row.get("current_affairs_event_date"))
+        practice_pool = _optional(row.get("current_affairs_practice_pool"))
+        if event_policy:
+            if event_policy != EVENT_POLICY_VERSION or not event_date or not practice_pool:
+                raise QuizValidationError("Current-affairs event evidence contract is invalid.")
+            try:
+                authoritative_source_domain(domain)
+            except ValueError as exc:
+                raise QuizValidationError(
+                    "Current-affairs event evidence source is not authoritative."
+                ) from exc
+            event_age = (target_date - _as_date(event_date)).days
+            if not 0 <= event_age <= 180:
+                raise QuizValidationError(
+                    "Current-affairs event date is outside the revision window."
+                )
+        else:
+            oldest = target_date - timedelta(days=CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS)
+            published_date = _as_local_date(published_at)
+            if published_date < oldest or published_date > target_date:
+                raise QuizValidationError(
+                    "Current-affairs source date is outside the allowed window."
+                )
 
     return SourceDocument(
         id=source_id,
@@ -164,6 +196,15 @@ def _validated_document(row: dict, subject_key: str, target_date: date) -> Sourc
         micro_topic_id=_required(row, "micro_topic_id"),
         micro_topic_key=_required(row, "micro_topic_key"),
         micro_topic_name=_required(row, "micro_topic_name"),
+        current_affairs_event_date=_optional(
+            row.get("current_affairs_event_date")
+        ),
+        current_affairs_practice_pool=_optional(
+            row.get("current_affairs_practice_pool")
+        ),
+        current_affairs_verification_policy=_optional(
+            row.get("current_affairs_verification_policy")
+        ),
     )
 
 

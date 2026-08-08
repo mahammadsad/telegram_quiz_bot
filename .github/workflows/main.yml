@@ -5,19 +5,7 @@ permissions:
 
 on:
   schedule:
-    - cron: "30 1 * * *"
-    - cron: "30 2 * * *"
-    - cron: "30 3 * * *"
-    - cron: "30 4 * * *"
-    - cron: "30 5 * * *"
-    - cron: "30 6 * * *"
-    - cron: "30 7 * * *"
-    - cron: "30 8 * * *"
-    - cron: "30 9 * * *"
-    - cron: "30 10 * * *"
-    - cron: "30 11 * * *"
-    - cron: "30 12 * * *"
-    - cron: "30 13 * * *"
+    - cron: "*/15 * * * *"
     - cron: "0 15 * * *"
   workflow_dispatch:
     inputs:
@@ -26,13 +14,13 @@ on:
         required: true
         default: subject-quiz
         type: choice
-        options: [preflight, subject-quiz, recover-missed-quizzes, export-static-fallbacks, announce]
+        options: [preflight, dispatch-due-jobs, daily-completeness, subject-quiz, recover-missed-quizzes, export-static-fallbacks, announce]
       subject:
         description: Canonical subject key (required for subject-quiz)
         required: false
         type: string
       force_post:
-        description: Repost saved validated content without Gemini
+        description: Post saved validated content without Gemini
         required: false
         default: false
         type: boolean
@@ -71,7 +59,7 @@ jobs:
           from datetime import datetime
           from zoneinfo import ZoneInfo
 
-          from config.schedule import RECOVERY_CRON, scheduled_action
+          from config.schedule import scheduled_action
           from config.subjects import get_subject
 
           if os.environ["EVENT_NAME"] == "workflow_dispatch":
@@ -85,7 +73,7 @@ jobs:
               mode == "export-static-fallbacks"
               or (
                   os.environ["EVENT_NAME"] == "schedule"
-                  and os.environ["EVENT_SCHEDULE"] == RECOVERY_CRON
+                  and mode == "daily-completeness"
               )
           )
 
@@ -153,7 +141,7 @@ jobs:
           EXPECTED_SUPABASE_PROJECT_REF: tizxodkcpglmxgtwepor
           QUESTION_VERIFICATION_MIN_CONFIDENCE: ${{ vars.QUESTION_VERIFICATION_MIN_CONFIDENCE || '0.85' }}
           CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS: ${{ vars.CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS || '45' }}
-          SOURCE_BACKED_ROTATION_ENABLED: ${{ vars.SOURCE_BACKED_ROTATION_ENABLED || 'false' }}
+          SOURCE_BACKED_ROTATION_ENABLED: "true"
           QUESTION_REPORT_THRESHOLD: ${{ vars.QUESTION_REPORT_THRESHOLD || '3' }}
           WRITE_STATIC_QUIZ_JSON: ${{ needs.resolve_job.outputs.commit_fallbacks }}
         run: python bot.py --mode preflight
@@ -161,31 +149,13 @@ jobs:
       - name: Run exactly one mapped job
         env: *bot-env
         run: |
-          status=0
           args=(--mode "${{ needs.resolve_job.outputs.mode }}")
           if [ -n "${{ needs.resolve_job.outputs.subject }}" ]; then args+=(--subject "${{ needs.resolve_job.outputs.subject }}"); fi
           if [ "${{ needs.resolve_job.outputs.force_post }}" = "true" ]; then args+=(--force-post); fi
           if [ "${{ needs.resolve_job.outputs.force_regenerate }}" = "true" ]; then args+=(--force-regenerate); fi
 
-          log_file="$(mktemp)"
-          for attempt in 1 2 3; do
-            : > "$log_file"
-            set +e
-            python bot.py "${args[@]}" 2>&1 | tee "$log_file"
-            status=${PIPESTATUS[0]}
-            set -e
-
-            if [ "$status" -eq 0 ]; then
-              break
-            fi
-            if ! grep -q "RUN_FAILED category=quiz_content_collision" "$log_file"; then
-              break
-            fi
-            if [ "$attempt" -lt 3 ]; then
-              echo "Retrying quiz generation after a scoped near-duplicate collision (attempt $((attempt + 1))/3)."
-            fi
-          done
-          rm -f "$log_file"
+          status=0
+          python bot.py "${args[@]}" || status=$?
 
           if [ "${{ needs.resolve_job.outputs.commit_fallbacks }}" = "true" ] && [ "${{ needs.resolve_job.outputs.mode }}" != "export-static-fallbacks" ]; then
             python bot.py --mode export-static-fallbacks || status=$?

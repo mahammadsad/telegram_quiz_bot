@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from typing import Any
 
 from config.settings import QUESTION_REPORT_THRESHOLD
@@ -29,6 +30,7 @@ DIFFICULTIES = {"adaptive", "easy", "medium", "hard"}
 QUIZ_MODES = {"timed", "practice"}
 BOOKMARK_TYPES = {"question", "resource"}
 PRACTICE_SOURCES = {"wrong", "due", "bookmark", "weak_topic"}
+MASTERY_STRENGTHS = {"all", "due", "weak", "strong"}
 
 
 def dashboard(telegram_user: dict) -> dict:
@@ -41,6 +43,61 @@ def due_reviews(telegram_user: dict, *, limit: int, offset: int) -> dict:
     return _safe(
         personal_learning_repo.due_reviews(
             _user_id(telegram_user),
+            limit=_page_limit(limit),
+            offset=max(0, offset),
+        )
+    )
+
+
+def knowledge_reviews(telegram_user: dict, *, limit: int, offset: int) -> dict:
+    return _safe(
+        personal_learning_repo.knowledge_reviews(
+            _user_id(telegram_user),
+            limit=_page_limit(limit),
+            offset=max(0, offset),
+        )
+    )
+
+
+def daily_rollups(
+    telegram_user: dict,
+    *,
+    date_from: date | None,
+    date_to: date | None,
+    limit: int,
+    offset: int,
+) -> dict:
+    if date_from and date_to and date_from > date_to:
+        raise ValueError("Start date must not be after end date.")
+    return _safe(
+        personal_learning_repo.daily_rollups(
+            _user_id(telegram_user),
+            date_from=date_from.isoformat() if date_from else None,
+            date_to=date_to.isoformat() if date_to else None,
+            limit=_page_limit(limit),
+            offset=max(0, offset),
+        )
+    )
+
+
+def knowledge_mastery(
+    telegram_user: dict,
+    *,
+    subject_key: str | None,
+    strength: str,
+    limit: int,
+    offset: int,
+) -> dict:
+    clean_subject = subject_key.strip() if subject_key else None
+    if clean_subject and clean_subject not in SUBJECTS:
+        raise ValueError("Unknown subject key.")
+    if strength not in MASTERY_STRENGTHS:
+        raise ValueError("Unknown mastery strength filter.")
+    return _safe(
+        personal_learning_repo.knowledge_mastery(
+            _user_id(telegram_user),
+            subject_key=clean_subject,
+            strength=strength,
             limit=_page_limit(limit),
             offset=max(0, offset),
         )

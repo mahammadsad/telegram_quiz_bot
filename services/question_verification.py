@@ -43,6 +43,7 @@ def verify_questions(
     pool: GeminiProviderPool,
     *,
     quiz_id: str | None = None,
+    allow_partial: bool = False,
 ) -> tuple[list[dict], dict]:
     prompt = _verification_prompt(questions, bundle)
     raw_text, metadata = pool.generate_subject_quiz(
@@ -104,12 +105,16 @@ def verify_questions(
             )
             continue
         notes = str(result.get("notes") or "").strip()
+        deterministic = question.get("deterministic_verification")
         clean.append({
             **question,
             "verification_status": "verified",
             "verification_score": float(confidence),
             "verification_notes": notes or "All source-grounded checks passed.",
-            "verification_checks": {name: True for name in CHECK_FIELDS},
+            "verification_checks": {
+                **{name: True for name in CHECK_FIELDS},
+                "deterministic": deterministic,
+            },
             "verified_at": verified_at,
             "verification_model": metadata.get("model"),
         })
@@ -118,13 +123,31 @@ def verify_questions(
             quiz_id, questions, bundle, raw, raw_text, "rejected",
             rejection_reasons, metadata,
         )
-        raise QuizValidationError(
-            "Independent verification rejected the quiz: " + "; ".join(rejection_reasons)
-        )
+        if not allow_partial:
+            raise QuizValidationError(
+                "Independent verification rejected the quiz: " + "; ".join(rejection_reasons)
+            )
+        partial_metadata = {
+            **metadata,
+            "candidate_count": len(questions),
+            "accepted_count": len(clean),
+            "rejected_count": len(rejection_reasons),
+            "rejection_reasons": rejection_reasons,
+        }
+        return clean, partial_metadata
     _record_audit(
         quiz_id, questions, bundle, raw, raw_text, "verified", [], metadata,
     )
     return clean, metadata
+
+
+def verify_question_candidates(
+    questions: list[dict],
+    bundle: GroundingBundle,
+    pool: GeminiProviderPool,
+) -> tuple[list[dict], dict]:
+    """Verify an async candidate batch while preserving accepted items."""
+    return verify_questions(questions, bundle, pool, allow_partial=True)
 
 
 def _verification_prompt(questions: list[dict], bundle: GroundingBundle) -> str:
@@ -139,6 +162,7 @@ def _verification_prompt(questions: list[dict], bundle: GroundingBundle) -> str:
             "difficulty": row["difficulty"],
             "micro_topic_key": row["micro_topic_key"],
             "source_document_id": row["source_document_id"],
+            "deterministic_verification": row.get("deterministic_verification"),
         }
         for index, row in enumerate(questions, start=1)
     ]

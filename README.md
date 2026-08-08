@@ -37,6 +37,8 @@ an administrator approves it.
 | `index.html` | Telegram-theme-aware quiz UI with a clearly read-only static fallback |
 | `dashboard.html` | Private learner analytics, preferences, and privacy-safe leaderboard families |
 | `practice.html` | Authenticated wrong/due/bookmark/weak-topic practice with post-answer review |
+| `mock.html` | Durable timed multi-section attempts, palette navigation, and post-submit analysis |
+| `service-worker.js` | Low-data shell plus explicitly answer-free pre-submission projection caching |
 | `.github/workflows/` | Production recovery, guarded source refresh/import, staging smoke, PostgreSQL/Playwright CI, and resource maintenance |
 
 The browser never receives a Supabase service-role key. It talks only to
@@ -119,10 +121,11 @@ The schedule and subject identities live in
 `config/schedule.py` and `config/subjects.py`; the complete curriculum lives in
 `config/syllabus_catalog.py`. Workflow concurrency uses the logical date and
 subject, waits instead of cancelling an active run, and has no run-ID component.
-The expansion stays on the legacy runtime rotation until the repository
-variable `SOURCE_BACKED_ROTATION_ENABLED` is exactly `true`. When enabled, the
-reviewed v1 rotation uses seven established Computer chapters and exactly two
-source-covered chapters for each other subject.
+Production and staging use the source-backed contract declared in
+`config/production.toml`. The reviewed v1 rotation uses seven established
+Computer chapters and exactly two source-covered chapters for each other
+subject. A conflicting legacy environment variable now fails closed instead
+of silently changing this policy.
 
 ## Configuration
 
@@ -155,19 +158,19 @@ Optional server settings:
 
 - `TELEGRAM_GENERAL_THREAD_ID`, `TELEGRAM_ADMIN_CHAT_ID`,
   `TELEGRAM_ADMIN_USER_IDS`
-- `GEMINI_MODEL_PRIMARY`, `GEMINI_MODEL_FALLBACK`, failover/backoff settings,
-  and `GEMINI_FACTUAL_TEMPERATURE` (capped at `0.4`)
-- `QUIZ_CLAIM_TIMEOUT_MINUTES` (minimum 5; default 20)
-- `QUESTION_VERIFICATION_MIN_CONFIDENCE` (default `0.85`)
-- `CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS` (default/database maximum `45`)
-- `SOURCE_BACKED_ROTATION_ENABLED` (default `false`; enable only after the
-  source-rollout migration and coverage gates pass)
-- `QUESTION_REPORT_THRESHOLD` (minimum `2`; default `3`)
+- Gemini backoff settings and `GEMINI_FACTUAL_TEMPERATURE` (capped at `0.4`)
 - `YOUTUBE_API_KEY` for optional, quota-bounded YouTube candidate discovery;
   discovered rows always require administrator review
 - `CORS_ALLOWED_ORIGINS`, `WRITE_STATIC_QUIZ_JSON`
 - `TELEGRAM_INIT_DATA_MAX_AGE_SECONDS` (read default 24 hours) and
   `TELEGRAM_WRITE_INIT_DATA_MAX_AGE_SECONDS` (sensitive-write default 1 hour)
+
+Non-secret production policy—including model names, source-backed rotation,
+verification/current-affairs thresholds, scheduler cooldowns, static fallback
+rules, and the required database feature contract—lives in the versioned
+`config/production.toml`. Legacy environment variables are accepted only when
+they match it exactly. Preflight and health expose its sanitized version/hash,
+never secret values.
 
 Development-only:
 
@@ -191,6 +194,9 @@ The application never applies DDL during startup.
 The v7.2.3 privacy gate additionally requires
 `20260801045552_leaderboard_privacy_hotfix.sql`; readiness remains closed until
 its safe leaderboard definitions and service-role-only grants are verified.
+Atomic Telegram acknowledgement and post bookkeeping additionally require
+`20260808063007_atomic_quiz_post_finalization.sql`; readiness remains closed
+until its columns, RPCs, and service-role-only grants are verified.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,
 and locks tables, legacy views, and private functions to the service role. Full
@@ -209,7 +215,9 @@ The immutable-integrity, revision-report, and ranking runbook is
 forward migration and verification queries are documented in
 `docs/MIGRATION_20260724_DURABLE_RATE_LIMITS.md`. The public leaderboard
 identity and cache-safety rollout is documented in
-`docs/MIGRATION_20260801_LEADERBOARD_PRIVACY.md`.
+`docs/MIGRATION_20260801_LEADERBOARD_PRIVACY.md`. Atomic post-finalization
+deployment and reconciliation are documented in
+`docs/MIGRATION_20260808_POST_FINALIZATION.md`.
 
 Before enabling the source-backed rotation, validate and import only its
 selected static rows:
@@ -348,11 +356,14 @@ python scripts/discover_learning_resources.py --limit 5
 verify that Telegram did not accept the original message. `--force-regenerate`
 explicitly replaces the pack; the flags are mutually exclusive. Recovery skips
 posted/future runs, takes over only expired leases, and reuses valid saved
-content before generating.
+content before generating. Its final machine-readable JSON and human-readable
+daily health report come from the date's `quiz_runs` rows and make the workflow
+fail whenever a due subject is not posted.
 
 Liveness only confirms that the process is running. Readiness checks critical
 configuration, production/staging project ownership, Telegram routing, Gemini,
-Supabase connectivity, exact schema/RPC/grant/RLS contract, verification
+Supabase connectivity, exact schema/RPC/grant/RLS and post-finalization
+contract, verification
 threshold, and retrieval of a ten-question checksum-certified active quiz. It
 returns HTTP 503 on any essential failure and never exposes secret values or raw
 database errors.

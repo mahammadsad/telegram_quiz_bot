@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from typing import Any
 
 from config.settings import (
@@ -35,7 +35,6 @@ from storage import (
     quiz_attempts_repo,
     quiz_packs_repo,
     quiz_runs_repo,
-    source_documents_repo,
     users_repo,
 )
 from utils.hashing import normalize_text, question_content_hash, question_hash
@@ -53,6 +52,8 @@ REPORT_REASONS = {
     "outdated",
     "outside_syllabus",
     "broken_source",
+    "duplicate_question",
+    "translation_error",
     "other",
 }
 
@@ -74,9 +75,7 @@ def get_quiz_pack(quiz_id: str) -> dict | None:
             if isinstance(question, list):
                 question = question[0] if question else {}
             if not question:
-                raise DatabaseIntegrityError(
-                    f"Quiz {quiz_id} has an ordered mapping without a question."
-                )
+                raise DatabaseIntegrityError(f"Quiz {quiz_id} has an ordered mapping without a question.")
             mapped_items.append({"mapping": mapping, "question": question})
         return _pack_from_items(quiz_id, mapped_items)
 
@@ -103,10 +102,23 @@ def get_quiz_pack(quiz_id: str) -> dict | None:
 
 def get_ready_quiz_pack(quiz_id: str) -> dict | None:
     """Return only a complete pack whose saved database content is certified."""
-    run = quiz_runs_repo.get(quiz_id)
+    return get_recoverable_quiz_pack(quiz_id, quiz_runs_repo.get(quiz_id))
+
+
+def get_recoverable_quiz_pack(quiz_id: str, run: dict | None) -> dict | None:
+    """Read and revalidate a checksum-certified persisted pack.
+
+    Persisted source ownership is reconstructed per source document so a valid
+    multi-micro-topic pack remains recoverable without weakening the original
+    source/topic relationship checks.
+    """
+    status = run.get("status") if run else None
+    certified_generation_failure = bool(
+        run and status == "generation_failed" and run.get("question_count") == QUESTION_COUNT and run.get("ready_at")
+    )
     if (
         not run
-        or run.get("status") not in {"ready", "posting", "posting_failed", "posted"}
+        or (status not in {"ready", "posting", "posting_failed", "posted"} and not certified_generation_failure)
         or run.get("integrity_verified") is not True
         or int(run.get("checksum_contract_version") or 0) != 2
         or not run.get("generated_checksum")
@@ -116,6 +128,11 @@ def get_ready_quiz_pack(quiz_id: str) -> dict | None:
     pack = get_quiz_pack(quiz_id)
     if not pack or len(pack.get("items") or []) != QUESTION_COUNT:
         return None
+    try:
+        _validate_saved_pack_source_contract(pack)
+    except (ValueError, TypeError):
+        LOG.warning("QUIZ_READ_BLOCKED invalid_saved_source_contract quiz_id=%s", quiz_id)
+        return None
     if checksum_for_pack(pack) != run["persisted_checksum"]:
         LOG.error("QUIZ_READ_BLOCKED checksum_mismatch quiz_id=%s", quiz_id)
         return None
@@ -123,6 +140,69 @@ def get_ready_quiz_pack(quiz_id: str) -> dict | None:
         run.get("negative_mark_penalty"),
     )
     return pack
+
+
+def _validate_saved_pack_source_contract(pack: dict) -> None:
+    meta = pack.get("meta") or {}
+    subject_key = str(meta.get("subject_key") or meta.get("subject") or "")
+    chapter = str(meta.get("chapter") or "")
+    raw: list[dict] = []
+    allowed_source_topics: dict[str, tuple[str, str]] = {}
+    for item in pack.get("items") or []:
+        question = item.get("question") or {}
+        source_id = str(question.get("source_document_id") or "")
+        topic = (
+            str(question.get("micro_topic_id") or ""),
+            str(question.get("micro_topic_key") or ""),
+        )
+        prior_topic = allowed_source_topics.setdefault(source_id, topic)
+        if prior_topic != topic:
+            raise ValueError("One source document cannot own multiple persisted micro-topics.")
+        raw.append(
+            {
+                "question": question.get("question_text"),
+                "options": [
+                    question.get("option_a"),
+                    question.get("option_b"),
+                    question.get("option_c"),
+                    question.get("option_d"),
+                ],
+                "correct_index": OPTION_LETTERS.find(str(question.get("correct_option") or "")),
+                "explanation": question.get("explanation"),
+                "detailed_explanation": question.get("detailed_explanation"),
+                "subject_key": subject_key,
+                "chapter": chapter,
+                "micro_topic_id": question.get("micro_topic_id"),
+                "micro_topic_key": question.get("micro_topic_key"),
+                "source_document_id": source_id,
+                "source_url": question.get("source_url"),
+                "source_title": question.get("source_title"),
+                "source_domain": question.get("source_domain"),
+                "source_kind": question.get("source_kind"),
+                "source_published_at": question.get("source_published_at"),
+                "source_accessed_at": question.get("source_accessed_at"),
+                "evidence_summary": question.get("evidence_summary"),
+                "fact_version": question.get("fact_version"),
+                "difficulty": question.get("difficulty"),
+                "language": question.get("language"),
+                "verification_status": question.get("verification_status"),
+                "verification_score": question.get("verification_score"),
+                "verification_notes": question.get("verification_notes"),
+                "verification_checks": question.get("verification_checks"),
+                "verified_at": question.get("verified_at"),
+                "verification_model": question.get("verification_model"),
+            }
+        )
+    validate_questions(
+        raw,
+        subject_key,
+        chapter,
+        enforce_composition=False,
+        allowed_source_ids=set(allowed_source_topics),
+        allowed_source_topics=allowed_source_topics,
+        required_source_diversity=len(allowed_source_topics),
+        required_topic_diversity=len(set(allowed_source_topics.values())),
+    )
 
 
 def _pack_from_items(quiz_id: str, items: list[dict], session_id: str | None = None) -> dict:
@@ -181,9 +261,7 @@ def record_quiz_pack(
         replace=replace,
     )
     if not save_result.get("ready"):
-        raise DatabaseIntegrityError(
-            "Saved quiz checksum did not match generated content; posting is blocked."
-        )
+        raise DatabaseIntegrityError("Saved quiz checksum did not match generated content; posting is blocked.")
     saved = get_quiz_pack(quiz_id)
     if not saved or len(saved.get("items") or []) != QUESTION_COUNT:
         raise DatabaseIntegrityError("Atomic quiz save did not produce a complete readable pack.")
@@ -193,10 +271,7 @@ def record_quiz_pack(
         chapter,
         [_content_row_from_saved_item(item) for item in saved["items"]],
     )
-    if (
-        readback_checksum != checksum
-        or readback_checksum != save_result.get("persisted_checksum")
-    ):
+    if readback_checksum != checksum or readback_checksum != save_result.get("persisted_checksum"):
         quiz_packs_repo.record_readback_integrity_failure(
             quiz_id=quiz_id,
             worker_id=worker_id,
@@ -204,28 +279,31 @@ def record_quiz_pack(
             persisted_checksum=readback_checksum,
             question_ids=[str(item["question"]["id"]) for item in saved["items"]],
         )
-        raise DatabaseIntegrityError(
-            "Quiz read-back checksum did not match generated content; posting is blocked."
-        )
+        raise DatabaseIntegrityError("Quiz read-back checksum did not match generated content; posting is blocked.")
     LOG.info("Recorded and checksum-verified quiz pack %s with 10 immutable versions.", quiz_id)
     return saved
 
 
-def mark_pack_posted(pack: dict) -> None:
-    used_at = datetime.now(timezone.utc).isoformat()
-    micro_topic_ids: set[str] = set()
-    for item in pack.get("items", []):
-        question = item["question"]
-        questions_repo.mark_used(
-            question_id=question["id"],
-            usage_count=question.get("usage_count", 0),
-            min_gap_days=SCHEDULER_MIN_REUSE_GAP_DAYS,
-            max_gap_days=SCHEDULER_MAX_REUSE_GAP_DAYS,
-        )
-        if question.get("micro_topic_id"):
-            micro_topic_ids.add(str(question["micro_topic_id"]))
-    for micro_topic_id in micro_topic_ids:
-        source_documents_repo.mark_micro_topic_used(micro_topic_id, used_at)
+def finalize_quiz_post(
+    *,
+    quiz_id: str,
+    worker_id: str,
+    telegram_message_id: int,
+    acknowledged_at: datetime,
+    telegram_chat_id: int,
+    telegram_thread_id: int,
+) -> dict:
+    """Atomically finalize acknowledged delivery and every usage dimension."""
+    return quiz_runs_repo.finalize_post(
+        quiz_id=quiz_id,
+        worker_id=worker_id,
+        telegram_message_id=telegram_message_id,
+        acknowledged_at=acknowledged_at,
+        telegram_chat_id=telegram_chat_id,
+        telegram_thread_id=telegram_thread_id,
+        min_gap_days=SCHEDULER_MIN_REUSE_GAP_DAYS,
+        max_gap_days=SCHEDULER_MAX_REUSE_GAP_DAYS,
+    )
 
 
 def public_quiz_payload(pack: dict) -> dict:
@@ -234,8 +312,7 @@ def public_quiz_payload(pack: dict) -> dict:
         "capabilities": {
             "submission": True,
             "source": "api",
-            "marking": pack.get("marking_scheme")
-            or _marking_scheme(QUIZ_INCORRECT_PENALTY),
+            "marking": pack.get("marking_scheme") or _marking_scheme(QUIZ_INCORRECT_PENALTY),
         },
         "qs": [
             {
@@ -402,7 +479,9 @@ def _build_question(quiz_id: str, item: dict, meta: dict) -> Question:
         verification_status=_str(item.get("verification_status")),
         verification_score=item.get("verification_score"),
         verification_notes=_str(item.get("verification_notes")),
-        verification_checks=item.get("verification_checks") if isinstance(item.get("verification_checks"), dict) else {},
+        verification_checks=item.get("verification_checks")
+        if isinstance(item.get("verification_checks"), dict)
+        else {},
         verified_at=_str(item.get("verified_at")) or None,
         verification_model=_str(item.get("verification_model")) or None,
         stem_hash=_str(item.get("stem_hash")) or question_hash(question_text),
@@ -418,7 +497,17 @@ def _build_question(quiz_id: str, item: dict, meta: dict) -> Question:
         fact_version=_str(item.get("fact_version")) or None,
         expires_at=_str(item.get("expires_at")) or None,
         review_required=False,
+        knowledge_point_id=_str(item.get("knowledge_point_id")) or None,
+        variant_fingerprint=_str(item.get("variant_fingerprint")) or None,
+        question_form=_str(item.get("question_form")) or "mcq",
+        inventory_status=_str(item.get("inventory_status")) or "legacy",
+        eligible_at=_str(item.get("eligible_at")) or None,
     )
+
+
+def question_row_from_validated_candidate(item: dict, meta: dict) -> dict:
+    """Project an independently validated candidate into database columns."""
+    return _build_question("verified-inventory", item, meta).to_insert_dict()
 
 
 def _question_row_for_atomic_save(quiz_id: str, item: dict, meta: dict) -> dict:

@@ -16,6 +16,56 @@ def get_leaderboard_privacy_contract() -> Row:
     return as_row(result.data, "leaderboard privacy contract")
 
 
+def get_post_finalization_contract() -> Row:
+    result = get_client().rpc("get_post_finalization_contract", {}).execute()
+    return as_row(result.data, "post finalization contract")
+
+
+def get_quiz_job_contract() -> Row:
+    result = get_client().rpc("get_quiz_job_contract", {}).execute()
+    return as_row(result.data, "quiz job contract")
+
+
+def get_phase_c_content_contract() -> Row:
+    result = get_client().rpc("get_phase_c_content_contract", {}).execute()
+    return as_row(result.data, "Phase C content contract")
+
+
+def get_phase_c_inventory_contract() -> Row:
+    result = get_client().rpc("get_phase_c_inventory_contract", {}).execute()
+    return as_row(result.data, "Phase C inventory contract")
+
+
+def get_phase_c_candidate_contract() -> Row:
+    result = get_client().rpc("get_phase_c_candidate_contract", {}).execute()
+    return as_row(result.data, "Phase C candidate contract")
+
+
+def get_phase_d_current_affairs_contract() -> Row:
+    result = get_client().rpc("get_phase_d_current_affairs_contract", {}).execute()
+    return as_row(result.data, "Phase D current-affairs contract")
+
+
+def get_phase_e_personal_learning_contract() -> Row:
+    result = get_client().rpc("get_phase_e_personal_learning_contract", {}).execute()
+    return as_row(result.data, "Phase E personal-learning contract")
+
+
+def get_phase_e_exam_configuration_contract() -> Row:
+    result = get_client().rpc("get_phase_e_exam_configuration_contract", {}).execute()
+    return as_row(result.data, "Phase E exam-configuration contract")
+
+
+def get_phase_e_previous_year_mock_contract() -> Row:
+    result = get_client().rpc("get_phase_e_previous_year_mock_contract", {}).execute()
+    return as_row(result.data, "Phase E previous-year/mock contract")
+
+
+def get_phase_e_question_quality_contract() -> Row:
+    result = get_client().rpc("get_phase_e_question_quality_contract", {}).execute()
+    return as_row(result.data, "Phase E question-quality contract")
+
+
 def active_quiz_probe() -> Row | None:
     result = (
         get_client()

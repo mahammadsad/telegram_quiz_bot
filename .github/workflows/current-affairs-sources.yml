@@ -88,16 +88,9 @@ jobs:
         if: env.OPERATION == 'refresh'
         run: |
           python - <<'PY'
-          from database.client import get_client
+          from bot import validate_database_schema
 
-          contract = get_client().rpc("get_application_schema_contract").execute().data
-          if (
-              not isinstance(contract, dict)
-              or contract.get("contract_key") != "telegram_quiz_api"
-              or contract.get("contract_version") != "2.2.0"
-              or contract.get("required_migration_version") != "20260724212939"
-          ):
-              raise SystemExit("Refusing refresh: database contract identity is not exact.")
+          validate_database_schema()
           print("database_contract_identity=true")
           PY
       - name: Validate official PIB source coverage

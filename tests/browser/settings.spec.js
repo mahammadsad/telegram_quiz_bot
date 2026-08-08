@@ -28,6 +28,8 @@ test("preferences and privacy live in a dedicated settings destination", async (
     "গোপন শিক্ষার্থী নাম",
   );
   await expect(page.locator("#revision-sound")).toBeChecked();
+  await expect(page.locator("#reminder")).toBeDisabled();
+  await expect(page.getByText("দৈনিক স্মরণবার্তা — শীঘ্রই আসছে")).toBeVisible();
   await expect(page.getByRole("link", { name: "সেটিংস" })).toHaveClass(/active/);
   await expect(page.getByRole("link", { name: "সেটিংস" })).toHaveAttribute(
     "aria-current",
@@ -45,6 +47,7 @@ test("preferences and privacy live in a dedicated settings destination", async (
   expect(api.preferenceSaves).toHaveLength(1);
   expect(api.preferenceSaves[0].revisionSoundEnabled).toBe(false);
   expect(api.preferenceSaves[0].leaderboardVisible).toBe(true);
+  expect(api.preferenceSaves[0].dailyReminderEnabled).toBe(false);
 
   await capture(page, testInfo, "dedicated-settings");
   await assertNoHorizontalOverflow(page);

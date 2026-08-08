@@ -9,13 +9,35 @@ module should call os.environ.get() directly for a setting.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import logging
 import os
+import tomllib
+from pathlib import Path
 from urllib.parse import urlparse
 
 from errors import ConfigurationError
 
 LOG = logging.getLogger("config")
+
+_PRODUCTION_CONFIG_PATH = Path(__file__).with_name("production.toml")
+PRODUCTION_CONFIG = tomllib.loads(_PRODUCTION_CONFIG_PATH.read_text(encoding="utf-8"))
+PRODUCTION_CONFIG_VERSION = str(PRODUCTION_CONFIG["meta"]["version"])
+PRODUCTION_CONFIG_HASH = hashlib.sha256(
+    json.dumps(PRODUCTION_CONFIG, sort_keys=True, separators=(",", ":")).encode()
+).hexdigest()
+
+
+def _locked_value(env_name: str, configured: object) -> str:
+    """Reject deployment drift while retaining same-value legacy variables."""
+    expected = str(configured).lower() if isinstance(configured, bool) else str(configured)
+    actual = os.environ.get(env_name)
+    if actual is not None and actual.strip().lower() != expected.lower():
+        raise ConfigurationError(
+            f"{env_name} conflicts with config/production.toml."
+        )
+    return expected
 
 
 def require_env(name: str) -> str:
@@ -65,18 +87,21 @@ def supabase_project_ref_matches(
 # a private environment mapping without mutating global state.
 GEMINI_MODEL_PRIMARY = os.environ.get(
     "GEMINI_MODEL_PRIMARY",
-    os.environ.get("GEMINI_MODEL", "gemini-3.1-flash-lite"),
-).strip() or "gemini-3.1-flash-lite"
+    _locked_value("GEMINI_MODEL", PRODUCTION_CONFIG["gemini"]["primary_model"]),
+).strip()
+_locked_value("GEMINI_MODEL_PRIMARY", PRODUCTION_CONFIG["gemini"]["primary_model"])
 GEMINI_MODEL_FALLBACK = os.environ.get(
-    "GEMINI_MODEL_FALLBACK", "gemini-2.5-flash"
-).strip() or "gemini-2.5-flash"
+    "GEMINI_MODEL_FALLBACK",
+    _locked_value("GEMINI_MODEL_FALLBACK", PRODUCTION_CONFIG["gemini"]["fallback_model"]),
+).strip()
 
 # Backward-compatible alias for older modules/database provenance. New
 # generation code always uses the explicit primary/fallback names above.
 GEMINI_MODEL = GEMINI_MODEL_PRIMARY
 
 GEMINI_FAILOVER_ENABLED = os.environ.get(
-    "GEMINI_FAILOVER_ENABLED", "true"
+    "GEMINI_FAILOVER_ENABLED",
+    _locked_value("GEMINI_FAILOVER_ENABLED", PRODUCTION_CONFIG["gemini"]["failover_enabled"]),
 ).strip().lower() == "true"
 GEMINI_MAX_ATTEMPTS_PER_KEY = max(
     1, int(os.environ.get("GEMINI_MAX_ATTEMPTS_PER_KEY", "2"))
@@ -104,17 +129,65 @@ GEMINI_FACTUAL_TEMPERATURE = min(
 # expire quickly even when a source row has a later explicit expiry.
 QUESTION_VERIFICATION_MIN_CONFIDENCE = min(
     1.0,
-    max(0.5, float(os.environ.get("QUESTION_VERIFICATION_MIN_CONFIDENCE", "0.85"))),
+    max(0.5, float(_locked_value(
+        "QUESTION_VERIFICATION_MIN_CONFIDENCE",
+        PRODUCTION_CONFIG["quiz"]["verification_min_confidence"],
+    ))),
 )
 CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS = max(
-    1, min(45, int(os.environ.get("CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS", "45")))
+    1,
+    min(45, int(_locked_value(
+        "CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS",
+        PRODUCTION_CONFIG["current_affairs"]["max_source_age_days"],
+    ))),
 )
-SOURCE_BACKED_ROTATION_ENABLED = os.environ.get(
+SOURCE_BACKED_ROTATION_ENABLED = _locked_value(
     "SOURCE_BACKED_ROTATION_ENABLED",
-    "false",
-).strip().lower() == "true"
+    PRODUCTION_CONFIG["quiz"]["source_backed_rotation_enabled"],
+).lower() == "true"
+DETERMINISTIC_PROOF_VERSION = int(
+    PRODUCTION_CONFIG["verification"]["deterministic_proof_version"]
+)
+DETERMINISTIC_PROOF_REQUIRED = bool(
+    PRODUCTION_CONFIG["verification"]["require_new_candidate_proof"]
+)
+CONTENT_INVENTORY_TARGET_DAYS = int(PRODUCTION_CONFIG["content_inventory"]["target_days"])
+CONTENT_INVENTORY_BATCH_SIZE = int(
+    PRODUCTION_CONFIG["content_inventory"]["generation_batch_size"]
+)
+CONTENT_CHAPTER_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["chapter_cooldown_days"]
+)
+CONTENT_TOPIC_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["topic_cooldown_days"]
+)
+CONTENT_MICRO_TOPIC_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["micro_topic_cooldown_days"]
+)
+CONTENT_SOURCE_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["source_cooldown_days"]
+)
+CONTENT_KNOWLEDGE_POINT_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["knowledge_point_cooldown_days"]
+)
+CONTENT_EXACT_VARIANT_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["exact_variant_cooldown_days"]
+)
+CONTENT_SEMANTIC_NEAR_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["semantic_near_cooldown_days"]
+)
+CONTENT_QUIZ_OVERLAP_WINDOW_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["quiz_overlap_window_days"]
+)
+CONTENT_MAX_QUIZ_OVERLAP_RATIO = float(
+    PRODUCTION_CONFIG["content_inventory"]["max_quiz_overlap_ratio"]
+)
 QUESTION_REPORT_THRESHOLD = max(
-    2, int(os.environ.get("QUESTION_REPORT_THRESHOLD", "3"))
+    2,
+    int(_locked_value(
+        "QUESTION_REPORT_THRESHOLD",
+        PRODUCTION_CONFIG["quiz"]["question_report_threshold"],
+    )),
 )
 
 # --------------------------------------------------------------------------
@@ -153,7 +226,9 @@ CORS_ALLOWED_ORIGINS = [
 
 # All daily quiz IDs are based on the audience timezone, not the server's
 # default timezone. GitHub Actions and many Python hosts run in UTC.
-APP_TIMEZONE = os.environ.get("APP_TIMEZONE", "Asia/Kolkata").strip() or "Asia/Kolkata"
+APP_TIMEZONE = _locked_value(
+    "APP_TIMEZONE", PRODUCTION_CONFIG["scheduler"]["timezone"]
+)
 
 # Static hosting fallback. When true, bot.py also writes quizzes/<quiz_id>.json
 # after storing the generated pack in Supabase, so GitHub Pages can still show
@@ -170,12 +245,29 @@ SESSION_TYPE = "mock_test"
 # --------------------------------------------------------------------------
 # Quiz-pack generation behavior
 # --------------------------------------------------------------------------
-QUESTIONS_PER_RUN = 10
+QUESTIONS_PER_RUN = int(PRODUCTION_CONFIG["quiz"]["question_count"])
 QUIZ_DIFFICULTY_DISTRIBUTION = {"easy": 3, "medium": 5, "hard": 2}
 QUIZ_CORRECT_MARKS = 1
-QUIZ_INCORRECT_PENALTY = 0.25
+QUIZ_INCORRECT_PENALTY = float(PRODUCTION_CONFIG["quiz"]["incorrect_penalty"])
 QUIZ_CLAIM_TIMEOUT_MINUTES = max(
-    5, int(os.environ.get("QUIZ_CLAIM_TIMEOUT_MINUTES", "20"))
+    5,
+    int(_locked_value(
+        "QUIZ_CLAIM_TIMEOUT_MINUTES",
+        PRODUCTION_CONFIG["scheduler"]["claim_timeout_minutes"],
+    )),
+)
+QUIZ_JOB_LEASE_MINUTES = max(
+    5, int(PRODUCTION_CONFIG["scheduler"]["dispatcher_lease_minutes"])
+)
+QUIZ_JOB_MAX_RETRIES = max(
+    1, int(PRODUCTION_CONFIG["scheduler"]["dispatcher_max_retries"])
+)
+QUIZ_JOB_RETRY_BASE_SECONDS = max(
+    10, int(PRODUCTION_CONFIG["scheduler"]["retry_base_seconds"])
+)
+QUIZ_JOB_RETRY_MAX_SECONDS = max(
+    QUIZ_JOB_RETRY_BASE_SECONDS,
+    int(PRODUCTION_CONFIG["scheduler"]["retry_max_seconds"]),
 )
 CURRENT_AFFAIRS_MIN = 2
 CURRENT_AFFAIRS_MAX = 3
@@ -199,8 +291,14 @@ TELEGRAM_DETAILED_EXPLANATION_LIMIT = 900
 # --------------------------------------------------------------------------
 # Minimum days before a used question becomes eligible for reuse. The actual
 # gap grows with usage_count (see scheduler), this is just the base unit.
-SCHEDULER_MIN_REUSE_GAP_DAYS = int(os.environ.get("SCHEDULER_MIN_REUSE_GAP_DAYS", "21"))
-SCHEDULER_MAX_REUSE_GAP_DAYS = int(os.environ.get("SCHEDULER_MAX_REUSE_GAP_DAYS", "180"))
+SCHEDULER_MIN_REUSE_GAP_DAYS = int(_locked_value(
+    "SCHEDULER_MIN_REUSE_GAP_DAYS",
+    PRODUCTION_CONFIG["scheduler"]["min_reuse_gap_days"],
+))
+SCHEDULER_MAX_REUSE_GAP_DAYS = int(_locked_value(
+    "SCHEDULER_MAX_REUSE_GAP_DAYS",
+    PRODUCTION_CONFIG["scheduler"]["max_reuse_gap_days"],
+))
 
 # How many candidate rows to pull from the DB per subject when scoring the
 # eligible pool (keeps the query cheap regardless of how large the bank gets).

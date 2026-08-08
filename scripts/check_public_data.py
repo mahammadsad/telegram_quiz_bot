@@ -246,7 +246,13 @@ def _current_tree_failures(root: Path) -> list[str]:
         for location in _walk_forbidden_keys(payload):
             failures.append(f"{relative}: answer-bearing field at {location}")
 
-    for filename in ("index.html", "dashboard.html", "practice.html", "settings.html"):
+    for filename in (
+        "index.html",
+        "dashboard.html",
+        "practice.html",
+        "settings.html",
+        "mock.html",
+    ):
         path = root / filename
         if not path.exists():
             failures.append(f"{filename}: required frontend file is missing")

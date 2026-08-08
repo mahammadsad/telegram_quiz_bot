@@ -1,14 +1,14 @@
 """Quiz delivery, authenticated learning workflows, and safe leaderboards."""
 
-
 from __future__ import annotations
 
 import json
 import uuid
+from datetime import date
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
@@ -25,13 +25,16 @@ from config.subjects import SUBJECTS
 from database.contract import APPLICATION_VERSION, REQUIRED_MIGRATION_VERSION
 from models.user import User
 from services import (
+    exam_config_service,
     leaderboard_privacy,
     learning_resources_service,
     personal_learning_service,
+    question_moderation_service,
     quiz_pack_service,
     rate_limit,
     readiness_service,
     resource_quality_service,
+    test_attempts_service,
 )
 from storage import stats_repo, users_repo
 from telegram.auth import TelegramAuthError, verify_init_data
@@ -57,9 +60,7 @@ async def security_and_privacy_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = (
-        "camera=(), microphone=(), geolocation=(), payment=()"
-    )
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://telegram.org; "
@@ -67,6 +68,7 @@ async def security_and_privacy_headers(request: Request, call_next):
         "font-src 'self' data: https://fonts.gstatic.com; "
         "img-src 'self' data: https:; "
         "connect-src 'self'; "
+        "manifest-src 'self'; worker-src 'self'; "
         "object-src 'none'; base-uri 'self'; form-action 'self'; "
         "frame-ancestors https://web.telegram.org https://*.telegram.org"
     )
@@ -74,9 +76,7 @@ async def security_and_privacy_headers(request: Request, call_next):
     if request.url.scheme == "https" or forwarded_proto == "https":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     if _is_leaderboard_path(request.url.path):
-        response.headers["Cache-Control"] = (
-            "no-store, private, max-age=0, must-revalidate"
-        )
+        response.headers["Cache-Control"] = "no-store, private, max-age=0, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
         response.headers["Surrogate-Control"] = "no-store"
@@ -95,10 +95,7 @@ def _is_leaderboard_path(path: str) -> bool:
     return bool(
         path == "/api/leaderboard"
         or path.startswith("/api/leaderboards/")
-        or (
-            path.startswith("/api/quiz/")
-            and path.endswith("/leaderboard")
-        )
+        or (path.startswith("/api/quiz/") and path.endswith("/leaderboard"))
     )
 
 
@@ -108,6 +105,12 @@ def _merge_vary_header(headers: Any, value: str) -> None:
     if value.casefold() not in {part.casefold() for part in values}:
         values.append(value)
     headers["Vary"] = ", ".join(values)
+
+
+def _mark_answer_free(response: Response) -> None:
+    """Permit private offline storage only for projections with no answer material."""
+    response.headers["X-Answer-Free-Payload"] = "1"
+    response.headers["Cache-Control"] = "private, no-cache, max-age=0"
 
 
 class SubmitQuizRequest(BaseModel):
@@ -127,7 +130,9 @@ class SubmitQuizRequest(BaseModel):
         if not isinstance(value, list) or len(value) != 10:
             raise ValueError("answers must contain exactly 10 entries")
         for answer in value:
-            if answer is not None and (isinstance(answer, bool) or not isinstance(answer, int) or answer not in range(4)):
+            if answer is not None and (
+                isinstance(answer, bool) or not isinstance(answer, int) or answer not in range(4)
+            ):
                 raise ValueError("answers may contain only 0, 1, 2, 3, or null")
         return value
 
@@ -140,9 +145,7 @@ class SubmitQuizRequest(BaseModel):
             raise ValueError("responseTimes must contain exactly 10 entries")
         for seconds in value:
             if seconds is not None and (
-                isinstance(seconds, bool)
-                or not isinstance(seconds, (int, float))
-                or not 0 <= seconds <= 3600
+                isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not 0 <= seconds <= 3600
             ):
                 raise ValueError("responseTimes entries must be between 0 and 3600 seconds")
         return value
@@ -259,6 +262,85 @@ class ResourceReviewRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class QuestionReviewRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    decision: str = Field(min_length=1, max_length=40)
+    resolution: str = Field(min_length=1, max_length=2000)
+    superseding_question_id: uuid.UUID | None = Field(
+        default=None,
+        alias="supersedingQuestionId",
+    )
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
+class AuthoritativeQuarantineRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    trigger: str = Field(min_length=1, max_length=50)
+    reason: str = Field(min_length=1, max_length=2000)
+    superseding_question_id: uuid.UUID | None = Field(
+        default=None,
+        alias="supersedingQuestionId",
+    )
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
+class StartTestAttemptRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    client_attempt_id: uuid.UUID = Field(alias="clientAttemptId")
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
+class TestResponseInput(BaseModel):
+    question_id: uuid.UUID = Field(alias="questionId")
+    selected_index: int | None = Field(default=None, alias="selectedIndex", ge=0, le=3)
+    response_time_seconds: float | None = Field(
+        default=None,
+        alias="responseTimeSeconds",
+        ge=0,
+        le=86400,
+    )
+    marked_for_review: bool = Field(default=False, alias="markedForReview")
+
+    model_config = {"populate_by_name": True}
+
+    @field_validator("selected_index", mode="before")
+    @classmethod
+    def reject_boolean_answer(cls, value: Any):
+        if isinstance(value, bool):
+            raise ValueError("selectedIndex must be between 0 and 3 or null")
+        return value
+
+
+class SaveTestProgressRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    responses: list[TestResponseInput] = Field(max_length=500)
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
+class AdvanceTestSectionRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    next_section_instance_id: uuid.UUID = Field(alias="nextSectionInstanceId")
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
+class SubmitTestAttemptRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    auto_submit: bool = Field(default=False, alias="autoSubmit")
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
 def _value_error_status(exc: ValueError) -> int:
     return 429 if "rate limit" in str(exc).casefold() else 400
 
@@ -287,6 +369,48 @@ def settings() -> FileResponse:
     return FileResponse(ROOT / "settings.html")
 
 
+@app.get("/mock")
+@app.get("/mock.html")
+def mock_test() -> FileResponse:
+    return FileResponse(ROOT / "mock.html")
+
+
+@app.get("/miniapp-shell.js")
+def miniapp_shell() -> FileResponse:
+    return FileResponse(
+        ROOT / "miniapp-shell.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@app.get("/service-worker.js")
+def service_worker() -> FileResponse:
+    return FileResponse(
+        ROOT / "service-worker.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "no-cache, max-age=0", "Service-Worker-Allowed": "/"},
+    )
+
+
+@app.get("/manifest.webmanifest")
+def web_manifest() -> FileResponse:
+    return FileResponse(
+        ROOT / "manifest.webmanifest",
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@app.get("/pwa-icon.svg")
+def pwa_icon() -> FileResponse:
+    return FileResponse(
+        ROOT / "pwa-icon.svg",
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @app.get("/quizzes/{quiz_file}")
 def legacy_quiz_file(quiz_file: str) -> JSONResponse:
     if not quiz_file.endswith(".json"):
@@ -306,6 +430,8 @@ def health_live() -> dict:
         "status": "live",
         "applicationVersion": app.version,
         "timezone": APP_TIMEZONE,
+        "productionConfigVersion": readiness_service.PRODUCTION_CONFIG_VERSION,
+        "productionConfigHash": readiness_service.PRODUCTION_CONFIG_HASH,
     }
 
 
@@ -324,8 +450,203 @@ def health() -> JSONResponse:
     return health_ready()
 
 
+@app.get("/api/exams")
+def exam_configuration_catalog(
+    as_of: date | None = None,
+    exam: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    try:
+        return exam_config_service.exam_catalog(
+            as_of=as_of,
+            exam_key=exam,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Exam configuration is temporarily unavailable.",
+        ) from exc
+
+
+@app.get("/api/tests/definitions")
+def test_definition_catalog(
+    as_of: date | None = None,
+    test_type: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    try:
+        return exam_config_service.test_definition_catalog(
+            as_of=as_of,
+            test_type=test_type,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Test definitions are temporarily unavailable.",
+        ) from exc
+
+
+@app.get("/api/tests/instances/{test_instance_id}")
+def public_test_instance(test_instance_id: uuid.UUID, response: Response) -> dict:
+    _mark_answer_free(response)
+    try:
+        payload = exam_config_service.public_test_instance(test_instance_id)
+        if payload is None:
+            raise HTTPException(status_code=404, detail="Test instance not found.")
+        return payload
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Test instance is temporarily unavailable.",
+        ) from exc
+
+
+@app.get("/api/previous-year")
+def previous_year_catalog(
+    exam: str | None = None,
+    year: int | None = None,
+    language: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    try:
+        return test_attempts_service.previous_year_catalog(
+            exam_key=exam,
+            exam_year=year,
+            language=language,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Previous-year questions are temporarily unavailable.",
+        ) from exc
+
+
+@app.post("/api/tests/instances/{test_instance_id}/attempts/start")
+def start_test_attempt(
+    test_instance_id: uuid.UUID,
+    payload: StartTestAttemptRequest,
+) -> dict:
+    try:
+        return test_attempts_service.start(
+            _write_user_from_payload(payload, "test-attempt-start", str(test_instance_id)),
+            test_instance_id=test_instance_id,
+            client_attempt_id=payload.client_attempt_id,
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Test attempt could not be started.") from exc
+
+
+@app.put("/api/tests/attempts/{attempt_id}/progress")
+def save_test_attempt_progress(
+    attempt_id: uuid.UUID,
+    payload: SaveTestProgressRequest,
+) -> dict:
+    try:
+        responses = [item.model_dump() for item in payload.responses]
+        return test_attempts_service.save_progress(
+            _write_user_from_payload(payload, "test-attempt-progress", str(attempt_id)),
+            attempt_id=attempt_id,
+            responses=responses,
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Test progress could not be saved.") from exc
+
+
+@app.post("/api/tests/attempts/{attempt_id}/sections/advance")
+def advance_test_attempt_section(
+    attempt_id: uuid.UUID,
+    payload: AdvanceTestSectionRequest,
+) -> dict:
+    try:
+        return test_attempts_service.advance_section(
+            _write_user_from_payload(payload, "test-attempt-section", str(attempt_id)),
+            attempt_id=attempt_id,
+            next_section_instance_id=payload.next_section_instance_id,
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Test section could not be advanced.") from exc
+
+
+@app.post("/api/tests/attempts/{attempt_id}/submit")
+def submit_test_attempt(
+    attempt_id: uuid.UUID,
+    payload: SubmitTestAttemptRequest,
+) -> dict:
+    try:
+        return test_attempts_service.submit(
+            _write_user_from_payload(payload, "test-attempt-submit", str(attempt_id)),
+            attempt_id=attempt_id,
+            auto_submit=payload.auto_submit,
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Test attempt could not be submitted.") from exc
+
+
+@app.get("/api/tests/attempts/{attempt_id}")
+def get_test_attempt(
+    attempt_id: uuid.UUID,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        payload = test_attempts_service.get(
+            _telegram_user_from_init_data(init_data),
+            attempt_id=attempt_id,
+        )
+        if payload is None:
+            raise HTTPException(status_code=404, detail="Test attempt not found.")
+        return payload
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Test attempt is temporarily unavailable.") from exc
+
+
 @app.get("/api/quiz/{quiz_id}")
-def get_quiz(quiz_id: str) -> dict:
+def get_quiz(quiz_id: str, response: Response) -> dict:
+    _mark_answer_free(response)
     clean_quiz_id = _clean_quiz_id(quiz_id)
     try:
         pack = quiz_pack_service.get_ready_quiz_pack(clean_quiz_id)
@@ -386,9 +707,7 @@ def admin_operations(
     init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
 ) -> dict:
     try:
-        return resource_quality_service.admin_operational_status(
-            _telegram_user_from_init_data(init_data)
-        )
+        return resource_quality_service.admin_operational_status(_telegram_user_from_init_data(init_data))
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except PermissionError as exc:
@@ -438,6 +757,77 @@ def review_resource(
         raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Resource review could not be saved.") from exc
+
+
+@app.get("/api/admin/questions/reviews")
+def admin_question_reviews(
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        return question_moderation_service.admin_review_queue(
+            _telegram_user_from_init_data(init_data),
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Question review queue is unavailable.") from exc
+
+
+@app.post("/api/admin/questions/reviews/{case_id}")
+def review_question_case(case_id: uuid.UUID, payload: QuestionReviewRequest) -> dict:
+    try:
+        return question_moderation_service.review_case(
+            _write_user_from_payload(payload, "question-moderation", str(case_id)),
+            case_id=str(case_id),
+            decision=payload.decision,
+            resolution=payload.resolution,
+            superseding_question_id=(str(payload.superseding_question_id) if payload.superseding_question_id else None),
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Question review could not be saved.") from exc
+
+
+@app.post("/api/admin/questions/{question_id}/quarantine")
+def quarantine_question(
+    question_id: uuid.UUID,
+    payload: AuthoritativeQuarantineRequest,
+) -> dict:
+    try:
+        return question_moderation_service.authoritative_quarantine(
+            _write_user_from_payload(payload, "question-moderation", str(question_id)),
+            question_id=str(question_id),
+            trigger=payload.trigger,
+            reason=payload.reason,
+            superseding_question_id=(str(payload.superseding_question_id) if payload.superseding_question_id else None),
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Question quarantine could not be saved.") from exc
 
 
 @app.post("/api/quiz/{quiz_id}/submit")
@@ -553,6 +943,72 @@ def my_due_reviews(
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="রিভিশনের প্রশ্ন এখন লোড করা যাচ্ছে না।") from exc
+
+
+@app.get("/api/me/reviews/knowledge")
+def my_knowledge_reviews(
+    limit: int = 20,
+    offset: int = 0,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        return personal_learning_service.knowledge_reviews(
+            _telegram_user_from_init_data(init_data),
+            limit=limit,
+            offset=offset,
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="জ্ঞানভিত্তিক রিভিশন এখন লোড করা যাচ্ছে না।") from exc
+
+
+@app.get("/api/me/learning/daily")
+def my_learning_daily_rollups(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    limit: int = 30,
+    offset: int = 0,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        return personal_learning_service.daily_rollups(
+            _telegram_user_from_init_data(init_data),
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+            offset=offset,
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="দৈনিক শেখার অগ্রগতি এখন লোড করা যাচ্ছে না।") from exc
+
+
+@app.get("/api/me/learning/knowledge-points")
+def my_knowledge_mastery(
+    subject: str | None = None,
+    strength: str = "all",
+    limit: int = 30,
+    offset: int = 0,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        return personal_learning_service.knowledge_mastery(
+            _telegram_user_from_init_data(init_data),
+            subject_key=subject,
+            strength=strength,
+            limit=limit,
+            offset=offset,
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="জ্ঞানভিত্তিক অগ্রগতি এখন লোড করা যাচ্ছে না।") from exc
 
 
 @app.get("/api/me/wrong-questions")
@@ -807,6 +1263,12 @@ def _write_user_from_payload(
         | PracticeQuestionReportRequest
         | ResourceFeedbackRequest
         | ResourceReviewRequest
+        | QuestionReviewRequest
+        | AuthoritativeQuarantineRequest
+        | StartTestAttemptRequest
+        | SaveTestProgressRequest
+        | AdvanceTestSectionRequest
+        | SubmitTestAttemptRequest
     ),
     scope: str,
     suffix: str = "",
@@ -825,6 +1287,11 @@ def _write_user_from_payload(
         "preferences": (20, 3600),
         "resource-feedback": (20, 3600),
         "resource-review": (60, 3600),
+        "question-moderation": (60, 3600),
+        "test-attempt-start": (30, 3600),
+        "test-attempt-progress": (600, 3600),
+        "test-attempt-section": (100, 3600),
+        "test-attempt-submit": (30, 3600),
     }
     limit, window = limits.get(scope, (30, 3600))
     try:
@@ -888,5 +1355,8 @@ def _load_public_fallback(quiz_id: str) -> dict | None:
         "meta": payload.get("meta") or {"quiz_id": quiz_id},
         "capabilities": {"submission": False, "source": "static_fallback"},
         "legacy": len(quiz_id) == 8,
-        "qs": [{"q": item.get("q") or item.get("question"), "o": item.get("o") or item.get("options")} for item in questions],
+        "qs": [
+            {"q": item.get("q") or item.get("question"), "o": item.get("o") or item.get("options")}
+            for item in questions
+        ],
     }

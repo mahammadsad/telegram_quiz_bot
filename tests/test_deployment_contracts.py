@@ -8,11 +8,27 @@ from pathlib import Path
 
 import yaml
 
-from config.schedule import RECOVERY_CRON, SUBJECT_CRONS
+from config.schedule import COMPLETENESS_CRON, DISPATCHER_CRON
+from config.settings import (
+    PRODUCTION_CONFIG,
+    PRODUCTION_CONFIG_HASH,
+    PRODUCTION_CONFIG_VERSION,
+)
 from database.contract import (
     APPLICATION_VERSION,
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
+    LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
+    PHASE_C_CANDIDATE_MIGRATION_VERSION,
+    PHASE_C_IDENTITY_MIGRATION_VERSION,
+    PHASE_C_INVENTORY_MIGRATION_VERSION,
+    PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
+    PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION,
+    PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
+    PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION,
+    PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION,
+    POST_FINALIZATION_MIGRATION_VERSION,
+    QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
 )
@@ -45,7 +61,8 @@ def test_render_blueprint_is_fail_closed_and_uses_readiness() -> None:
 
     env = {item["key"]: item for item in service["envVars"]}
     assert env["EXPECTED_SUPABASE_PROJECT_REF"]["value"] == PRODUCTION_PROJECT_REF
-    assert env["SOURCE_BACKED_ROTATION_ENABLED"]["value"] == "false"
+    assert env["SOURCE_BACKED_ROTATION_ENABLED"]["value"] == "true"
+    assert env["CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS"]["value"] == "45"
     for secret_name in (
         "SUPABASE_URL",
         "SUPABASE_SERVICE_KEY",
@@ -89,20 +106,13 @@ def test_workflows_have_minimum_permissions_timeouts_and_environment_guards() ->
     assert run_bot["concurrency"]["cancel-in-progress"] is False
     main_trigger = main.get("on") or main.get(True)
     assert main_trigger["schedule"] == [
-        *({"cron": cron} for cron in SUBJECT_CRONS),
-        {"cron": RECOVERY_CRON},
+        {"cron": DISPATCHER_CRON},
+        {"cron": COMPLETENESS_CRON},
     ]
-    bot_preflight = next(
-        step
-        for step in run_bot["steps"]
-        if step.get("name") == "Sanitized configuration preflight"
-    )
+    bot_preflight = next(step for step in run_bot["steps"] if step.get("name") == "Sanitized configuration preflight")
     assert bot_preflight["env"]["SUPABASE_URL"] == PRODUCTION_SUPABASE_URL
     main_source = (WORKFLOW_DIR / "main.yml").read_text(encoding="utf-8")
-    assert (
-        "SOURCE_BACKED_ROTATION_ENABLED: "
-        "${{ vars.SOURCE_BACKED_ROTATION_ENABLED || 'false' }}"
-    ) in main_source
+    assert 'SOURCE_BACKED_ROTATION_ENABLED: "true"' in main_source
 
     assert resources["permissions"] == {"contents": "read"}
     maintenance = resources["jobs"]["maintain-resources"]
@@ -117,9 +127,7 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     path = WORKFLOW_DIR / "staging-smoke.yml"
     staging = _load_yaml(path)
     workflow_trigger = staging.get("on") or staging.get(True)
-    assert workflow_trigger == {
-        "workflow_dispatch": workflow_trigger["workflow_dispatch"]
-    }
+    assert workflow_trigger == {"workflow_dispatch": workflow_trigger["workflow_dispatch"]}
     inputs = workflow_trigger["workflow_dispatch"]["inputs"]
     assert inputs["operation"]["options"] == ["preflight", "subject-quiz"]
     assert inputs["subject"]["default"] == "computer"
@@ -153,10 +161,30 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert 'failures != ["active_quiz_retrieval"]' in source
     assert "Staging readiness must be HTTP 200 after quiz creation." in source
     assert "from database.contract import (" in source
-    assert "body.get(\"applicationVersion\") != APPLICATION_VERSION" in source
-    assert "body.get(\"databaseContractVersion\") != DATABASE_CONTRACT_VERSION" in source
-    assert "body.get(\"personalLearningMigrationVersion\")" in source
-    assert "body.get(\"leaderboardPrivacyMigrationVersion\")" in source
+    assert 'body.get("applicationVersion") != APPLICATION_VERSION' in source
+    assert 'body.get("databaseContractVersion") != DATABASE_CONTRACT_VERSION' in source
+    assert 'body.get("personalLearningMigrationVersion")' in source
+    assert 'body.get("leaderboardPrivacyMigrationVersion")' in source
+    assert 'body.get("leaderboardPrivacyRpcFixMigrationVersion")' in source
+    assert 'body.get("postFinalizationMigrationVersion")' in source
+    assert 'body.get("checks", {}).get("postFinalization") is not True' in source
+    assert 'body.get("quizJobsMigrationVersion")' in source
+    assert 'body.get("checks", {}).get("durableQuizJobs") is not True' in source
+    assert 'body.get("phaseCIdentityMigrationVersion")' in source
+    assert 'body.get("phaseCInventoryMigrationVersion")' in source
+    assert 'body.get("phaseCCandidateMigrationVersion")' in source
+    assert 'body.get("phaseDCurrentAffairsMigrationVersion")' in source
+    assert 'body.get("phaseEPersonalLearningMigrationVersion")' in source
+    assert 'body.get("phaseEExamConfigurationMigrationVersion")' in source
+    assert 'body.get("phaseEPreviousYearMockMigrationVersion")' in source
+    assert 'body.get("phaseEQuestionQualityMigrationVersion")' in source
+    assert 'body.get("checks", {}).get("contentIdentity") is not True' in source
+    assert 'body.get("checks", {}).get("verifiedInventory") is not True' in source
+    assert 'body.get("checks", {}).get("currentAffairsEvents") is not True' in source
+    assert 'body.get("checks", {}).get("personalKnowledgeMastery") is not True' in source
+    assert 'body.get("checks", {}).get("examConfiguration") is not True' in source
+    assert 'body.get("checks", {}).get("previousYearMocks") is not True' in source
+    assert 'body.get("checks", {}).get("questionQualityAdministration")' in source
     assert '"7.1.0"' not in source
 
 
@@ -207,17 +235,17 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
         assert "secrets.SUPABASE_URL" not in source
         assert "TELEGRAM_" not in source
         assert "GEMINI_" not in source
-        assert "get_application_schema_contract" in source
+        assert "validate_database_schema" in source
         assert "SUPABASE_SERVICE_KEY" in source
 
     static_source = static_path.read_text(encoding="utf-8")
-    assert static_source.index("get_application_schema_contract") < (
+    assert static_source.index("validate_database_schema") < (
         static_source.index("scripts/import_source_rollout.py --approve")
     )
     assert "IMPORT REVIEWED SOURCES TO" in static_source
 
     current_source = current_path.read_text(encoding="utf-8")
-    assert current_source.index("get_application_schema_contract") < (
+    assert current_source.index("validate_database_schema") < (
         current_source.index("--max-items 200 --minimum-per-chapter 4 --approve")
     )
     assert "REFRESH PIB SOURCES IN" in current_source
@@ -226,20 +254,66 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
 def test_authoritative_migration_version_is_latest_filename() -> None:
     migrations = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
     assert migrations
-    assert migrations[-1].name.startswith(
-        f"{LEADERBOARD_PRIVACY_MIGRATION_VERSION}_"
+    assert migrations[-1].name.startswith(f"{PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION}_")
+    assert any(path.name.startswith(f"{PHASE_C_IDENTITY_MIGRATION_VERSION}_") for path in migrations)
+    assert any(path.name.startswith(f"{POST_FINALIZATION_MIGRATION_VERSION}_") for path in migrations)
+    assert any(path.name.startswith(f"{LEADERBOARD_PRIVACY_MIGRATION_VERSION}_") for path in migrations)
+    assert any(path.name.startswith(f"{PERSONAL_LEARNING_MIGRATION_VERSION}_") for path in migrations)
+    assert any(path.name.startswith(f"{QUIZ_QUALITY_MIGRATION_VERSION}_") for path in migrations)
+    assert any(path.name.startswith(f"{REQUIRED_MIGRATION_VERSION}_") for path in migrations)
+
+
+def test_versioned_production_manifest_matches_deployment_intent() -> None:
+    manifest_path = ROOT / "config" / "production.toml"
+    assert manifest_path.is_file()
+    assert PRODUCTION_CONFIG_VERSION == "2026-08-08.10"
+    assert re.fullmatch(r"[0-9a-f]{64}", PRODUCTION_CONFIG_HASH)
+    assert PRODUCTION_CONFIG["quiz"]["source_backed_rotation_enabled"] is True
+    assert PRODUCTION_CONFIG["gemini"] == {
+        "primary_model": "gemini-3.1-flash-lite",
+        "fallback_model": "gemini-2.5-flash",
+        "failover_enabled": True,
+    }
+    assert PRODUCTION_CONFIG["verification"] == {
+        "deterministic_proof_version": 1,
+        "require_new_candidate_proof": True,
+    }
+    assert PRODUCTION_CONFIG["database"]["post_finalization_migration_version"] == (POST_FINALIZATION_MIGRATION_VERSION)
+    assert PRODUCTION_CONFIG["database"]["quiz_jobs_migration_version"] == (QUIZ_JOBS_MIGRATION_VERSION)
+    assert (
+        PRODUCTION_CONFIG["database"]["leaderboard_privacy_rpc_fix_migration_version"]
+        == LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
     )
-    assert any(
-        path.name.startswith(f"{PERSONAL_LEARNING_MIGRATION_VERSION}_")
-        for path in migrations
+    assert PRODUCTION_CONFIG["database"]["phase_c_identity_migration_version"] == (PHASE_C_IDENTITY_MIGRATION_VERSION)
+    assert PRODUCTION_CONFIG["database"]["phase_c_inventory_migration_version"] == (PHASE_C_INVENTORY_MIGRATION_VERSION)
+    assert PRODUCTION_CONFIG["database"]["phase_c_candidate_migration_version"] == (PHASE_C_CANDIDATE_MIGRATION_VERSION)
+    assert (
+        PRODUCTION_CONFIG["database"]["phase_d_current_affairs_migration_version"]
+        == PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
     )
-    assert any(
-        path.name.startswith(f"{QUIZ_QUALITY_MIGRATION_VERSION}_")
-        for path in migrations
+    assert (
+        PRODUCTION_CONFIG["database"]["phase_e_personal_learning_migration_version"]
+        == PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
     )
-    assert any(
-        path.name.startswith(f"{REQUIRED_MIGRATION_VERSION}_")
-        for path in migrations
+    assert (
+        PRODUCTION_CONFIG["database"]["phase_e_exam_configuration_migration_version"]
+        == PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION
+    )
+    assert (
+        PRODUCTION_CONFIG["database"]["phase_e_previous_year_mock_migration_version"]
+        == PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION
+    )
+    assert (
+        PRODUCTION_CONFIG["database"]["phase_e_question_quality_migration_version"]
+        == PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION
+    )
+
+    render = _load_yaml(ROOT / "render.yaml")
+    render_env = {row["key"]: row.get("value") for row in render["services"][0]["envVars"] if "value" in row}
+    assert render_env["GEMINI_MODEL_PRIMARY"] == PRODUCTION_CONFIG["gemini"]["primary_model"]
+    assert render_env["GEMINI_MODEL_FALLBACK"] == PRODUCTION_CONFIG["gemini"]["fallback_model"]
+    assert render_env["QUESTION_VERIFICATION_MIN_CONFIDENCE"] == str(
+        PRODUCTION_CONFIG["quiz"]["verification_min_confidence"]
     )
 
 
@@ -247,7 +321,7 @@ def test_python_and_browser_packages_share_the_release_version() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
 
-    assert APPLICATION_VERSION == "7.2.3"
+    assert APPLICATION_VERSION == "8.4.0"
     assert package["version"] == APPLICATION_VERSION
     assert lock["version"] == APPLICATION_VERSION
     assert lock["packages"][""]["version"] == APPLICATION_VERSION

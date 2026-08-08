@@ -4,8 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="quiz-api-base" content="" />
+<meta name="theme-color" content="#0f766e" />
 <title>পছন্দ ও গোপনীয়তা</title>
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="icon" href="/pwa-icon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/miniapp-shell.css" />
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="/miniapp-shell.js" defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -42,7 +47,7 @@
       <p class="section-note">আপনার লক্ষ্য ও কুইজের ধরন ঠিক করুন।</p>
       <div class="form-grid">
         <label class="field-label">দৈনিক প্রশ্ন লক্ষ্য<input class="field" id="daily-target" type="number" min="1" max="130" required /></label>
-        <label class="field-label">পছন্দের ভাষা<select class="field" id="language"><option value="bn">বাংলা</option><option value="hi">হিন্দি</option><option value="en">English</option></select></label>
+        <label class="field-label">ইন্টারফেস ভাষা<select class="field" id="language" aria-describedby="language-support"><option value="bn">বাংলা</option></select><small id="language-support">সম্পূর্ণ অনুবাদ ও পরীক্ষা শেষ না হওয়া পর্যন্ত শুধু বাংলা ইন্টারফেস সমর্থিত।</small></label>
         <label class="field-label">কুইজ মোড<select class="field" id="quiz-mode"><option value="timed">সময়বদ্ধ</option><option value="practice">অনুশীলন</option></select></label>
         <label class="field-label">কঠিনতার পছন্দ<select class="field" id="difficulty"><option value="adaptive">স্বয়ংক্রিয়</option><option value="easy">সহজ</option><option value="medium">মাঝারি</option><option value="hard">কঠিন</option></select></label>
         <div class="wide"><b class="group-title">টার্গেট পরীক্ষা</b><div class="checks" id="exam-checks"></div></div>
@@ -66,7 +71,7 @@
       <h2>স্মরণবার্তা ও পুনরাবৃত্তি</h2>
       <p class="section-note">দৈনিক অনুশীলন ও ভুল উত্তরের প্রতিক্রিয়া বেছে নিন।</p>
       <div class="toggle-list">
-        <label class="toggle"><span><b>দৈনিক স্মরণবার্তা</b><small>প্রতিদিনের প্রশ্নের জন্য স্মরণবার্তা চাই।</small></span><input id="reminder" type="checkbox" /></label>
+        <label class="toggle"><span><b>দৈনিক স্মরণবার্তা — শীঘ্রই আসছে</b><small>নিরাপদ opt-in delivery প্রস্তুত হলে এটি চালু করা যাবে; এখন কোনো Telegram স্মরণবার্তা পাঠানো হয় না।</small></span><input id="reminder" type="checkbox" disabled aria-disabled="true" /></label>
         <label class="toggle"><span><b>ভুল পুনরাবৃত্তি উত্তরে শব্দ</b><small>Revision-এ ভুল হলে ছোট একটি শব্দ বাজবে।</small></span><input id="revision-sound" type="checkbox" /></label>
         <label class="toggle"><span><b>ভুল পুনরাবৃত্তি উত্তরে কম্পন</b><small>সমর্থিত ডিভাইসে হালকা কম্পন হবে।</small></span><input id="revision-vibration" type="checkbox" /></label>
       </div>
@@ -150,8 +155,8 @@
   }
 
   function fillPreferences(prefs){
-    el("daily-target").value=prefs.dailyQuestionTarget||30;el("language").value=prefs.preferredLanguage||"bn";el("quiz-mode").value=prefs.quizMode||"timed";el("difficulty").value=prefs.difficultyPreference||"adaptive";el("display-name").value=prefs.publicDisplayName||"";
-    el("leaderboard-visible").checked=prefs.leaderboardVisible!==false;el("username-visible").checked=!!prefs.usernameVisible;el("reminder").checked=!!prefs.dailyReminderEnabled;el("revision-sound").checked=prefs.revisionSoundEnabled!==false;el("revision-vibration").checked=prefs.revisionVibrationEnabled===true;
+    el("daily-target").value=prefs.dailyQuestionTarget||30;el("language").value="bn";el("quiz-mode").value=prefs.quizMode||"timed";el("difficulty").value=prefs.difficultyPreference||"adaptive";el("display-name").value=prefs.publicDisplayName||"";
+    el("leaderboard-visible").checked=prefs.leaderboardVisible!==false;el("username-visible").checked=!!prefs.usernameVisible;el("reminder").checked=false;el("revision-sound").checked=prefs.revisionSoundEnabled!==false;el("revision-vibration").checked=prefs.revisionVibrationEnabled===true;
     localPreference("revisionSoundEnabled",el("revision-sound").checked);localPreference("revisionVibrationEnabled",el("revision-vibration").checked);checkValues("exam-checks",prefs.targetExams||[]);checkValues("subject-checks",prefs.preferredSubjects||[]);
   }
 
@@ -163,7 +168,7 @@
   function savePreferences(event){
     event.preventDefault();var message=el("settings-message"),button=el("settings-submit");button.disabled=true;message.textContent="সংরক্ষণ হচ্ছে...";
     var sound=el("revision-sound").checked,vibration=el("revision-vibration").checked;
-    fetch(api("/api/me/preferences"),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:initData,targetExams:checked("exam-checks"),preferredSubjects:checked("subject-checks"),dailyQuestionTarget:+el("daily-target").value,preferredLanguage:el("language").value,difficultyPreference:el("difficulty").value,quizMode:el("quiz-mode").value,leaderboardVisible:el("leaderboard-visible").checked,publicDisplayName:el("display-name").value.trim()||null,usernameVisible:el("username-visible").checked,dailyReminderEnabled:el("reminder").checked,revisionSoundEnabled:sound,revisionVibrationEnabled:vibration})})
+    fetch(api("/api/me/preferences"),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:initData,targetExams:checked("exam-checks"),preferredSubjects:checked("subject-checks"),dailyQuestionTarget:+el("daily-target").value,preferredLanguage:el("language").value,difficultyPreference:el("difficulty").value,quizMode:el("quiz-mode").value,leaderboardVisible:el("leaderboard-visible").checked,publicDisplayName:el("display-name").value.trim()||null,usernameVisible:el("username-visible").checked,dailyReminderEnabled:false,revisionSoundEnabled:sound,revisionVibrationEnabled:vibration})})
       .then(check).then(function(){localPreference("revisionSoundEnabled",sound);localPreference("revisionVibrationEnabled",vibration);message.textContent="সেটিং সংরক্ষিত হয়েছে।"}).catch(function(){message.textContent="সেটিং সংরক্ষণ করা যায়নি।"}).finally(function(){button.disabled=false});
   }
 })();

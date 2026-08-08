@@ -9,7 +9,18 @@ from random import Random, SystemRandom
 from typing import Any
 from urllib.parse import urlparse
 
-from config.settings import QUESTION_VERIFICATION_MIN_CONFIDENCE, QUIZ_DIFFICULTY_DISTRIBUTION
+from config.settings import (
+    QUESTION_VERIFICATION_MIN_CONFIDENCE,
+    QUESTIONS_PER_RUN,
+    QUIZ_DIFFICULTY_DISTRIBUTION,
+)
+from services.content_identity import knowledge_key, variant_fingerprint
+from services.deterministic_verification import (
+    DeterministicVerificationError,
+)
+from services.deterministic_verification import (
+    verify_candidate as verify_candidate_deterministically,
+)
 from utils.hashing import (
     normalize_text,
     question_content_hash,
@@ -17,7 +28,7 @@ from utils.hashing import (
     quiz_content_checksum,
 )
 
-QUESTION_COUNT = 10
+QUESTION_COUNT = QUESTIONS_PER_RUN
 _BENGALI_RE = re.compile(r"[\u0980-\u09ff]")
 _DIFFICULTIES = {"easy", "medium", "hard"}
 _DERIVED_VERSION_FIELDS = {
@@ -35,11 +46,13 @@ class QuizValidationError(ValueError):
         *,
         attempts: list[dict[str, Any]] | None = None,
         retryable: bool = False,
+        reason_code: str | None = None,
     ) -> None:
         super().__init__(message)
         self.category = "validation_failed"
         self.attempts = attempts or []
         self.retryable = retryable
+        self.reason_code = reason_code
 
 
 def randomize_balanced_answer_positions(
@@ -112,10 +125,15 @@ def validate_questions(
     required_source_diversity: int = 1,
     required_topic_diversity: int = 1,
     require_verification: bool = True,
+    require_deterministic_proof: bool = False,
+    _expected_count: int = QUESTION_COUNT,
 ) -> list[dict]:
-    if not isinstance(raw_questions, list) or len(raw_questions) != QUESTION_COUNT:
+    if not isinstance(raw_questions, list) or len(raw_questions) != _expected_count:
         count = len(raw_questions) if isinstance(raw_questions, list) else 0
-        raise QuizValidationError(f"A quiz must contain exactly 10 questions; received {count}.")
+        raise QuizValidationError(
+            f"Expected exactly {_expected_count} question"
+            f"{'s' if _expected_count != 1 else ''}; received {count}."
+        )
 
     clean: list[dict] = []
     seen_questions: set[str] = set()
@@ -240,6 +258,17 @@ def validate_questions(
             raise QuizValidationError(f"Question {number} is blank or duplicated.")
         seen_questions.add(normalized_question)
 
+        try:
+            deterministic = verify_candidate_deterministically(
+                raw,
+                require_subject_proof=require_deterministic_proof,
+            )
+        except DeterministicVerificationError as exc:
+            raise QuizValidationError(
+                f"Question {number} failed deterministic verification: {exc}",
+                reason_code=exc.code,
+            ) from exc
+
         clean_row: dict[str, Any] = {
             "question": text,
             "options": options,
@@ -267,11 +296,34 @@ def validate_questions(
             "verification_checks": raw.get("verification_checks") if isinstance(raw.get("verification_checks"), dict) else {},
             "verified_at": verified_at or None,
             "verification_model": _text(raw.get("verification_model")) or None,
+            "canonical_claim": _text(raw.get("canonical_claim")),
+            "knowledge_entity": _text(raw.get("knowledge_entity")),
+            "knowledge_relation": _text(raw.get("knowledge_relation")),
+            "knowledge_answer_value": _text(raw.get("knowledge_answer_value")),
+            "knowledge_time_scope": _text(raw.get("knowledge_time_scope")) or "timeless",
+            "knowledge_relation_inverse": bool(raw.get("knowledge_relation_inverse")),
+            "deterministic_proof": (
+                raw.get("deterministic_proof")
+                if isinstance(raw.get("deterministic_proof"), dict)
+                else None
+            ),
+            "deterministic_verification": deterministic.as_dict(),
+            "source_expires_at": _text(
+                raw.get("source_expires_at") or raw.get("expires_at")
+            )
+            or None,
+            "fact_effective_at": _text(raw.get("fact_effective_at")) or None,
         }
         try:
             clean_row["stem_hash"] = question_hash(text)
             clean_row["question_hash"] = clean_row["stem_hash"]
             clean_row["content_hash"] = question_content_hash(clean_row)
+            clean_row["variant_fingerprint"] = variant_fingerprint(
+                stem=text,
+                options=options,
+                correct_index=correct,
+                language=language,
+            )
         except ValueError as exc:
             raise QuizValidationError(f"Question {number} has invalid version metadata.") from exc
         clean_row["question_id"] = _text(raw.get("question_id")) or clean_row["content_hash"]
@@ -284,6 +336,101 @@ def validate_questions(
     if enforce_composition:
         _validate_quiz_composition(clean)
     return clean
+
+
+def validate_question_candidate(
+    raw_question: dict,
+    subject_key: str,
+    chapter: str,
+    **kwargs: Any,
+) -> dict:
+    """Validate one candidate without applying ten-question pack rules."""
+    options = dict(kwargs)
+    options["enforce_composition"] = False
+    options["required_source_diversity"] = 1
+    options["required_topic_diversity"] = 1
+    options["_expected_count"] = 1
+    clean = validate_questions(
+        [raw_question],
+        subject_key,
+        chapter,
+        **options,
+    )
+    return clean[0]
+
+
+def validate_question_candidates(
+    raw_questions: list[dict],
+    subject_key: str,
+    chapter: str,
+    **kwargs: Any,
+) -> tuple[list[dict], list[dict[str, Any]]]:
+    """Validate candidates independently and retain every accepted item."""
+    accepted_rows: list[tuple[int, dict]] = []
+    rejected: list[dict[str, Any]] = []
+    for index, candidate in enumerate(raw_questions):
+        try:
+            accepted_rows.append(
+                (
+                    index,
+                    validate_question_candidate(candidate, subject_key, chapter, **kwargs),
+                )
+            )
+        except QuizValidationError as exc:
+            rejected.append({
+                "index": index,
+                "code": exc.reason_code or _candidate_rejection_code(str(exc)),
+                "message": str(exc),
+            })
+    accepted: list[dict] = []
+    seen_knowledge: set[str] = set()
+    for index, row in accepted_rows:
+        semantic_fields = (
+            row.get("knowledge_entity"),
+            row.get("knowledge_relation"),
+            row.get("knowledge_answer_value"),
+        )
+        semantic_key = ""
+        if all(str(value or "").strip() for value in semantic_fields):
+            try:
+                semantic_key = knowledge_key(
+                    subject=subject_key,
+                    entity=str(row["knowledge_entity"]),
+                    relation=str(row["knowledge_relation"]),
+                    answer_value=str(row["knowledge_answer_value"]),
+                    time_scope=str(row.get("knowledge_time_scope") or "timeless"),
+                    inverse=bool(row.get("knowledge_relation_inverse")),
+                )
+            except ValueError:
+                semantic_key = ""
+        if semantic_key and semantic_key in seen_knowledge:
+            rejected.append({
+                "index": index,
+                "code": "duplicate_knowledge_point",
+                "message": "Candidate duplicates a knowledge point already accepted in this batch.",
+            })
+            continue
+        if semantic_key:
+            seen_knowledge.add(semantic_key)
+        accepted.append(row)
+    return accepted, rejected
+
+
+def _candidate_rejection_code(message: str) -> str:
+    clean = message.lower()
+    checks = (
+        ("source", "source_invalid"),
+        ("verification", "verification_failed"),
+        ("correct index", "answer_invalid"),
+        ("four option", "options_invalid"),
+        ("duplicate option", "options_duplicate"),
+        ("another subject", "subject_mismatch"),
+        ("another chapter", "chapter_mismatch"),
+        ("micro-topic", "micro_topic_invalid"),
+        ("truncated", "content_truncated"),
+        ("bengali", "language_invalid"),
+    )
+    return next((code for fragment, code in checks if fragment in clean), "content_invalid")
 
 
 def _validate_grounding_diversity(

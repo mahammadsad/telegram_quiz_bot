@@ -13,6 +13,16 @@ def list_grounding_bundle(
     *,
     limit: int = 8,
 ) -> list[Row]:
+    if subject_key == "current-affairs":
+        result = get_client().rpc(
+            "get_current_affairs_grounding_bundle",
+            {
+                "p_chapter": chapter,
+                "p_target_date": target_date,
+                "p_limit": limit,
+            },
+        ).execute()
+        return as_rows(result.data, "current-affairs grounding bundle")
     result = get_client().rpc(
         "get_grounding_bundle",
         {

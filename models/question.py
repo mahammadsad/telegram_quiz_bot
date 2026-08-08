@@ -58,6 +58,11 @@ class Question:
     fact_version: Optional[str] = None
     expires_at: Optional[str] = None
     review_required: bool = False
+    knowledge_point_id: Optional[str] = None
+    variant_fingerprint: Optional[str] = None
+    question_form: str = "mcq"
+    inventory_status: str = "legacy"
+    eligible_at: Optional[str] = None
 
     # scheduler metadata
     last_used_at: Optional[str] = None
@@ -118,6 +123,11 @@ class Question:
             "fact_version": self.fact_version,
             "expires_at": self.expires_at,
             "review_required": self.review_required,
+            "knowledge_point_id": self.knowledge_point_id,
+            "variant_fingerprint": self.variant_fingerprint,
+            "question_form": self.question_form,
+            "inventory_status": self.inventory_status,
+            "eligible_at": self.eligible_at,
         }
 
     @classmethod
@@ -166,6 +176,11 @@ class Question:
             fact_version=row.get("fact_version"),
             expires_at=row.get("expires_at"),
             review_required=bool(row.get("review_required", False)),
+            knowledge_point_id=row.get("knowledge_point_id"),
+            variant_fingerprint=row.get("variant_fingerprint"),
+            question_form=row.get("question_form") or "mcq",
+            inventory_status=row.get("inventory_status") or "legacy",
+            eligible_at=row.get("eligible_at"),
             last_used_at=row.get("last_used_at"),
             usage_count=row.get("usage_count", 0),
             next_global_review=row.get("next_global_review"),
