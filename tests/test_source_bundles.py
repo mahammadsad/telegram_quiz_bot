@@ -149,7 +149,7 @@ def _science_bundle_rows() -> list[dict]:
 def test_computer_expansion_covers_every_gated_micro_topic_exactly():
     chapters = [chapter for chapter in SYLLABUS["computer"] if chapter.key in EXPANSION_CHAPTER_KEYS]
     assert {chapter.key for chapter in chapters} == EXPANSION_CHAPTER_KEYS
-    assert all(not chapter.rotation_enabled for chapter in chapters)
+    assert all(chapter.rotation_enabled for chapter in chapters)
 
     expected = {
         topic.key: (chapter.name, topic.name)
@@ -205,9 +205,7 @@ def test_polity_expansion_covers_every_gated_micro_topic_exactly():
     ]
     assert {chapter.key for chapter in chapters} == POLITY_EXPANSION_CHAPTER_KEYS
     assert all(chapter.priority == 3 for chapter in chapters)
-    assert {
-        chapter.key for chapter in chapters if chapter.rotation_enabled
-    } == set(ROTATION_CHAPTER_KEYS["polity"])
+    assert all(chapter.rotation_enabled for chapter in chapters)
 
     expected = {
         topic.key: (chapter.name, topic.name)
@@ -261,9 +259,7 @@ def test_english_expansion_covers_every_gated_micro_topic_exactly():
     ]
     assert {chapter.key for chapter in chapters} == ENGLISH_EXPANSION_CHAPTER_KEYS
     assert all(chapter.priority == 3 for chapter in chapters)
-    assert {
-        chapter.key for chapter in chapters if chapter.rotation_enabled
-    } == set(ROTATION_CHAPTER_KEYS["english"])
+    assert all(chapter.rotation_enabled for chapter in chapters)
 
     expected = {
         topic.key: (chapter.name, topic.name)
@@ -309,9 +305,7 @@ def test_mathematics_expansion_covers_every_gated_micro_topic_exactly():
         if chapter.key in MATHEMATICS_EXPANSION_CHAPTER_KEYS
     ]
     assert {chapter.key for chapter in chapters} == MATHEMATICS_EXPANSION_CHAPTER_KEYS
-    assert {
-        chapter.key for chapter in chapters if chapter.rotation_enabled
-    } == set(ROTATION_CHAPTER_KEYS["mathematics"])
+    assert all(chapter.rotation_enabled for chapter in chapters)
     assert {chapter.priority for chapter in chapters} == {2, 3}
 
     expected = {
@@ -361,9 +355,7 @@ def test_science_expansion_covers_every_gated_micro_topic_exactly():
         if chapter.key in SCIENCE_EXPANSION_CHAPTER_KEYS
     ]
     assert {chapter.key for chapter in chapters} == SCIENCE_EXPANSION_CHAPTER_KEYS
-    assert {
-        chapter.key for chapter in chapters if chapter.rotation_enabled
-    } == set(ROTATION_CHAPTER_KEYS["science"])
+    assert all(chapter.rotation_enabled for chapter in chapters)
     assert {chapter.priority for chapter in chapters} == {2, 3}
 
     expected = {
@@ -463,7 +455,7 @@ def test_new_static_rollout_sources_are_official_reviewed_and_non_expiring():
     assert all(len(row["fact_summary"]) >= 300 for row in language_rows + domain_rows)
 
 
-def test_static_bundle_manifest_covers_every_non_dynamic_rotation_chapter():
+def test_static_bundle_manifest_covers_every_source_approved_stable_chapter():
     covered: set[tuple[str, str]] = set()
     for relative_path in STATIC_SOURCE_BUNDLES:
         rows = json.loads((ROOT / relative_path).read_text(encoding="utf-8"))
@@ -474,7 +466,7 @@ def test_static_bundle_manifest_covers_every_non_dynamic_rotation_chapter():
         for subject_key, chapters in SYLLABUS.items()
         if subject_key != "current-affairs"
         for chapter in chapters
-        if chapter.rotation_enabled
+        if chapter.key in ROTATION_CHAPTER_KEYS[subject_key]
     }
     assert expected <= covered
 

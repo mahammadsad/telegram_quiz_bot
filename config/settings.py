@@ -145,6 +145,10 @@ SOURCE_BACKED_ROTATION_ENABLED = _locked_value(
     "SOURCE_BACKED_ROTATION_ENABLED",
     PRODUCTION_CONFIG["quiz"]["source_backed_rotation_enabled"],
 ).lower() == "true"
+SOURCE_OPTIONAL_STABLE_SUBJECTS_ENABLED = _locked_value(
+    "SOURCE_OPTIONAL_STABLE_SUBJECTS_ENABLED",
+    PRODUCTION_CONFIG["quiz"]["source_optional_stable_subjects_enabled"],
+).lower() == "true"
 DETERMINISTIC_PROOF_VERSION = int(
     PRODUCTION_CONFIG["verification"]["deterministic_proof_version"]
 )

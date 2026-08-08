@@ -24,25 +24,27 @@ def test_catalogue_has_subject_specific_depth_instead_of_fixed_seven_chapters():
     assert sum(len(chapter.micro_topics) for chapters in SYLLABUS.values() for chapter in chapters) == 648
 
 
-def test_rotation_is_explicitly_limited_to_source_approved_chapters():
-    assert len(CHAPTERS["computer"]) == 7
+def test_stable_rotation_uses_full_syllabus_while_current_affairs_stays_gated():
     assert all(
-        len(CHAPTERS[key]) == 2
+        CHAPTERS[key] == ALL_CHAPTERS[key]
         for key in QUIZ_SUBJECT_KEYS
-        if key != "computer"
+        if key != "current-affairs"
     )
-    assert all(len(ALL_CHAPTERS[key]) > len(CHAPTERS[key]) for key in QUIZ_SUBJECT_KEYS)
+    assert len(CHAPTERS["current-affairs"]) == 2
+    assert len(ALL_CHAPTERS["current-affairs"]) > len(CHAPTERS["current-affairs"])
     assert {
         chapter.key
         for subject_key, chapters in SYLLABUS.items()
+        if subject_key != "current-affairs"
         for chapter in chapters
         if chapter.rotation_enabled
     } == {
-        key
-        for keys in ROTATION_CHAPTER_KEYS.values()
-        for key in keys
+        chapter.key
+        for subject_key, chapters in SYLLABUS.items()
+        if subject_key != "current-affairs"
+        for chapter in chapters
     }
-    assert CHAPTERS["computer"] == (
+    assert CHAPTERS["computer"][:7] == (
         "কম্পিউটারের মৌলিক ধারণা",
         "হার্ডওয়্যার ও সফটওয়্যার",
         "অপারেটিং সিস্টেম",
@@ -52,7 +54,7 @@ def test_rotation_is_explicitly_limited_to_source_approved_chapters():
         "সাইবার নিরাপত্তা",
     )
     assert "সংখ্যা পদ্ধতি ও ডেটা উপস্থাপন" in ALL_CHAPTERS["computer"]
-    assert "সংখ্যা পদ্ধতি ও ডেটা উপস্থাপন" not in CHAPTERS["computer"]
+    assert "সংখ্যা পদ্ধতি ও ডেটা উপস্থাপন" in CHAPTERS["computer"]
     assert CHAPTERS["current-affairs"] == (
         "জাতীয় সাম্প্রতিক ঘটনা",
         "বিজ্ঞান ও প্রযুক্তি",
@@ -81,7 +83,12 @@ def test_every_micro_topic_has_stable_identity_exam_mapping_and_targets():
 def test_approved_computer_pilot_remains_mapped_to_legacy_core_topics():
     rows = json.loads(SOURCE_PILOT.read_text(encoding="utf-8"))
     assert len(rows) == 12
-    assert {row["chapter"] for row in rows} == set(CHAPTERS["computer"])
+    approved_names = {
+        chapter.name
+        for chapter in SYLLABUS["computer"]
+        if chapter.key in ROTATION_CHAPTER_KEYS["computer"]
+    }
+    assert {row["chapter"] for row in rows} == approved_names
     assert all(row["micro_topic_key"].startswith("computer:") for row in rows)
     assert all(row["micro_topic_key"].endswith(":core") for row in rows)
 

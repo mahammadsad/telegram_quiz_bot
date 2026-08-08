@@ -91,6 +91,39 @@ def variant_fingerprint(
     })
 
 
+def canonical_knowledge_identity(candidate: Mapping[str, Any]) -> dict[str, str]:
+    """Canonicalize model semantic fields for application/database parity."""
+    subject = str(candidate.get("subject_key") or candidate.get("subject") or "").strip()
+    entity = str(candidate.get("knowledge_entity") or candidate.get("entity_key") or "").strip()
+    relation = str(candidate.get("knowledge_relation") or candidate.get("relation_key") or "").strip()
+    answer_value = str(
+        candidate.get("knowledge_answer_value") or candidate.get("answer_value") or ""
+    ).strip()
+    time_scope = str(
+        candidate.get("knowledge_time_scope") or candidate.get("time_scope") or "timeless"
+    ).strip()
+    canonical_relation, alias_is_inverse = _RELATION_ALIASES.get(
+        _identity_text(relation), (_identity_text(relation), False)
+    )
+    canonical_entity = entity
+    canonical_answer = answer_value
+    if bool(candidate.get("knowledge_relation_inverse")) or alias_is_inverse:
+        canonical_entity, canonical_answer = canonical_answer, canonical_entity
+    return {
+        "knowledge_key": knowledge_key(
+            subject=subject,
+            entity=canonical_entity,
+            relation=canonical_relation,
+            answer_value=canonical_answer,
+            time_scope=time_scope,
+        ),
+        "entity_key": _identity_text(canonical_entity),
+        "relation_key": canonical_relation,
+        "answer_value": canonical_answer,
+        "time_scope": time_scope or "timeless",
+    }
+
+
 def source_fact_checksum(
     *,
     source_document_id: str,
@@ -117,36 +150,20 @@ def attach_candidate_identities(candidate: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(options, list) or not isinstance(correct_index, int):
         raise ValueError("candidate options and answer are required")
     canonical_claim = str(candidate.get("canonical_claim") or "").strip()
-    entity = str(candidate.get("knowledge_entity") or "").strip()
-    relation = str(candidate.get("knowledge_relation") or "").strip()
-    answer_value = str(candidate.get("knowledge_answer_value") or "").strip()
-    time_scope = str(candidate.get("knowledge_time_scope") or "timeless").strip()
     evidence_span = str(candidate.get("evidence_summary") or "").strip()
     fact_version = str(candidate.get("fact_version") or "").strip()
     source_document_id = str(candidate.get("source_document_id") or "").strip()
     if not canonical_claim:
         raise ValueError("canonical claim is required")
-    canonical_relation, alias_is_inverse = _RELATION_ALIASES.get(
-        _identity_text(relation), (_identity_text(relation), False)
-    )
-    canonical_entity = entity
-    canonical_answer = answer_value
-    if bool(candidate.get("knowledge_relation_inverse")) or alias_is_inverse:
-        canonical_entity, canonical_answer = canonical_answer, canonical_entity
+    identity = canonical_knowledge_identity(candidate)
     return {
         **candidate,
-        "knowledge_key": knowledge_key(
-            subject=str(candidate.get("subject_key") or candidate.get("subject") or ""),
-            entity=canonical_entity,
-            relation=canonical_relation,
-            answer_value=canonical_answer,
-            time_scope=time_scope,
-        ),
+        "knowledge_key": identity["knowledge_key"],
         "canonical_claim": canonical_claim,
-        "entity_key": _identity_text(canonical_entity),
-        "relation_key": canonical_relation,
-        "answer_value": canonical_answer,
-        "time_scope": time_scope or "timeless",
+        "entity_key": identity["entity_key"],
+        "relation_key": identity["relation_key"],
+        "answer_value": identity["answer_value"],
+        "time_scope": identity["time_scope"],
         "variant_fingerprint": variant_fingerprint(
             stem=str(candidate.get("question") or candidate.get("question_text") or ""),
             options=options,

@@ -5,7 +5,11 @@ from pathlib import Path
 
 import pytest
 
-from services.content_identity import knowledge_key, variant_fingerprint
+from services.content_identity import (
+    canonical_knowledge_identity,
+    knowledge_key,
+    variant_fingerprint,
+)
 from services.question_validation import validate_question_candidates
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -49,6 +53,24 @@ def test_paraphrase_and_inverse_relation_share_knowledge_identity() -> None:
         answer_value="France",
     )
     assert direct == paraphrase == inverse
+
+
+def test_canonical_identity_fields_close_inverse_wording_bypass() -> None:
+    direct = canonical_knowledge_identity({
+        "subject_key": "geography",
+        "knowledge_entity": "France",
+        "knowledge_relation": "has_capital",
+        "knowledge_answer_value": "Paris",
+    })
+    inverse = canonical_knowledge_identity({
+        "subject_key": "geography",
+        "knowledge_entity": "Paris",
+        "knowledge_relation": "is_capital_of",
+        "knowledge_answer_value": "France",
+    })
+    assert direct == inverse
+    assert direct["entity_key"] == "france"
+    assert direct["relation_key"] == "capital_of"
 
 
 def test_mutable_metadata_does_not_change_variant_fingerprint() -> None:

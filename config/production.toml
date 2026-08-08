@@ -1,5 +1,5 @@
 [meta]
-version = "2026-08-08.10"
+version = "2026-08-08.11"
 
 [gemini]
 primary_model = "gemini-3.1-flash-lite"
@@ -8,6 +8,7 @@ failover_enabled = true
 
 [quiz]
 source_backed_rotation_enabled = true
+source_optional_stable_subjects_enabled = true
 verification_min_confidence = 0.85
 question_report_threshold = 3
 question_count = 10
@@ -49,6 +50,7 @@ phase_e_personal_learning_migration_version = "20260808113000"
 phase_e_exam_configuration_migration_version = "20260808123000"
 phase_e_previous_year_mock_migration_version = "20260808133000"
 phase_e_question_quality_migration_version = "20260808143000"
+source_optional_generation_migration_version = "20260808160000"
 
 [content_inventory]
 target_days = 15

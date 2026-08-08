@@ -66,6 +66,11 @@ def get_phase_e_question_quality_contract() -> Row:
     return as_row(result.data, "Phase E question-quality contract")
 
 
+def get_source_optional_generation_contract() -> Row:
+    result = get_client().rpc("get_source_optional_generation_contract", {}).execute()
+    return as_row(result.data, "source-optional generation contract")
+
+
 def active_quiz_probe() -> Row | None:
     result = (
         get_client()

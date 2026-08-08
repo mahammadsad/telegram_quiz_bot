@@ -22,6 +22,7 @@ from config.subjects import SUBJECTS
 from errors import DatabaseIntegrityError, QuizContentCollisionError
 from models.question import Question
 from models.user import User
+from services.content_identity import canonical_knowledge_identity
 from services.question_validation import (
     QUESTION_COUNT,
     checksum_for_pack,
@@ -239,6 +240,8 @@ def record_quiz_pack(
     allowed_source_topics: dict[str, tuple[str, str]] | None = None,
     required_source_diversity: int = 1,
     required_topic_diversity: int = 1,
+    source_required: bool = True,
+    allowed_micro_topics: dict[str, str] | None = None,
 ) -> dict:
     subject_key = str(meta.get("subject_key") or meta.get("subject") or "").strip()
     chapter = str(meta.get("chapter") or "").strip()
@@ -250,6 +253,8 @@ def record_quiz_pack(
         allowed_source_topics=allowed_source_topics,
         required_source_diversity=required_source_diversity,
         required_topic_diversity=required_topic_diversity,
+        source_required=source_required,
+        allowed_micro_topics=allowed_micro_topics,
     )
     question_rows = [_question_row_for_atomic_save(quiz_id, item, meta) for item in clean_questions]
     checksum = content_checksum(quiz_id, subject_key, chapter, clean_questions)
@@ -259,6 +264,7 @@ def record_quiz_pack(
         questions=question_rows,
         content_checksum=checksum,
         replace=replace,
+        source_required=source_required,
     )
     if not save_result.get("ready"):
         raise DatabaseIntegrityError("Saved quiz checksum did not match generated content; posting is blocked.")
@@ -467,7 +473,11 @@ def _build_question(quiz_id: str, item: dict, meta: dict) -> Question:
         topic=topic,
         difficulty=_str(item.get("difficulty") or "medium"),
         gemini_model=_str(meta.get("generation_model") or GEMINI_MODEL),
-        source=quiz_source(quiz_id),
+        source=(
+            quiz_source(quiz_id)
+            if _str(item.get("source_document_id"))
+            else "gemini_model_validated"
+        ),
         week_number=iso_week_number(),
         bot_type=BOT_TYPE,
         question_hash=question_hash(question_text),
@@ -514,6 +524,16 @@ def _question_row_for_atomic_save(quiz_id: str, item: dict, meta: dict) -> dict:
     """Reuse only byte-equivalent content; never substitute an unverified near-duplicate."""
     question = _build_question(quiz_id, item, meta)
     row = question.to_insert_dict()
+    row.update({
+        "canonical_claim": _str(item.get("canonical_claim")),
+        "knowledge_entity": _str(item.get("knowledge_entity")),
+        "knowledge_relation": _str(item.get("knowledge_relation")),
+        "knowledge_answer_value": _str(item.get("knowledge_answer_value")),
+        "knowledge_time_scope": _str(item.get("knowledge_time_scope")) or "timeless",
+        "knowledge_relation_inverse": bool(item.get("knowledge_relation_inverse")),
+    })
+    if not question.source_document_id:
+        row.update(canonical_knowledge_identity(item))
     if not question.content_hash:
         raise DatabaseIntegrityError(f"Question content hash is missing in {quiz_id}.")
     exact = questions_repo.get_by_content_hash(question.content_hash)

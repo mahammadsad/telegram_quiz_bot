@@ -1,19 +1,20 @@
 # Telegram Subject Quiz Bot
 
-A source-grounded Bengali Telegram Mini App for one daily 10-question quiz in each of 13
+A verified Bengali Telegram Mini App for one daily 10-question quiz in each of 13
 competitive-exam subjects. FastAPI serves answer-free quiz payloads, validates
 Telegram Mini App authentication, submits attempts through transactional
 Supabase functions, and returns private review data and privacy-safe
-leaderboards. Every newly generated question cites an operator-verified fact
-bundle, belongs to a normalized micro-topic, and passes a separate source-only
-verification request before the atomic save can activate it.
+leaderboards. Current affairs always cites fresh operator-verified evidence.
+Stable syllabus subjects may use reviewed sources or independently model-verified
+timeless knowledge; every question belongs to a normalized micro-topic and
+passes a separate verification request before the atomic save can activate it.
 Question rows are immutable versions: matching text can safely coexist with a
 corrected answer, option, explanation, classification, language, or source.
 
 The syllabus-v2 foundation preserves the 13 Telegram subjects while expanding
 the curriculum to 162 subject-specific chapters and 648 curated micro-topics.
-New coverage is source-gated and stays out of rotation until its verified bundle
-passes staging. See [`docs/SYLLABUS_V2.md`](docs/SYLLABUS_V2.md) for catalogue,
+All stable-subject chapters are generation-enabled; current affairs remains
+source-gated. See [`docs/SYLLABUS_V2.md`](docs/SYLLABUS_V2.md) for catalogue,
 activation, compatibility, and rollout details. The preparation screen reads
 only cached, operator-approved learning-resource metadata for the exact quiz
 micro-topics. Completed attempts now update a private spaced-review schedule;
@@ -121,11 +122,11 @@ The schedule and subject identities live in
 `config/schedule.py` and `config/subjects.py`; the complete curriculum lives in
 `config/syllabus_catalog.py`. Workflow concurrency uses the logical date and
 subject, waits instead of cancelling an active run, and has no run-ID component.
-Production and staging use the source-backed contract declared in
-`config/production.toml`. The reviewed v1 rotation uses seven established
-Computer chapters and exactly two source-covered chapters for each other
-subject. A conflicting legacy environment variable now fails closed instead
-of silently changing this policy.
+Production and staging use the verification contract declared in
+`config/production.toml`. Twelve stable subjects rotate through their full
+catalogues; current affairs remains limited to two source-covered chapters.
+Stable knowledge identities, recent-question prompt exclusions, text similarity
+checks, and database cooldowns prevent frequent repetition.
 
 ## Configuration
 
@@ -165,7 +166,7 @@ Optional server settings:
 - `TELEGRAM_INIT_DATA_MAX_AGE_SECONDS` (read default 24 hours) and
   `TELEGRAM_WRITE_INIT_DATA_MAX_AGE_SECONDS` (sensitive-write default 1 hour)
 
-Non-secret production policy—including model names, source-backed rotation,
+Non-secret production policy—including model names, source/current-affairs gates,
 verification/current-affairs thresholds, scheduler cooldowns, static fallback
 rules, and the required database feature contract—lives in the versioned
 `config/production.toml`. Legacy environment variables are accepted only when

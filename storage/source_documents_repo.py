@@ -6,6 +6,21 @@ from database.client import get_client
 from storage.contracts import Row, as_rows
 
 
+def list_micro_topics(keys: list[str]) -> list[Row]:
+    """Resolve curated syllabus keys to their durable database identities."""
+    if not keys:
+        return []
+    result = (
+        get_client()
+        .table("quiz_micro_topics")
+        .select("id,key,name")
+        .in_("key", keys)
+        .eq("active", True)
+        .execute()
+    )
+    return as_rows(result.data, "active syllabus micro-topics")
+
+
 def list_grounding_bundle(
     subject_key: str,
     chapter: str,

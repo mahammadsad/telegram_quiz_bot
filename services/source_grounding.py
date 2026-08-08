@@ -8,6 +8,7 @@ from urllib.parse import urlparse
 from zoneinfo import ZoneInfo
 
 from config.settings import APP_TIMEZONE, CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS
+from config.syllabus import get_chapter
 from services.current_affairs_pipeline import (
     EVENT_POLICY_VERSION,
     authoritative_source_domain,
@@ -40,6 +41,13 @@ class SourceDocument:
 
 
 @dataclass(frozen=True, slots=True)
+class MicroTopicReference:
+    id: str
+    key: str
+    name: str
+
+
+@dataclass(frozen=True, slots=True)
 class GroundingBundle:
     subject_key: str
     chapter: str
@@ -47,6 +55,29 @@ class GroundingBundle:
     micro_topic_key: str
     micro_topic_name: str
     documents: tuple[SourceDocument, ...]
+    topics: tuple[MicroTopicReference, ...] = ()
+
+    @property
+    def source_required(self) -> bool:
+        return bool(self.documents)
+
+    @property
+    def available_topics(self) -> tuple[MicroTopicReference, ...]:
+        if self.topics:
+            return self.topics
+        seen: dict[str, MicroTopicReference] = {}
+        for row in self.documents:
+            key = row.micro_topic_key or self.micro_topic_key
+            seen.setdefault(key, MicroTopicReference(
+                id=row.micro_topic_id or self.micro_topic_id,
+                key=key,
+                name=row.micro_topic_name or self.micro_topic_name,
+            ))
+        return tuple(seen.values())
+
+    @property
+    def allowed_micro_topics(self) -> dict[str, str]:
+        return {row.key: row.id for row in self.available_topics}
 
     @property
     def source_ids(self) -> set[str]:
@@ -64,11 +95,11 @@ class GroundingBundle:
 
     @property
     def topic_keys(self) -> set[str]:
-        return {topic_key for _, topic_key in self.source_topics.values()}
+        return {row.key for row in self.available_topics}
 
     @property
     def required_source_diversity(self) -> int:
-        return min(4, len(self.source_ids))
+        return min(4, len(self.source_ids)) if self.source_required else 0
 
     @property
     def required_topic_diversity(self) -> int:
@@ -125,6 +156,51 @@ def load_grounding_bundle(
         micro_topic_key=_required(rows[0], "micro_topic_key"),
         micro_topic_name=_required(rows[0], "micro_topic_name"),
         documents=documents,
+    )
+
+
+def load_generation_bundle(
+    subject_key: str,
+    chapter: str,
+    target_date: date,
+) -> GroundingBundle:
+    """Prefer verified facts, then use curated timeless syllabus context.
+
+    Current affairs deliberately has no model-memory fallback.
+    """
+    try:
+        return load_grounding_bundle(subject_key, chapter, target_date)
+    except QuizValidationError:
+        if subject_key == "current-affairs":
+            raise
+
+    configured = get_chapter(subject_key, chapter)
+    ordered_keys = [topic.key for topic in configured.micro_topics]
+    rows_by_key = {
+        str(row.get("key") or ""): row
+        for row in source_documents_repo.list_micro_topics(ordered_keys)
+    }
+    topics = tuple(
+        MicroTopicReference(
+            id=str(rows_by_key[topic.key].get("id") or ""),
+            key=topic.key,
+            name=topic.name,
+        )
+        for topic in configured.micro_topics
+        if topic.key in rows_by_key
+    )
+    if len(topics) != len(configured.micro_topics) or any(not row.id for row in topics):
+        raise QuizValidationError(
+            f"Curated syllabus micro-topics are not synchronized for {subject_key}/{chapter}."
+        )
+    return GroundingBundle(
+        subject_key=subject_key,
+        chapter=chapter,
+        micro_topic_id=topics[0].id,
+        micro_topic_key=topics[0].key,
+        micro_topic_name=topics[0].name,
+        documents=(),
+        topics=topics,
     )
 
 
