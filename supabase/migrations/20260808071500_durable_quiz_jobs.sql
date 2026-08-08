@@ -182,6 +182,7 @@ begin
         raise exception 'worker and current timestamp are required';
     end if;
 
+    return query
     with expired_posting as (
         update public.quiz_jobs job
         set status = 'posting_unknown',
