@@ -1,5 +1,5 @@
 [meta]
-version = "2026-08-08.6"
+version = "2026-08-08.7"
 
 [gemini]
 primary_model = "gemini-3.1-flash-lite"
@@ -46,6 +46,7 @@ phase_c_inventory_migration_version = "20260808093621"
 phase_c_candidate_migration_version = "20260808094602"
 phase_d_current_affairs_migration_version = "20260808103500"
 phase_e_personal_learning_migration_version = "20260808113000"
+phase_e_exam_configuration_migration_version = "20260808123000"
 
 [content_inventory]
 target_days = 15

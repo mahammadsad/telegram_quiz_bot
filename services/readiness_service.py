@@ -35,6 +35,7 @@ from database.contract import (
     PHASE_C_IDENTITY_MIGRATION_VERSION,
     PHASE_C_INVENTORY_MIGRATION_VERSION,
     PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
+    PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION,
     PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
@@ -89,6 +90,9 @@ class Readiness:
             "phaseEPersonalLearningMigrationVersion": (
                 PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
             ),
+            "phaseEExamConfigurationMigrationVersion": (
+                PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION
+            ),
             "productionConfigVersion": PRODUCTION_CONFIG_VERSION,
             "productionConfigHash": PRODUCTION_CONFIG_HASH,
         }
@@ -115,6 +119,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
         "verifiedInventory": False,
         "currentAffairsEvents": False,
         "personalKnowledgeMastery": False,
+        "examConfiguration": False,
         "activeQuizRetrieval": False,
     }
     failures: list[str] = []
@@ -204,12 +209,16 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 phase_e_personal_learning = (
                     schema_contract_repo.get_phase_e_personal_learning_contract()
                 )
+                phase_e_exam_configuration = (
+                    schema_contract_repo.get_phase_e_exam_configuration_contract()
+                )
             except Exception as exc:
                 phase_c_content = {}
                 phase_c_inventory = {}
                 phase_c_candidate = {}
                 phase_d_current_affairs = {}
                 phase_e_personal_learning = {}
+                phase_e_exam_configuration = {}
                 LOG.warning(
                     "READINESS_PHASE_C_FAILURE category=%s",
                     type(exc).__name__,
@@ -234,6 +243,10 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 phase_e_personal_learning.get("function_permission_failures") or []
             ) + (
                 phase_e_personal_learning.get("table_permission_failures") or []
+            ) + (
+                phase_e_exam_configuration.get("function_permission_failures") or []
+            ) + (
+                phase_e_exam_configuration.get("table_permission_failures") or []
             )
             checks["databasePermissions"] = not permission_failures
             checks["leaderboardPrivacy"] = bool(
@@ -313,6 +326,20 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 )
                 == PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
             )
+            checks["examConfiguration"] = bool(
+                phase_e_exam_configuration.get("ready") is True
+                and phase_e_exam_configuration.get("versioned_exam_hierarchy") is True
+                and phase_e_exam_configuration.get("effective_dating") is True
+                and phase_e_exam_configuration.get("syllabus_weights") is True
+                and phase_e_exam_configuration.get("shared_test_instances") is True
+                and phase_e_exam_configuration.get("daily_quick_definition") is True
+                and phase_e_exam_configuration.get("historical_ids_preserved") is True
+                and phase_e_exam_configuration.get("attempt_links_backfilled") is True
+                and phase_e_exam_configuration.get(
+                    "phase_e_exam_configuration_migration_version"
+                )
+                == PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION
+            )
             source_rollout_ready = bool(
                 contract.get("source_rollout_migration_version")
                 == SOURCE_ROLLOUT_MIGRATION_VERSION
@@ -350,6 +377,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and checks["verifiedInventory"]
                 and checks["currentAffairsEvents"]
                 and checks["personalKnowledgeMastery"]
+                and checks["examConfiguration"]
                 and float(contract.get("verification_threshold") or 0)
                 == QUESTION_VERIFICATION_MIN_CONFIDENCE
             )
@@ -385,6 +413,8 @@ def assess(*, use_cache: bool = True) -> Readiness:
         failures.append("current_affairs_events")
     if not checks["personalKnowledgeMastery"]:
         failures.append("personal_knowledge_mastery")
+    if not checks["examConfiguration"]:
+        failures.append("exam_configuration")
     if not checks["databasePermissions"]:
         failures.append("database_permissions")
     if not checks["activeQuizRetrieval"]:

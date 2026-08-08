@@ -2,7 +2,7 @@
 
 Updated: 2026-08-08
 
-Branch: `codex/phase-e-learner-platform`
+Branch: `codex/phase-e-exam-platform`
 
 Baseline commit: `e390751782f6c0acf066b54273da1ceb8c65e5e1`
 
@@ -18,7 +18,9 @@ Render deployment, and fail-closed staging smoke are green. Phase D deterministi
 verification and its adversarial release gate are green on draft PR #29. The
 Phase D current-affairs event/claim migration and public staging gate are green.
 The expanded mathematics, reasoning, English, and Bengali validators are green
-in staging. Phase E1 personal learning is the active checkpoint.
+in staging. Phase E1 personal learning is green on PR #30, including CI,
+Supabase staging, Render staging, and non-posting smoke #24. Phase E2 exam
+configuration is the active checkpoint.
 Production is unchanged.
 
 ## Implemented
@@ -80,6 +82,12 @@ Production is unchanged.
   a 50/30/20 recommendation policy; and server-filtered, paginated mastery.
   The unwired Telegram reminder control is disabled and explicitly labelled
   as coming soon.
+- Phase E2 adds versioned, effective-dated exam/stage/paper/section entities,
+  syllabus weights down to knowledge points, shared test definitions and
+  instances, automatic `daily_quick` mapping for all legacy and future daily
+  quizzes, and attempt/answer links to test and section instances. Public
+  catalogue/test RPCs omit answer keys; unreviewed exam/mock templates remain
+  drafts rather than inventing official rules.
 
 ## Local evidence
 
@@ -124,6 +132,13 @@ Production is unchanged.
   skipped locally; Ruff and mypy (70 production files) pass. The local browser
   suite could not run because the locked Playwright package download was
   corrupted; disposable PostgreSQL and browser CI are required before staging.
+- Phase E1 final gate: CI run `31255846386`, Render deployment
+  `dep-d9rhh3ajnfac73fnm91g`, and non-posting smoke run `31256140930` are green
+  on commit `4e753a4`. The Phase E contract is ready in staging and a cleanup-safe
+  alternate-variant mastery simulation passed.
+- Phase E2 local checkpoint: 400 tests pass with 29 hosted database tests
+  skipped locally; Ruff and mypy (73 production files) pass. Disposable
+  PostgreSQL and browser CI remain required before the staging migration.
 
 ## Deployment prerequisites
 

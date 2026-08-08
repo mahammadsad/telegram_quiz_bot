@@ -42,6 +42,7 @@ from database.contract import (
     PHASE_C_CANDIDATE_MIGRATION_VERSION,
     PHASE_C_INVENTORY_MIGRATION_VERSION,
     PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
+    PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION,
     PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
@@ -1056,6 +1057,9 @@ def validate_database_schema() -> None:
     phase_e_personal_learning = (
         schema_contract_repo.get_phase_e_personal_learning_contract()
     )
+    phase_e_exam_configuration = (
+        schema_contract_repo.get_phase_e_exam_configuration_contract()
+    )
     permission_failures = (
         contract.get("function_permission_failures") or []
     ) + (contract.get("table_permission_failures") or []) + (
@@ -1074,6 +1078,10 @@ def validate_database_schema() -> None:
         phase_e_personal_learning.get("function_permission_failures") or []
     ) + (
         phase_e_personal_learning.get("table_permission_failures") or []
+    ) + (
+        phase_e_exam_configuration.get("function_permission_failures") or []
+    ) + (
+        phase_e_exam_configuration.get("table_permission_failures") or []
     )
     valid = bool(
         contract.get("ready")
@@ -1119,6 +1127,18 @@ def validate_database_schema() -> None:
             "phase_e_personal_learning_migration_version"
         )
         == PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
+        and phase_e_exam_configuration.get("ready") is True
+        and phase_e_exam_configuration.get("versioned_exam_hierarchy") is True
+        and phase_e_exam_configuration.get("effective_dating") is True
+        and phase_e_exam_configuration.get("syllabus_weights") is True
+        and phase_e_exam_configuration.get("shared_test_instances") is True
+        and phase_e_exam_configuration.get("daily_quick_definition") is True
+        and phase_e_exam_configuration.get("historical_ids_preserved") is True
+        and phase_e_exam_configuration.get("attempt_links_backfilled") is True
+        and phase_e_exam_configuration.get(
+            "phase_e_exam_configuration_migration_version"
+        )
+        == PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION
         and (
             not SOURCE_BACKED_ROTATION_ENABLED
             or (

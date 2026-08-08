@@ -26,6 +26,7 @@ from config.subjects import SUBJECTS
 from database.contract import APPLICATION_VERSION, REQUIRED_MIGRATION_VERSION
 from models.user import User
 from services import (
+    exam_config_service,
     leaderboard_privacy,
     learning_resources_service,
     personal_learning_service,
@@ -325,6 +326,68 @@ def health_ready() -> JSONResponse:
 def health() -> JSONResponse:
     """Compatibility alias with the same strict semantics as readiness."""
     return health_ready()
+
+
+@app.get("/api/exams")
+def exam_configuration_catalog(
+    as_of: date | None = None,
+    exam: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    try:
+        return exam_config_service.exam_catalog(
+            as_of=as_of,
+            exam_key=exam,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Exam configuration is temporarily unavailable.",
+        ) from exc
+
+
+@app.get("/api/tests/definitions")
+def test_definition_catalog(
+    as_of: date | None = None,
+    test_type: str | None = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> dict:
+    try:
+        return exam_config_service.test_definition_catalog(
+            as_of=as_of,
+            test_type=test_type,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Test definitions are temporarily unavailable.",
+        ) from exc
+
+
+@app.get("/api/tests/instances/{test_instance_id}")
+def public_test_instance(test_instance_id: uuid.UUID) -> dict:
+    try:
+        payload = exam_config_service.public_test_instance(test_instance_id)
+        if payload is None:
+            raise HTTPException(status_code=404, detail="Test instance not found.")
+        return payload
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Test instance is temporarily unavailable.",
+        ) from exc
 
 
 @app.get("/api/quiz/{quiz_id}")

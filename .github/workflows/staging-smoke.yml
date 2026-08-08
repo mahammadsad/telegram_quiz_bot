@@ -202,6 +202,7 @@ jobs:
               PHASE_C_IDENTITY_MIGRATION_VERSION,
               PHASE_C_INVENTORY_MIGRATION_VERSION,
               PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
+              PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION,
               PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
               POST_FINALIZATION_MIGRATION_VERSION,
               QUIZ_JOBS_MIGRATION_VERSION,
@@ -257,6 +258,9 @@ jobs:
                   ),
                   "phaseEPersonalLearningMigrationVersion": body.get(
                       "phaseEPersonalLearningMigrationVersion"
+                  ),
+                  "phaseEExamConfigurationMigrationVersion": body.get(
+                      "phaseEExamConfigurationMigrationVersion"
                   ),
                   "sourceBackedRotationEnabled": body.get(
                       "sourceBackedRotationEnabled"
@@ -342,6 +346,13 @@ jobs:
               if body.get("checks", {}).get("personalKnowledgeMastery") is not True:
                   raise SystemExit("Staging personal knowledge mastery is not ready.")
               if (
+                  body.get("phaseEExamConfigurationMigrationVersion")
+                  != PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION
+              ):
+                  raise SystemExit("Staging Phase E exam configuration mismatch.")
+              if body.get("checks", {}).get("examConfiguration") is not True:
+                  raise SystemExit("Staging exam configuration is not ready.")
+              if (
                   body.get("sourceRolloutMigrationVersion")
                   != SOURCE_ROLLOUT_MIGRATION_VERSION
               ):
@@ -371,6 +382,7 @@ jobs:
                       "verifiedInventory",
                       "currentAffairsEvents",
                       "personalKnowledgeMastery",
+                      "examConfiguration",
                       "activeQuizRetrieval",
                   }
                   if (

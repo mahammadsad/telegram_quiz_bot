@@ -23,6 +23,7 @@ from database.contract import (
     PHASE_C_IDENTITY_MIGRATION_VERSION,
     PHASE_C_INVENTORY_MIGRATION_VERSION,
     PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
+    PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION,
     PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
@@ -178,10 +179,12 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert "body.get(\"phaseCCandidateMigrationVersion\")" in source
     assert "body.get(\"phaseDCurrentAffairsMigrationVersion\")" in source
     assert "body.get(\"phaseEPersonalLearningMigrationVersion\")" in source
+    assert "body.get(\"phaseEExamConfigurationMigrationVersion\")" in source
     assert 'body.get("checks", {}).get("contentIdentity") is not True' in source
     assert 'body.get("checks", {}).get("verifiedInventory") is not True' in source
     assert 'body.get("checks", {}).get("currentAffairsEvents") is not True' in source
     assert 'body.get("checks", {}).get("personalKnowledgeMastery") is not True' in source
+    assert 'body.get("checks", {}).get("examConfiguration") is not True' in source
     assert '"7.1.0"' not in source
 
 
@@ -252,7 +255,7 @@ def test_authoritative_migration_version_is_latest_filename() -> None:
     migrations = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
     assert migrations
     assert migrations[-1].name.startswith(
-        f"{PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION}_"
+        f"{PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION}_"
     )
     assert any(
         path.name.startswith(f"{PHASE_C_IDENTITY_MIGRATION_VERSION}_")
@@ -283,7 +286,7 @@ def test_authoritative_migration_version_is_latest_filename() -> None:
 def test_versioned_production_manifest_matches_deployment_intent() -> None:
     manifest_path = ROOT / "config" / "production.toml"
     assert manifest_path.is_file()
-    assert PRODUCTION_CONFIG_VERSION == "2026-08-08.6"
+    assert PRODUCTION_CONFIG_VERSION == "2026-08-08.7"
     assert re.fullmatch(r"[0-9a-f]{64}", PRODUCTION_CONFIG_HASH)
     assert PRODUCTION_CONFIG["quiz"]["source_backed_rotation_enabled"] is True
     assert PRODUCTION_CONFIG["gemini"] == {
@@ -319,6 +322,9 @@ def test_versioned_production_manifest_matches_deployment_intent() -> None:
     assert PRODUCTION_CONFIG["database"][
         "phase_e_personal_learning_migration_version"
     ] == PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
+    assert PRODUCTION_CONFIG["database"][
+        "phase_e_exam_configuration_migration_version"
+    ] == PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION
 
     render = _load_yaml(ROOT / "render.yaml")
     render_env = {
@@ -341,7 +347,7 @@ def test_python_and_browser_packages_share_the_release_version() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
 
-    assert APPLICATION_VERSION == "8.0.0"
+    assert APPLICATION_VERSION == "8.1.0"
     assert package["version"] == APPLICATION_VERSION
     assert lock["version"] == APPLICATION_VERSION
     assert lock["packages"][""]["version"] == APPLICATION_VERSION

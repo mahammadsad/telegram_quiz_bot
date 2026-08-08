@@ -21,6 +21,7 @@ from database.contract import (
     LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
     PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
+    PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION,
     PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
@@ -828,6 +829,59 @@ def test_database_rotation_is_exactly_the_reviewed_source_allowlist(
         ).fetchall()
 
     assert {row["key"] for row in rows} == expected
+
+
+def test_phase_e_exam_contract_backfills_shared_daily_quick_model(
+    database_url: str,
+    versioned_quizzes: dict,
+) -> None:
+    del versioned_quizzes
+    with connect(database_url) as connection:
+        contract = connection.execute(
+            "select public.get_phase_e_exam_configuration_contract() as contract"
+        ).fetchone()["contract"]
+        instance = connection.execute(
+            """
+            select instance.id
+            from public.test_instances instance
+            where instance.legacy_quiz_id = '20260602-history'
+            """
+        ).fetchone()
+        public_payload = connection.execute(
+            "select public.get_public_test_instance(%s) as payload",
+            (instance["id"],),
+        ).fetchone()["payload"]
+
+    assert contract["ready"] is True
+    assert contract["phase_e_exam_configuration_migration_version"] == (
+        PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION
+    )
+    assert contract["daily_quick_definition"] is True
+    assert contract["historical_ids_preserved"] is True
+    assert contract["attempt_links_backfilled"] is True
+    assert public_payload["legacyQuizId"] == "20260602-history"
+    assert public_payload["testType"] == "daily_quick"
+    assert len(public_payload["sections"]) == 1
+    assert len(public_payload["sections"][0]["questions"]) == 10
+    assert "correctOption" not in str(public_payload)
+    assert "correct_option" not in str(public_payload)
+
+
+def test_phase_e_exam_tables_and_rpcs_are_service_role_only(
+    database_url: str,
+) -> None:
+    for role in ("anon", "authenticated"):
+        with psycopg.connect(database_url, autocommit=True) as connection:
+            connection.execute(f"set role {role}")
+            try:
+                with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                    connection.execute("select count(*) from public.exams")
+                with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                    connection.execute(
+                        "select public.get_test_definition_catalog(current_date, null, 20, 0)"
+                    )
+            finally:
+                connection.execute("reset role")
 
 
 @pytest.mark.parametrize("role", ["anon", "authenticated"])

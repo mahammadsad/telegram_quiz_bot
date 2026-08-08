@@ -877,6 +877,25 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
     )
     monkeypatch.setattr(
         bot.schema_contract_repo,
+        "get_phase_e_exam_configuration_contract",
+        lambda: {
+            "ready": True,
+            "versioned_exam_hierarchy": True,
+            "effective_dating": True,
+            "syllabus_weights": True,
+            "shared_test_instances": True,
+            "daily_quick_definition": True,
+            "historical_ids_preserved": True,
+            "attempt_links_backfilled": True,
+            "phase_e_exam_configuration_migration_version": (
+                bot.PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION
+            ),
+            "function_permission_failures": [],
+            "table_permission_failures": [],
+        },
+    )
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
         "get_phase_d_current_affairs_contract",
         lambda: {
             "ready": True,
@@ -986,6 +1005,25 @@ def test_database_preflight_fails_closed_on_old_or_misgranted_contract(monkeypat
             "cohort_definition": True,
             "phase_e_personal_learning_migration_version": (
                 bot.PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
+            ),
+            "function_permission_failures": [],
+            "table_permission_failures": [],
+        },
+    )
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_phase_e_exam_configuration_contract",
+        lambda: {
+            "ready": True,
+            "versioned_exam_hierarchy": True,
+            "effective_dating": True,
+            "syllabus_weights": True,
+            "shared_test_instances": True,
+            "daily_quick_definition": True,
+            "historical_ids_preserved": True,
+            "attempt_links_backfilled": True,
+            "phase_e_exam_configuration_migration_version": (
+                bot.PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION
             ),
             "function_permission_failures": [],
             "table_permission_failures": [],

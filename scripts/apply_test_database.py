@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from database.contract import (  # noqa: E402
-    PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
+    PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION,
 )
 
 BOOTSTRAP = ROOT / "database" / "schema.sql"
@@ -109,7 +109,7 @@ def rebuild(database_url: str) -> dict:
     identity = _migration_identity(latest_supabase)
     if (
         not identity
-        or identity[0] != PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
+        or identity[0] != PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION
     ):
         raise RuntimeError(
             "The Phase E contract does not match the latest migration file."
@@ -183,6 +183,13 @@ def rebuild(database_url: str) -> dict:
             raise RuntimeError(
                 "Disposable Phase E personal-learning contract is not ready."
             )
+        phase_e_exam_configuration_contract = connection.execute(
+            "select public.get_phase_e_exam_configuration_contract()"
+        ).fetchone()[0]
+        if not phase_e_exam_configuration_contract.get("ready"):
+            raise RuntimeError(
+                "Disposable Phase E exam-configuration contract is not ready."
+            )
         contract.update(privacy_contract)
         contract.update(quiz_job_contract)
         contract.update(phase_c_content_contract)
@@ -190,6 +197,7 @@ def rebuild(database_url: str) -> dict:
         contract.update(phase_c_candidate_contract)
         contract.update(phase_d_current_affairs_contract)
         contract.update(phase_e_personal_learning_contract)
+        contract.update(phase_e_exam_configuration_contract)
         return contract
 
 
@@ -219,6 +227,8 @@ def main() -> int:
         f"{contract['phase_d_current_affairs_migration_version']}"
         " phase_e_personal_learning="
         f"{contract['phase_e_personal_learning_migration_version']}"
+        " phase_e_exam_configuration="
+        f"{contract['phase_e_exam_configuration_migration_version']}"
     )
     return 0
 

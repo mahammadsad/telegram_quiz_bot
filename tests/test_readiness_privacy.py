@@ -160,6 +160,25 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "table_permission_failures": [],
         },
     )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_phase_e_exam_configuration_contract",
+        lambda: {
+            "ready": True,
+            "versioned_exam_hierarchy": True,
+            "effective_dating": True,
+            "syllabus_weights": True,
+            "shared_test_instances": True,
+            "daily_quick_definition": True,
+            "historical_ids_preserved": True,
+            "attempt_links_backfilled": True,
+            "phase_e_exam_configuration_migration_version": (
+                readiness_service.PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION
+            ),
+            "function_permission_failures": [],
+            "table_permission_failures": [],
+        },
+    )
     readiness_service._CACHE = None
 
 
