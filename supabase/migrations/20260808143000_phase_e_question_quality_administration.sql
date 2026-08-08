@@ -2,6 +2,10 @@
 -- append-only question moderation workflow. Existing report reasons and APIs
 -- remain valid; attempted question content remains immutable.
 
+create index if not exists idx_questions_supersedes_question
+    on public.questions (supersedes_question_id)
+    where supersedes_question_id is not null;
+
 alter table public.question_reports
     drop constraint if exists question_reports_reason_check;
 alter table public.question_reports add constraint question_reports_reason_check
