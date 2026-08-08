@@ -748,16 +748,33 @@ def run_subject_quiz(
                         failed_run.get("integrity_diagnostic_code") or "checksum_mismatch",
                     )
                 else:
+                    failure_fields = {
+                        "last_error_category": category,
+                        "last_error_at": datetime.now(timezone.utc).isoformat(),
+                        "providers_attempted": list(dict.fromkeys(row.get("provider") for row in safe_attempts if row.get("provider"))),
+                        "generation_attempt_count": len(safe_attempts),
+                        "retryable": bool(getattr(exc, "retryable", False)),
+                    }
+                    if category == "quiz_content_collision":
+                        alternate = chapter_selector.select_alternate_chapter(
+                            subject_key,
+                            target_date,
+                            chapter,
+                        )
+                        failure_fields["chapter"] = alternate
+                        LOG.warning(
+                            "QUIZ_COLLISION_ROTATED_CHAPTER subject=%s quiz_id=%s from=%s to=%s",
+                            subject_key,
+                            quiz_id,
+                            chapter,
+                            alternate,
+                        )
                     quiz_runs_repo.update_status(
                         quiz_id,
                         "generation_failed",
                         claimed_by=worker_id,
                         release_claim=True,
-                        last_error_category=category,
-                        last_error_at=datetime.now(timezone.utc).isoformat(),
-                        providers_attempted=list(dict.fromkeys(row.get("provider") for row in safe_attempts if row.get("provider"))),
-                        generation_attempt_count=len(safe_attempts),
-                        retryable=bool(getattr(exc, "retryable", False)),
+                        **failure_fields,
                     )
             except Exception:
                 LOG.warning("QUIZ_FAILURE_STATUS_UPDATE_SKIPPED subject=%s quiz_id=%s", subject_key, quiz_id)
