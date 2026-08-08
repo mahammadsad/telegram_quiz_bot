@@ -45,6 +45,8 @@ def test_exam_migration_is_versioned_additive_private_and_effective_dated() -> N
     assert sql.count("effective_from date not null") >= 6
     assert "validate_exam_syllabus_weight_scope" in sql
     assert "knowledge_point_id uuid references public.knowledge_points" in sql
+    assert "idx_exam_syllabus_weights_subject" in sql
+    assert "idx_test_instance_questions_section_instance" in sql
 
 
 def test_daily_quick_backfill_preserves_legacy_ids_and_future_sync() -> None:

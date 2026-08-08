@@ -138,6 +138,8 @@ create unique index if not exists idx_exam_syllabus_weight_scope_unique
     );
 create index if not exists idx_exam_syllabus_weights_section
     on public.exam_syllabus_weights (exam_section_id, effective_from, effective_to);
+create index if not exists idx_exam_syllabus_weights_subject
+    on public.exam_syllabus_weights (subject_key);
 create index if not exists idx_exam_syllabus_weights_chapter
     on public.exam_syllabus_weights (chapter_id) where chapter_id is not null;
 create index if not exists idx_exam_syllabus_weights_micro_topic
@@ -274,6 +276,8 @@ create index if not exists idx_test_instance_questions_question
     on public.test_instance_questions (question_id);
 create index if not exists idx_test_instance_questions_section
     on public.test_instance_questions (section_instance_id, section_order);
+create index if not exists idx_test_instance_questions_section_instance
+    on public.test_instance_questions (section_instance_id, test_instance_id);
 
 alter table public.quiz_attempts
     add column if not exists test_instance_id uuid
