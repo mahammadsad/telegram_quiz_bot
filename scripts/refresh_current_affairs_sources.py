@@ -267,7 +267,14 @@ def refresh_rows(
             if release is None or not release_is_current(release.published_at, now):
                 skipped += 1
                 continue
-            rows.append(release_to_source_row(release, now))
+            try:
+                rows.append(release_to_source_row(release, now))
+            except ValueError:
+                # A real PIB page can be complete enough to parse while still
+                # containing no sentence that satisfies the exact-span atomic
+                # claim policy. Reject that one release without discarding the
+                # rest of the independently valid refresh batch.
+                skipped += 1
 
     if not rows:
         raise CurrentAffairsRefreshError(
