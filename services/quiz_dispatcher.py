@@ -98,6 +98,7 @@ def dispatch_due_jobs(
         job_id = str(job["id"])
         quiz_id = str(job["quiz_id"])
         try:
+            job_logical_date = date.fromisoformat(str(job["logical_date"]))
             quiz_jobs_repo.transition(
                 job_id=job_id,
                 worker_id=worker_id,
@@ -107,7 +108,7 @@ def dispatch_due_jobs(
             )
             outcome = runner(
                 subject_key,
-                target_date=logical_date,
+                target_date=job_logical_date,
                 durable_job_id=job_id,
                 durable_worker_id=worker_id,
             )

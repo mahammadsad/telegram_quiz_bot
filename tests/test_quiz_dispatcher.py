@@ -9,6 +9,7 @@ def _jobs(specs):
         {
             "id": f"job-{index}",
             "quiz_id": spec["quiz_id"],
+            "logical_date": spec["logical_date"],
             "subject_key": spec["subject_key"],
             "code_sha": "sha",
         }
@@ -87,3 +88,39 @@ def test_already_posted_is_synchronized_and_unknown_is_quarantined(monkeypatch):
     assert synced == [{"quiz_id": jobs[0]["quiz_id"], "worker_id": "worker"}]
     assert unknown[0]["job_id"] == jobs[1]["id"]
     assert result.actionable_failures is True
+
+
+def test_midnight_catchup_runs_each_job_for_its_own_logical_date(monkeypatch):
+    now = datetime(2026, 8, 8, 19, tzinfo=timezone.utc)
+    old_specs = quiz_dispatcher.daily_job_specs(date(2026, 8, 8))
+    old_job = _jobs(old_specs[:1])[0]
+    targets = []
+
+    monkeypatch.setattr(
+        quiz_dispatcher.quiz_jobs_repo,
+        "ensure_daily",
+        lambda *args, **kwargs: [],
+    )
+    monkeypatch.setattr(
+        quiz_dispatcher.quiz_jobs_repo,
+        "claim_due",
+        lambda **kwargs: [old_job],
+    )
+    monkeypatch.setattr(
+        quiz_dispatcher.quiz_jobs_repo,
+        "transition",
+        lambda **kwargs: None,
+    )
+
+    def runner(subject, **kwargs):
+        targets.append(kwargs["target_date"])
+        return RunOutcome.GENERATED_AND_POSTED
+
+    result = quiz_dispatcher.dispatch_due_jobs(
+        runner,
+        now=now,
+        worker_id="worker",
+    )
+
+    assert result.logical_date == date(2026, 8, 9)
+    assert targets == [date(2026, 8, 8)]
