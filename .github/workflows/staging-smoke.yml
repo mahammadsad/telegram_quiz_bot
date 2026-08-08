@@ -198,6 +198,9 @@ jobs:
               LEADERBOARD_PRIVACY_MIGRATION_VERSION,
               LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
               PERSONAL_LEARNING_MIGRATION_VERSION,
+              PHASE_C_CANDIDATE_MIGRATION_VERSION,
+              PHASE_C_IDENTITY_MIGRATION_VERSION,
+              PHASE_C_INVENTORY_MIGRATION_VERSION,
               POST_FINALIZATION_MIGRATION_VERSION,
               QUIZ_JOBS_MIGRATION_VERSION,
               REQUIRED_MIGRATION_VERSION,
@@ -237,6 +240,15 @@ jobs:
                   ),
                   "quizJobsMigrationVersion": body.get(
                       "quizJobsMigrationVersion"
+                  ),
+                  "phaseCIdentityMigrationVersion": body.get(
+                      "phaseCIdentityMigrationVersion"
+                  ),
+                  "phaseCInventoryMigrationVersion": body.get(
+                      "phaseCInventoryMigrationVersion"
+                  ),
+                  "phaseCCandidateMigrationVersion": body.get(
+                      "phaseCCandidateMigrationVersion"
                   ),
                   "sourceBackedRotationEnabled": body.get(
                       "sourceBackedRotationEnabled"
@@ -289,6 +301,25 @@ jobs:
               if body.get("checks", {}).get("durableQuizJobs") is not True:
                   raise SystemExit("Staging durable quiz jobs are not ready.")
               if (
+                  body.get("phaseCIdentityMigrationVersion")
+                  != PHASE_C_IDENTITY_MIGRATION_VERSION
+              ):
+                  raise SystemExit("Staging Phase C identity migration mismatch.")
+              if (
+                  body.get("phaseCInventoryMigrationVersion")
+                  != PHASE_C_INVENTORY_MIGRATION_VERSION
+              ):
+                  raise SystemExit("Staging Phase C inventory migration mismatch.")
+              if (
+                  body.get("phaseCCandidateMigrationVersion")
+                  != PHASE_C_CANDIDATE_MIGRATION_VERSION
+              ):
+                  raise SystemExit("Staging Phase C candidate migration mismatch.")
+              if body.get("checks", {}).get("contentIdentity") is not True:
+                  raise SystemExit("Staging content identity is not ready.")
+              if body.get("checks", {}).get("verifiedInventory") is not True:
+                  raise SystemExit("Staging verified inventory is not ready.")
+              if (
                   body.get("sourceRolloutMigrationVersion")
                   != SOURCE_ROLLOUT_MIGRATION_VERSION
               ):
@@ -314,6 +345,8 @@ jobs:
                       "leaderboardPrivacy",
                       "postFinalization",
                       "durableQuizJobs",
+                      "contentIdentity",
+                      "verifiedInventory",
                       "activeQuizRetrieval",
                   }
                   if (

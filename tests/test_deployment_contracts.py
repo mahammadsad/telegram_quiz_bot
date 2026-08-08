@@ -171,6 +171,11 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert 'body.get("checks", {}).get("postFinalization") is not True' in source
     assert "body.get(\"quizJobsMigrationVersion\")" in source
     assert 'body.get("checks", {}).get("durableQuizJobs") is not True' in source
+    assert "body.get(\"phaseCIdentityMigrationVersion\")" in source
+    assert "body.get(\"phaseCInventoryMigrationVersion\")" in source
+    assert "body.get(\"phaseCCandidateMigrationVersion\")" in source
+    assert 'body.get("checks", {}).get("contentIdentity") is not True' in source
+    assert 'body.get("checks", {}).get("verifiedInventory") is not True' in source
     assert '"7.1.0"' not in source
 
 
