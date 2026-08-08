@@ -9,6 +9,7 @@ MIGRATION = ROOT / "supabase" / "migrations" / "20260718171256_learning_resource
 INDEX_MIGRATION = ROOT / "supabase" / "migrations" / "20260718172756_learning_resources_fk_indexes.sql"
 LEGACY_MIGRATION = ROOT / "supabase" / "migrations" / "20260718174844_learning_resources_legacy_pack_compatibility.sql"
 CACHE_DEDUPE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718203218_dedupe_source_resource_cache.sql"
+TITLE_BOUND_MIGRATION = ROOT / "supabase" / "migrations" / "20260809003000_bound_cached_source_resource_titles.sql"
 INDEX = ROOT / "index.html"
 
 
@@ -73,6 +74,17 @@ def test_source_mirror_deduplicates_immutable_fact_versions_before_upsert():
     assert "security definer" not in sql
     assert "from public, anon, authenticated" in sql
     assert "to service_role" in sql
+
+
+def test_source_mirror_bounds_untrusted_official_titles_without_mutating_sources():
+    sql = TITLE_BOUND_MIGRATION.read_text(encoding="utf-8").lower()
+    cache = sql.split("function public.cache_verified_source_resources", 1)[1]
+    assert "left(btrim(source.source_title), 300)" in cache
+    assert "update public.source_documents" not in cache
+    assert "select distinct on (sd.micro_topic_id, sd.source_url)" in cache
+    assert "security definer" not in cache
+    assert "from public, anon, authenticated" in cache
+    assert "to service_role" in cache
 
 
 def test_legacy_pack_compatibility_is_exact_and_does_not_rewrite_questions():
