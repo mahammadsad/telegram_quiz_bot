@@ -128,6 +128,7 @@ def validate_questions(
     required_topic_diversity: int = 1,
     require_verification: bool = True,
     require_deterministic_proof: bool = False,
+    run_deterministic_checks: bool = True,
     _expected_count: int = QUESTION_COUNT,
 ) -> list[dict]:
     if not isinstance(raw_questions, list) or len(raw_questions) != _expected_count:
@@ -311,16 +312,18 @@ def validate_questions(
             raise QuizValidationError(f"Question {number} is blank or duplicated.")
         seen_questions.add(normalized_question)
 
-        try:
-            deterministic = verify_candidate_deterministically(
-                raw,
-                require_subject_proof=require_deterministic_proof,
-            )
-        except DeterministicVerificationError as exc:
-            raise QuizValidationError(
-                f"Question {number} failed deterministic verification: {exc}",
-                reason_code=exc.code,
-            ) from exc
+        deterministic = None
+        if run_deterministic_checks:
+            try:
+                deterministic = verify_candidate_deterministically(
+                    raw,
+                    require_subject_proof=require_deterministic_proof,
+                )
+            except DeterministicVerificationError as exc:
+                raise QuizValidationError(
+                    f"Question {number} failed deterministic verification: {exc}",
+                    reason_code=exc.code,
+                ) from exc
 
         clean_row: dict[str, Any] = {
             "question": text,
@@ -360,7 +363,7 @@ def validate_questions(
                 if isinstance(raw.get("deterministic_proof"), dict)
                 else None
             ),
-            "deterministic_verification": deterministic.as_dict(),
+            "deterministic_verification": deterministic.as_dict() if deterministic else None,
             "source_expires_at": _text(
                 raw.get("source_expires_at") or raw.get("expires_at")
             )
