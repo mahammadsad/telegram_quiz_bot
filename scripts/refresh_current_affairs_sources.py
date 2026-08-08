@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
-from datetime import datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError
@@ -36,6 +36,10 @@ from config.syllabus import SYLLABUS  # noqa: E402
 from scripts.import_source_documents import (  # noqa: E402
     import_source_bundle,
     validate_source_bundle,
+)
+from services.current_affairs_pipeline import (  # noqa: E402
+    build_event_bundle,
+    cluster_current_affairs_rows,
 )
 
 PIB_RSS_URL = "https://www.pib.gov.in/RssMain.aspx?ModId=6&Lang=1&Regid=3"
@@ -269,7 +273,7 @@ def refresh_rows(
         raise CurrentAffairsRefreshError(
             "No current, complete PIB releases passed the source-safety checks."
         )
-    return rows, RefreshStats(
+    return cluster_current_affairs_rows(rows), RefreshStats(
         rss_items=len(items),
         accepted=len(rows),
         skipped=skipped,
@@ -583,11 +587,14 @@ def release_to_source_row(release: Release, accessed_at: datetime) -> dict:
     published_at = _as_utc(release.published_at)
     accessed_at = _as_utc(accessed_at)
     local_publication_date = published_at.astimezone(IST).date()
-    expires_at = datetime.combine(
-        local_publication_date + timedelta(days=CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS),
-        time(23, 59, 59),
-        tzinfo=IST,
-    ).astimezone(timezone.utc)
+    event = build_event_bundle(
+        title=release.title,
+        body=release.body,
+        ministry=release.ministry,
+        source_url=release.url,
+        published_at=published_at,
+    )
+    expires_at = datetime.fromisoformat(str(event["expires_at"]))
     body = _truncate_at_word(release.body, MAX_FACT_SUMMARY_CHARS - 300)
     fact_summary = (
         f"Official PIB release dated {published_at.astimezone(IST).date().isoformat()} "
@@ -620,9 +627,10 @@ def release_to_source_row(release: Release, accessed_at: datetime) -> dict:
         ),
         "expires_at": expires_at.isoformat(),
         "verification_notes": (
-            "Automatically parsed from the exact official PIB release under the "
-            "reviewed PIB-only ingestion policy; dynamic facts expire after 45 days."
+            "Official document identity and exact-span atomic claims were validated "
+            "under official_exact_span_v1; correction-like releases require review."
         ),
+        "current_affairs_event": event,
         "_chapter_key": chapter_key,
     }
 

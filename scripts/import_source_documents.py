@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
@@ -14,6 +15,11 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from config.subjects import get_subject  # noqa: E402
+from services.current_affairs_pipeline import (  # noqa: E402
+    EVENT_CLUSTER_VERSION,
+    EVENT_POLICY_VERSION,
+    authoritative_source_domain,
+)
 from utils.source_validation import is_placeholder_source  # noqa: E402
 
 
@@ -75,6 +81,14 @@ def import_source_bundle(
             f"Unknown chapter at row {index}",
         )
         micro_topic = _find_or_create_micro_topic(client, chapter, clean, dry_run)
+        event = clean.get("current_affairs_event")
+        can_approve = bool(
+            approve
+            and (
+                clean["subject_key"] != "current-affairs"
+                or (isinstance(event, dict) and not event["review_required"])
+            )
+        )
         payload = {
             "micro_topic_id": micro_topic["id"],
             "source_url": clean["source_url"],
@@ -86,12 +100,12 @@ def import_source_bundle(
             "fact_summary": clean["fact_summary"],
             "fact_version": clean["fact_version"],
             "expires_at": clean["expires_at"],
-            "verification_status": "verified" if approve else "draft",
+            "verification_status": "verified" if can_approve else "draft",
             "verification_notes": clean.get("verification_notes") or (
-                "Operator approved validated import." if approve else "Awaiting operator approval."
+                "Operator approved validated import." if can_approve else "Awaiting operator approval."
             ),
-            "review_required": not approve,
-            "verified_at": datetime.now(timezone.utc).isoformat() if approve else None,
+            "review_required": not can_approve,
+            "verified_at": datetime.now(timezone.utc).isoformat() if can_approve else None,
             "updated_at": datetime.now(timezone.utc).isoformat(),
         }
         if dry_run:
@@ -101,7 +115,16 @@ def import_source_bundle(
             payload,
             on_conflict="micro_topic_id,source_url,fact_version",
         ).execute()
-        imported.append(result.data[0])
+        source = result.data[0]
+        imported.append(source)
+        if clean["subject_key"] == "current-affairs":
+            client.rpc(
+                "upsert_current_affairs_event_bundle",
+                {
+                    "p_source_document_id": source["id"],
+                    "p_event": _event_for_import(event, approve=can_approve),
+                },
+            ).execute()
 
     if approve and not dry_run:
         for subject_key in sorted({str(row["subject_key"]) for row in clean_rows}):
@@ -155,6 +178,13 @@ def validate_source_row(raw: object, row_number: int) -> dict:
         raise ValueError(f"Current-affairs source row {row_number} requires source_published_at.")
     if subject_key == "current-affairs" and source_kind == "secondary":
         raise ValueError(f"Current-affairs source row {row_number} must be official or primary.")
+    if subject_key == "current-affairs":
+        try:
+            authoritative_source_domain(source_domain)
+        except ValueError as exc:
+            raise ValueError(
+                f"Current-affairs source row {row_number} is not authoritative."
+            ) from exc
     accessed_at = _optional_datetime(raw.get("source_accessed_at"), "source_accessed_at", row_number)
     accessed_at = accessed_at or datetime.now(timezone.utc).isoformat()
     expires_at = _optional_datetime(raw.get("expires_at"), "expires_at", row_number)
@@ -163,7 +193,7 @@ def validate_source_row(raw: object, row_number: int) -> dict:
     fact_summary = _required(raw, "fact_summary", row_number)
     if len(fact_summary) < 40:
         raise ValueError(f"Source row {row_number} fact_summary is too short.")
-    return {
+    clean = {
         "subject_key": subject_key,
         "chapter": chapter,
         "micro_topic_name": micro_topic_name,
@@ -179,6 +209,83 @@ def validate_source_row(raw: object, row_number: int) -> dict:
         "expires_at": expires_at,
         "verification_notes": str(raw.get("verification_notes") or "").strip(),
     }
+    if subject_key == "current-affairs":
+        clean["current_affairs_event"] = _validate_current_affairs_event(
+            raw.get("current_affairs_event"),
+            row_number,
+        )
+    return clean
+
+
+def _validate_current_affairs_event(raw: object, row_number: int) -> dict:
+    if not isinstance(raw, dict):
+        raise ValueError(
+            f"Current-affairs source row {row_number} requires current_affairs_event."
+        )
+    cluster_key = str(raw.get("cluster_key") or "")
+    if not re.fullmatch(r"[0-9a-f]{64}", cluster_key):
+        raise ValueError(f"Current-affairs source row {row_number} has invalid cluster_key.")
+    if raw.get("cluster_version") != EVENT_CLUSTER_VERSION:
+        raise ValueError(f"Current-affairs source row {row_number} has invalid cluster_version.")
+    if raw.get("verification_policy") != EVENT_POLICY_VERSION:
+        raise ValueError(
+            f"Current-affairs source row {row_number} has an unsupported verification policy."
+        )
+    event_date = _required(raw, "event_date", row_number)
+    try:
+        date.fromisoformat(event_date)
+    except ValueError as exc:
+        raise ValueError(
+            f"Current-affairs source row {row_number} has invalid event_date."
+        ) from exc
+    claims = raw.get("claims")
+    if not isinstance(claims, list) or not 1 <= len(claims) <= 8:
+        raise ValueError(
+            f"Current-affairs source row {row_number} requires 1 to 8 atomic claims."
+        )
+    claim_keys: set[str] = set()
+    clean_claims: list[dict] = []
+    for claim_number, claim in enumerate(claims, start=1):
+        if not isinstance(claim, dict):
+            raise ValueError(
+                f"Current-affairs source row {row_number} claim {claim_number} is invalid."
+            )
+        claim_key = str(claim.get("claim_key") or "")
+        canonical = str(claim.get("canonical_claim") or "").strip()
+        evidence = str(claim.get("evidence_span") or "").strip()
+        if not re.fullmatch(r"[0-9a-f]{64}", claim_key) or claim_key in claim_keys:
+            raise ValueError(
+                f"Current-affairs source row {row_number} has an invalid claim identity."
+            )
+        if len(canonical) < 40 or canonical != evidence:
+            raise ValueError(
+                f"Current-affairs source row {row_number} claim {claim_number} lacks exact evidence."
+            )
+        if claim.get("verification_policy") != EVENT_POLICY_VERSION:
+            raise ValueError(
+                f"Current-affairs source row {row_number} claim {claim_number} has invalid policy."
+            )
+        claim_keys.add(claim_key)
+        clean_claims.append(dict(claim))
+    clean = dict(raw)
+    clean["claims"] = clean_claims
+    return clean
+
+
+def _event_for_import(raw: object, *, approve: bool) -> dict:
+    if not isinstance(raw, dict):
+        raise ValueError("Validated current-affairs event metadata is required.")
+    event = dict(raw)
+    event["verification_status"] = "verified" if approve else "review_required"
+    event["review_required"] = not approve
+    claims = []
+    for raw_claim in event["claims"]:
+        claim = dict(raw_claim)
+        claim["verification_status"] = "verified" if approve else "review_required"
+        claim["review_required"] = not approve
+        claims.append(claim)
+    event["claims"] = claims
+    return event
 
 
 def _find_or_create_micro_topic(client, chapter: dict, clean: dict, dry_run: bool) -> dict:

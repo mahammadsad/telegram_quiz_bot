@@ -201,6 +201,7 @@ jobs:
               PHASE_C_CANDIDATE_MIGRATION_VERSION,
               PHASE_C_IDENTITY_MIGRATION_VERSION,
               PHASE_C_INVENTORY_MIGRATION_VERSION,
+              PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
               POST_FINALIZATION_MIGRATION_VERSION,
               QUIZ_JOBS_MIGRATION_VERSION,
               REQUIRED_MIGRATION_VERSION,
@@ -249,6 +250,9 @@ jobs:
                   ),
                   "phaseCCandidateMigrationVersion": body.get(
                       "phaseCCandidateMigrationVersion"
+                  ),
+                  "phaseDCurrentAffairsMigrationVersion": body.get(
+                      "phaseDCurrentAffairsMigrationVersion"
                   ),
                   "sourceBackedRotationEnabled": body.get(
                       "sourceBackedRotationEnabled"
@@ -319,6 +323,13 @@ jobs:
                   raise SystemExit("Staging content identity is not ready.")
               if body.get("checks", {}).get("verifiedInventory") is not True:
                   raise SystemExit("Staging verified inventory is not ready.")
+              if (
+                  body.get("phaseDCurrentAffairsMigrationVersion")
+                  != PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
+              ):
+                  raise SystemExit("Staging Phase D current-affairs migration mismatch.")
+              if body.get("checks", {}).get("currentAffairsEvents") is not True:
+                  raise SystemExit("Staging current-affairs event pipeline is not ready.")
               if (
                   body.get("sourceRolloutMigrationVersion")
                   != SOURCE_ROLLOUT_MIGRATION_VERSION

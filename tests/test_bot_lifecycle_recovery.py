@@ -859,6 +859,20 @@ def test_generation_prompt_treats_dynamic_source_text_as_untrusted_data():
 def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
     monkeypatch.setattr(
         bot.schema_contract_repo,
+        "get_phase_d_current_affairs_contract",
+        lambda: {
+            "ready": True,
+            "atomic_claims": True,
+            "multi_source_clusters": True,
+            "phase_d_current_affairs_migration_version": (
+                bot.PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
+            ),
+            "function_permission_failures": [],
+            "table_permission_failures": [],
+        },
+    )
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
         "get_phase_c_content_contract",
         lambda: {
             "ready": True,
@@ -941,6 +955,20 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
 
 
 def test_database_preflight_fails_closed_on_old_or_misgranted_contract(monkeypatch):
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_phase_d_current_affairs_contract",
+        lambda: {
+            "ready": True,
+            "atomic_claims": True,
+            "multi_source_clusters": True,
+            "phase_d_current_affairs_migration_version": (
+                bot.PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
+            ),
+            "function_permission_failures": [],
+            "table_permission_failures": [],
+        },
+    )
     monkeypatch.setattr(
         bot.schema_contract_repo,
         "get_phase_c_content_contract",

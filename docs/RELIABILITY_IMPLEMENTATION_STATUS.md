@@ -15,7 +15,9 @@ preflight are green. Production remains unchanged.
 Phase C is green on draft PR #28. Its additive identity, evidence, candidate
 persistence, durable replenishment, inventory-first due-time path, GitHub CI,
 Render deployment, and fail-closed staging smoke are green. Phase D deterministic
-verification is in progress on a separate stacked branch. Production is unchanged.
+verification and its adversarial release gate are green on draft PR #29. The
+Phase D current-affairs event/claim migration is the active checkpoint.
+Production is unchanged.
 
 ## Implemented
 
@@ -58,6 +60,12 @@ verification is in progress on a separate stacked branch. Production is unchange
   unique-answer, and explanation-conclusion checks. Supported mathematics and
   reasoning families are solved from machine-readable inputs; unsupported or
   under-constrained items fail closed before the probabilistic verifier runs.
+- Phase D current-affairs ingestion now separates event date from publication
+  date, clusters same-event releases, extracts exact-span atomic claims, records
+  corroborating evidence, routes correction-like content to review, and exposes
+  configurable daily/weekly/monthly/six-month pools. Current-affairs grounding
+  reads only the verified event/claim pool; legacy publication-age fallback is
+  retained for rollback compatibility.
 
 ## Local evidence
 
@@ -87,6 +95,15 @@ verification is in progress on a separate stacked branch. Production is unchange
   reject wrong answers, two correct options, explanation contradictions, stale
   facts, broken Bengali/terminology, invalid maths, inconsistent reasoning, and
   duplicate current-affairs knowledge points with stable reason codes.
+- Phase D deterministic staging checkpoint: CI run `31252866510` passed both
+  quality/tests and real mobile browser jobs at commit `7665c44`; Render deploy
+  `dep-d9rgb1qfngtc73dag1l0` is live and staging smoke run `31253037556`
+  passed with application `7.4.0` and ready Phase C contracts.
+- Current current-affairs checkpoint: 371 tests pass with 26 hosted database
+  tests skipped locally; Ruff and mypy (71 production files) pass. Migration
+  `20260808103500` and application `7.5.0` still require disposable PostgreSQL,
+  hosted staging migration, Render, and smoke evidence before this checkpoint
+  is considered green.
 
 ## Deployment prerequisites
 

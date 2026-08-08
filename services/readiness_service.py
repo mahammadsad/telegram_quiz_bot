@@ -34,6 +34,7 @@ from database.contract import (
     PHASE_C_CANDIDATE_MIGRATION_VERSION,
     PHASE_C_IDENTITY_MIGRATION_VERSION,
     PHASE_C_INVENTORY_MIGRATION_VERSION,
+    PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
@@ -81,6 +82,9 @@ class Readiness:
             "phaseCIdentityMigrationVersion": PHASE_C_IDENTITY_MIGRATION_VERSION,
             "phaseCInventoryMigrationVersion": PHASE_C_INVENTORY_MIGRATION_VERSION,
             "phaseCCandidateMigrationVersion": PHASE_C_CANDIDATE_MIGRATION_VERSION,
+            "phaseDCurrentAffairsMigrationVersion": (
+                PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
+            ),
             "productionConfigVersion": PRODUCTION_CONFIG_VERSION,
             "productionConfigHash": PRODUCTION_CONFIG_HASH,
         }
@@ -105,6 +109,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
         "durableQuizJobs": False,
         "contentIdentity": False,
         "verifiedInventory": False,
+        "currentAffairsEvents": False,
         "activeQuizRetrieval": False,
     }
     failures: list[str] = []
@@ -188,10 +193,14 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 phase_c_content = schema_contract_repo.get_phase_c_content_contract()
                 phase_c_inventory = schema_contract_repo.get_phase_c_inventory_contract()
                 phase_c_candidate = schema_contract_repo.get_phase_c_candidate_contract()
+                phase_d_current_affairs = (
+                    schema_contract_repo.get_phase_d_current_affairs_contract()
+                )
             except Exception as exc:
                 phase_c_content = {}
                 phase_c_inventory = {}
                 phase_c_candidate = {}
+                phase_d_current_affairs = {}
                 LOG.warning(
                     "READINESS_PHASE_C_FAILURE category=%s",
                     type(exc).__name__,
@@ -208,6 +217,10 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 phase_c_inventory.get("function_permission_failures") or []
             ) + (
                 phase_c_candidate.get("function_permission_failures") or []
+            ) + (
+                phase_d_current_affairs.get("function_permission_failures") or []
+            ) + (
+                phase_d_current_affairs.get("table_permission_failures") or []
             )
             checks["databasePermissions"] = not permission_failures
             checks["leaderboardPrivacy"] = bool(
@@ -262,6 +275,18 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and phase_c_candidate.get("phase_c_candidate_migration_version")
                 == PHASE_C_CANDIDATE_MIGRATION_VERSION
             )
+            checks["currentAffairsEvents"] = bool(
+                phase_d_current_affairs.get("ready") is True
+                and phase_d_current_affairs.get("event_dates") is True
+                and phase_d_current_affairs.get("atomic_claims") is True
+                and phase_d_current_affairs.get("multi_source_clusters") is True
+                and phase_d_current_affairs.get("correction_and_expiry") is True
+                and phase_d_current_affairs.get("weighted_revision_pools") is True
+                and phase_d_current_affairs.get(
+                    "phase_d_current_affairs_migration_version"
+                )
+                == PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
+            )
             source_rollout_ready = bool(
                 contract.get("source_rollout_migration_version")
                 == SOURCE_ROLLOUT_MIGRATION_VERSION
@@ -297,6 +322,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and checks["durableQuizJobs"]
                 and checks["contentIdentity"]
                 and checks["verifiedInventory"]
+                and checks["currentAffairsEvents"]
                 and float(contract.get("verification_threshold") or 0)
                 == QUESTION_VERIFICATION_MIN_CONFIDENCE
             )
@@ -328,6 +354,8 @@ def assess(*, use_cache: bool = True) -> Readiness:
         failures.append("content_identity")
     if not checks["verifiedInventory"]:
         failures.append("verified_inventory")
+    if not checks["currentAffairsEvents"]:
+        failures.append("current_affairs_events")
     if not checks["databasePermissions"]:
         failures.append("database_permissions")
     if not checks["activeQuizRetrieval"]:

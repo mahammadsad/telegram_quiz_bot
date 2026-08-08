@@ -1,5 +1,5 @@
 [meta]
-version = "2026-08-08.3"
+version = "2026-08-08.4"
 
 [gemini]
 primary_model = "gemini-3.1-flash-lite"
@@ -44,6 +44,7 @@ leaderboard_privacy_rpc_fix_migration_version = "20260808084950"
 phase_c_identity_migration_version = "20260808093610"
 phase_c_inventory_migration_version = "20260808093621"
 phase_c_candidate_migration_version = "20260808094602"
+phase_d_current_affairs_migration_version = "20260808103500"
 
 [content_inventory]
 target_days = 15

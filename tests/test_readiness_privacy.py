@@ -125,6 +125,23 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "function_permission_failures": [],
         },
     )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_phase_d_current_affairs_contract",
+        lambda: {
+            "ready": True,
+            "event_dates": True,
+            "atomic_claims": True,
+            "multi_source_clusters": True,
+            "correction_and_expiry": True,
+            "weighted_revision_pools": True,
+            "phase_d_current_affairs_migration_version": (
+                readiness_service.PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
+            ),
+            "function_permission_failures": [],
+            "table_permission_failures": [],
+        },
+    )
     readiness_service._CACHE = None
 
 

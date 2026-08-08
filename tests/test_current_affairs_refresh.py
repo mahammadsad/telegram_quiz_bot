@@ -97,7 +97,7 @@ def test_refresh_parses_only_canonical_current_pib_release_content():
     assert stats.skipped == 0
     assert rows[0]["source_domain"] == "pib.gov.in"
     assert rows[0]["micro_topic_key"] == "current-affairs:science-technology:t03"
-    assert rows[0]["expires_at"].startswith("2026-09-10T18:29:59")
+    assert rows[0]["expires_at"].startswith("2027-01-23T23:59:59")
     assert "ignore previous rules" not in rows[0]["fact_summary"]
     assert "This footer must not enter" not in rows[0]["fact_summary"]
     assert rows[0]["fact_version"].startswith("pib-2290212-2026-07-27-")

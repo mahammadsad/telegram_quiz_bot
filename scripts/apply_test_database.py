@@ -169,11 +169,19 @@ def rebuild(database_url: str) -> dict:
         ).fetchone()[0]
         if not phase_c_candidate_contract.get("ready"):
             raise RuntimeError("Disposable Phase C candidate contract is not ready.")
+        phase_d_current_affairs_contract = connection.execute(
+            "select public.get_phase_d_current_affairs_contract()"
+        ).fetchone()[0]
+        if not phase_d_current_affairs_contract.get("ready"):
+            raise RuntimeError(
+                "Disposable Phase D current-affairs contract is not ready."
+            )
         contract.update(privacy_contract)
         contract.update(quiz_job_contract)
         contract.update(phase_c_content_contract)
         contract.update(phase_c_inventory_contract)
         contract.update(phase_c_candidate_contract)
+        contract.update(phase_d_current_affairs_contract)
         return contract
 
 
@@ -199,6 +207,8 @@ def main() -> int:
         f"{contract['leaderboard_privacy_migration_version']} "
         f"quiz_jobs={contract['quiz_job_migration_version']}"
         f" phase_c_inventory={contract['phase_c_inventory_migration_version']}"
+        " phase_d_current_affairs="
+        f"{contract['phase_d_current_affairs_migration_version']}"
     )
     return 0
 

@@ -20,11 +20,13 @@ from database.contract import (
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
     LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
+    PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
 )
+from services.current_affairs_pipeline import build_event_bundle
 from services.question_validation import content_checksum, validate_questions
 from services.quiz_dispatcher import daily_job_specs
 from utils.hashing import normalize_text
@@ -561,6 +563,88 @@ def test_exact_database_contract_and_permissions(database_url: str) -> None:
         "function_permission_failures",
     ):
         assert privacy_contract[key] == []
+
+
+def test_phase_d_current_affairs_event_claim_and_pool_contract(database_url: str) -> None:
+    source_id = uuid.UUID("44444444-4444-4444-8444-444444444444")
+    published_at = datetime(2026, 8, 6, 12, tzinfo=timezone.utc)
+    body = (
+        "On 5 August 2026, the official authority launched a national quantum "
+        "research programme with a named institution, implementation schedule, "
+        "eligibility rules, public objective, delivery mechanism, and review date."
+    )
+    event = build_event_bundle(
+        title="National quantum research programme launched",
+        body=body,
+        ministry="Ministry of Science and Technology",
+        source_url="https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=2290998",
+        published_at=published_at,
+    )
+    with connect(database_url) as connection:
+        topic = connection.execute(
+            """
+            select topic.id
+            from public.quiz_micro_topics topic
+            join public.quiz_chapters chapter on chapter.id = topic.chapter_id
+            where chapter.subject_key = 'current-affairs'
+            order by topic.key
+            limit 1
+            """
+        ).fetchone()
+        assert topic
+        connection.execute(
+            """
+            insert into public.source_documents (
+                id, micro_topic_id, source_url, source_title, source_domain,
+                source_kind, source_published_at, source_accessed_at, fact_summary,
+                verification_status, verification_notes, fact_version, expires_at,
+                review_required, verified_at
+            ) values (
+                %s, %s, %s, %s, 'pib.gov.in', 'official', %s, %s, %s,
+                'verified', 'Exact-span integration policy.', %s, %s, false, %s
+            )
+            """,
+            (
+                source_id,
+                topic["id"],
+                "https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=2290998",
+                event["event_title"],
+                published_at,
+                published_at,
+                body,
+                "pib-2290998-integration",
+                datetime(2026, 9, 20, tzinfo=timezone.utc),
+                published_at,
+            ),
+        )
+        stored = connection.execute(
+            "select public.upsert_current_affairs_event_bundle(%s, %s) as result",
+            (source_id, Jsonb(event)),
+        ).fetchone()["result"]
+        pool = connection.execute(
+            "select * from public.get_current_affairs_practice_pool(%s, %s, %s)",
+            (date(2026, 8, 8), "daily_quick", 20),
+        ).fetchall()
+        grounding = connection.execute(
+            "select * from public.get_current_affairs_grounding_bundle(%s, %s, %s)",
+            ("জাতীয় সাম্প্রতিক ঘটনা", date(2026, 8, 8), 8),
+        ).fetchall()
+        contract = connection.execute(
+            "select public.get_phase_d_current_affairs_contract() as contract"
+        ).fetchone()["contract"]
+
+    assert stored["verification_status"] == "verified"
+    assert stored["review_required"] is False
+    assert stored["claim_count"] >= 1
+    assert pool and pool[0]["practice_pool"] == "daily"
+    assert pool[0]["corroborating_sources"] == 1
+    assert grounding and grounding[0]["fact_summary"] == body
+    assert contract["ready"] is True
+    assert contract["atomic_claims"] is True
+    assert contract["multi_source_clusters"] is True
+    assert contract["phase_d_current_affairs_migration_version"] == (
+        PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
+    )
 
 
 def test_service_role_can_read_leaderboard_privacy_contract(

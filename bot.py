@@ -41,6 +41,7 @@ from database.contract import (
     PERSONAL_LEARNING_MIGRATION_VERSION,
     PHASE_C_CANDIDATE_MIGRATION_VERSION,
     PHASE_C_INVENTORY_MIGRATION_VERSION,
+    PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
@@ -1048,6 +1049,9 @@ def validate_database_schema() -> None:
     phase_c_content = schema_contract_repo.get_phase_c_content_contract()
     phase_c_inventory = schema_contract_repo.get_phase_c_inventory_contract()
     phase_c_candidate = schema_contract_repo.get_phase_c_candidate_contract()
+    phase_d_current_affairs = (
+        schema_contract_repo.get_phase_d_current_affairs_contract()
+    )
     permission_failures = (
         contract.get("function_permission_failures") or []
     ) + (contract.get("table_permission_failures") or []) + (
@@ -1058,6 +1062,10 @@ def validate_database_schema() -> None:
         phase_c_inventory.get("function_permission_failures") or []
     ) + (
         phase_c_candidate.get("function_permission_failures") or []
+    ) + (
+        phase_d_current_affairs.get("function_permission_failures") or []
+    ) + (
+        phase_d_current_affairs.get("table_permission_failures") or []
     )
     valid = bool(
         contract.get("ready")
@@ -1087,6 +1095,11 @@ def validate_database_schema() -> None:
         and phase_c_candidate.get("stable_identity_parity") is True
         and phase_c_candidate.get("phase_c_candidate_migration_version")
         == PHASE_C_CANDIDATE_MIGRATION_VERSION
+        and phase_d_current_affairs.get("ready") is True
+        and phase_d_current_affairs.get("atomic_claims") is True
+        and phase_d_current_affairs.get("multi_source_clusters") is True
+        and phase_d_current_affairs.get("phase_d_current_affairs_migration_version")
+        == PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
         and (
             not SOURCE_BACKED_ROTATION_ENABLED
             or (
