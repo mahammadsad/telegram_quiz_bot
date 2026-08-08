@@ -11,13 +11,60 @@ from storage.contracts import raise_safe_rate_limit
 
 
 def dashboard(user_id: str) -> dict:
-    return _rpc("get_user_learning_dashboard", {"p_user_id": user_id})
+    return _rpc("get_user_learning_dashboard_v2", {"p_user_id": user_id})
 
 
 def due_reviews(user_id: str, *, limit: int, offset: int) -> dict:
     return _rpc(
         "get_user_due_reviews",
         {"p_user_id": user_id, "p_limit": limit, "p_offset": offset},
+    )
+
+
+def knowledge_reviews(user_id: str, *, limit: int, offset: int) -> dict:
+    return _rpc(
+        "get_user_knowledge_review_queue",
+        {"p_user_id": user_id, "p_limit": limit, "p_offset": offset},
+    )
+
+
+def daily_rollups(
+    user_id: str,
+    *,
+    date_from: str | None,
+    date_to: str | None,
+    limit: int,
+    offset: int,
+) -> dict:
+    return _rpc(
+        "get_user_learning_daily_rollups",
+        {
+            "p_user_id": user_id,
+            "p_date_from": date_from,
+            "p_date_to": date_to,
+            "p_limit": limit,
+            "p_offset": offset,
+        },
+    )
+
+
+def knowledge_mastery(
+    user_id: str,
+    *,
+    subject_key: str | None,
+    strength: str,
+    limit: int,
+    offset: int,
+) -> dict:
+    return _rpc(
+        "get_user_knowledge_mastery_page",
+        {
+            "p_user_id": user_id,
+            "p_subject_key": subject_key,
+            "p_strength": strength,
+            "p_limit": limit,
+            "p_offset": offset,
+        },
     )
 
 

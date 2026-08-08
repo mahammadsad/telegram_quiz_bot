@@ -46,6 +46,11 @@ def get_phase_d_current_affairs_contract() -> Row:
     return as_row(result.data, "Phase D current-affairs contract")
 
 
+def get_phase_e_personal_learning_contract() -> Row:
+    result = get_client().rpc("get_phase_e_personal_learning_contract", {}).execute()
+    return as_row(result.data, "Phase E personal-learning contract")
+
+
 def active_quiz_probe() -> Row | None:
     result = (
         get_client()

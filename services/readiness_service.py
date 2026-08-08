@@ -35,6 +35,7 @@ from database.contract import (
     PHASE_C_IDENTITY_MIGRATION_VERSION,
     PHASE_C_INVENTORY_MIGRATION_VERSION,
     PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
+    PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
@@ -85,6 +86,9 @@ class Readiness:
             "phaseDCurrentAffairsMigrationVersion": (
                 PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
             ),
+            "phaseEPersonalLearningMigrationVersion": (
+                PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
+            ),
             "productionConfigVersion": PRODUCTION_CONFIG_VERSION,
             "productionConfigHash": PRODUCTION_CONFIG_HASH,
         }
@@ -110,6 +114,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
         "contentIdentity": False,
         "verifiedInventory": False,
         "currentAffairsEvents": False,
+        "personalKnowledgeMastery": False,
         "activeQuizRetrieval": False,
     }
     failures: list[str] = []
@@ -196,11 +201,15 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 phase_d_current_affairs = (
                     schema_contract_repo.get_phase_d_current_affairs_contract()
                 )
+                phase_e_personal_learning = (
+                    schema_contract_repo.get_phase_e_personal_learning_contract()
+                )
             except Exception as exc:
                 phase_c_content = {}
                 phase_c_inventory = {}
                 phase_c_candidate = {}
                 phase_d_current_affairs = {}
+                phase_e_personal_learning = {}
                 LOG.warning(
                     "READINESS_PHASE_C_FAILURE category=%s",
                     type(exc).__name__,
@@ -221,6 +230,10 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 phase_d_current_affairs.get("function_permission_failures") or []
             ) + (
                 phase_d_current_affairs.get("table_permission_failures") or []
+            ) + (
+                phase_e_personal_learning.get("function_permission_failures") or []
+            ) + (
+                phase_e_personal_learning.get("table_permission_failures") or []
             )
             checks["databasePermissions"] = not permission_failures
             checks["leaderboardPrivacy"] = bool(
@@ -287,6 +300,19 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 )
                 == PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
             )
+            checks["personalKnowledgeMastery"] = bool(
+                phase_e_personal_learning.get("ready") is True
+                and phase_e_personal_learning.get("knowledge_point_state") is True
+                and phase_e_personal_learning.get("variant_history") is True
+                and phase_e_personal_learning.get("different_variant_selection") is True
+                and phase_e_personal_learning.get("daily_rollups") is True
+                and phase_e_personal_learning.get("transparent_recommendations") is True
+                and phase_e_personal_learning.get("cohort_definition") is True
+                and phase_e_personal_learning.get(
+                    "phase_e_personal_learning_migration_version"
+                )
+                == PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
+            )
             source_rollout_ready = bool(
                 contract.get("source_rollout_migration_version")
                 == SOURCE_ROLLOUT_MIGRATION_VERSION
@@ -323,6 +349,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and checks["contentIdentity"]
                 and checks["verifiedInventory"]
                 and checks["currentAffairsEvents"]
+                and checks["personalKnowledgeMastery"]
                 and float(contract.get("verification_threshold") or 0)
                 == QUESTION_VERIFICATION_MIN_CONFIDENCE
             )
@@ -356,6 +383,8 @@ def assess(*, use_cache: bool = True) -> Readiness:
         failures.append("verified_inventory")
     if not checks["currentAffairsEvents"]:
         failures.append("current_affairs_events")
+    if not checks["personalKnowledgeMastery"]:
+        failures.append("personal_knowledge_mastery")
     if not checks["databasePermissions"]:
         failures.append("database_permissions")
     if not checks["activeQuizRetrieval"]:

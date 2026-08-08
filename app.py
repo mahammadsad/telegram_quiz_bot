@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -555,6 +556,72 @@ def my_due_reviews(
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="রিভিশনের প্রশ্ন এখন লোড করা যাচ্ছে না।") from exc
+
+
+@app.get("/api/me/reviews/knowledge")
+def my_knowledge_reviews(
+    limit: int = 20,
+    offset: int = 0,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        return personal_learning_service.knowledge_reviews(
+            _telegram_user_from_init_data(init_data),
+            limit=limit,
+            offset=offset,
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="জ্ঞানভিত্তিক রিভিশন এখন লোড করা যাচ্ছে না।") from exc
+
+
+@app.get("/api/me/learning/daily")
+def my_learning_daily_rollups(
+    date_from: date | None = None,
+    date_to: date | None = None,
+    limit: int = 30,
+    offset: int = 0,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        return personal_learning_service.daily_rollups(
+            _telegram_user_from_init_data(init_data),
+            date_from=date_from,
+            date_to=date_to,
+            limit=limit,
+            offset=offset,
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="দৈনিক শেখার অগ্রগতি এখন লোড করা যাচ্ছে না।") from exc
+
+
+@app.get("/api/me/learning/knowledge-points")
+def my_knowledge_mastery(
+    subject: str | None = None,
+    strength: str = "all",
+    limit: int = 30,
+    offset: int = 0,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        return personal_learning_service.knowledge_mastery(
+            _telegram_user_from_init_data(init_data),
+            subject_key=subject,
+            strength=strength,
+            limit=limit,
+            offset=offset,
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="জ্ঞানভিত্তিক অগ্রগতি এখন লোড করা যাচ্ছে না।") from exc
 
 
 @app.get("/api/me/wrong-questions")

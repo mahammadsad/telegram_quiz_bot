@@ -42,6 +42,7 @@ from database.contract import (
     PHASE_C_CANDIDATE_MIGRATION_VERSION,
     PHASE_C_INVENTORY_MIGRATION_VERSION,
     PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
+    PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
@@ -1052,6 +1053,9 @@ def validate_database_schema() -> None:
     phase_d_current_affairs = (
         schema_contract_repo.get_phase_d_current_affairs_contract()
     )
+    phase_e_personal_learning = (
+        schema_contract_repo.get_phase_e_personal_learning_contract()
+    )
     permission_failures = (
         contract.get("function_permission_failures") or []
     ) + (contract.get("table_permission_failures") or []) + (
@@ -1066,6 +1070,10 @@ def validate_database_schema() -> None:
         phase_d_current_affairs.get("function_permission_failures") or []
     ) + (
         phase_d_current_affairs.get("table_permission_failures") or []
+    ) + (
+        phase_e_personal_learning.get("function_permission_failures") or []
+    ) + (
+        phase_e_personal_learning.get("table_permission_failures") or []
     )
     valid = bool(
         contract.get("ready")
@@ -1100,6 +1108,17 @@ def validate_database_schema() -> None:
         and phase_d_current_affairs.get("multi_source_clusters") is True
         and phase_d_current_affairs.get("phase_d_current_affairs_migration_version")
         == PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
+        and phase_e_personal_learning.get("ready") is True
+        and phase_e_personal_learning.get("knowledge_point_state") is True
+        and phase_e_personal_learning.get("variant_history") is True
+        and phase_e_personal_learning.get("different_variant_selection") is True
+        and phase_e_personal_learning.get("daily_rollups") is True
+        and phase_e_personal_learning.get("transparent_recommendations") is True
+        and phase_e_personal_learning.get("cohort_definition") is True
+        and phase_e_personal_learning.get(
+            "phase_e_personal_learning_migration_version"
+        )
+        == PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
         and (
             not SOURCE_BACKED_ROTATION_ENABLED
             or (

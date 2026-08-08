@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -17,6 +18,7 @@ ANALYTICS_MIGRATION = ROOT / "supabase" / "migrations" / "20260718185905_learnin
 PRACTICE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718190639_personal_practice_answers.sql"
 SUBJECT_PROJECTION_MIGRATION = ROOT / "supabase" / "migrations" / "20260718192154_canonical_subject_learning_projections.sql"
 PROJECTION_HOTFIX_MIGRATION = ROOT / "supabase" / "migrations" / "20260729134221_personal_learning_projection_hotfix.sql"
+PHASE_E_MIGRATION = ROOT / "supabase" / "migrations" / "20260808113000_phase_e_personal_knowledge_mastery.sql"
 client = TestClient(api_module.app)
 
 
@@ -163,6 +165,41 @@ def test_subject_projection_hotfix_preserves_objects_and_nested_arrays():
     )
 
 
+def test_phase_e_learning_is_knowledge_keyed_private_and_answer_free():
+    sql = PHASE_E_MIGRATION.read_text(encoding="utf-8").lower()
+    for table in (
+        "personal_knowledge_mastery",
+        "personal_knowledge_variant_history",
+        "learner_daily_rollups",
+    ):
+        assert f"create table if not exists public.{table}" in sql
+        assert f"alter table public.{table} enable row level security" in sql
+    assert "primary key (user_id, knowledge_point_id)" in sql
+    assert "unique (source_event_kind, source_event_id)" in sql
+    assert "after insert on public.quiz_attempt_answers" in sql
+    assert "after insert on public.personal_practice_answers" in sql
+    assert "when p_was_skipped or p_is_correct is false then 1" in sql
+    for interval in (3, 7, 14, 30, 60):
+        assert f"then {interval}" in sql or f"else {interval}" in sql
+    assert "'dueorwrongpercent', 50" in sql
+    assert "'weaktopicpercent', 30" in sql
+    assert "'broadmaintenancepercent', 20" in sql
+    assert "'definition', 'learners with at least one completed official first attempt'" in sql
+    assert "from public, anon, authenticated" in sql
+    assert "to service_role" in sql
+    review_rpc = sql.split(
+        "function public.get_user_knowledge_review_queue", 1
+    )[1].split("function public.get_user_learning_daily_rollups", 1)[0]
+    assert "correct_option" not in review_rpc
+    assert "verification_status = 'verified'" in review_rpc
+    assert "inventory_status in ('verified','used')" in review_rpc
+    assert "variant_fingerprint is not distinct from due.last_variant_fingerprint" in review_rpc
+    assert "function public.get_user_knowledge_mastery_page" in sql
+    assert "p_subject_key is null or kp.subject_key = p_subject_key" in sql
+    assert "when 'weak' then mastery.mastery_score < 60" in sql
+    assert "when 'strong' then mastery.mastery_score >= 80" in sql
+
+
 def test_dashboard_endpoint_requires_telegram_header(monkeypatch):
     monkeypatch.setattr(api_module, "DEV_ALLOW_UNVERIFIED_TELEGRAM", False)
     assert client.get("/api/me/dashboard").status_code == 401
@@ -192,11 +229,121 @@ def test_private_learning_endpoints_project_authenticated_user(monkeypatch):
         "wrong_questions",
         lambda user, subject_key, limit, offset: {"total": 2, "rows": []},
     )
+    monkeypatch.setattr(
+        api_module.personal_learning_service,
+        "knowledge_reviews",
+        lambda user, limit, offset: {"total": 3, "items": []},
+    )
+    monkeypatch.setattr(
+        api_module.personal_learning_service,
+        "daily_rollups",
+        lambda user, date_from, date_to, limit, offset: {
+            "total": 1,
+            "rows": [{"date": "2026-08-08"}],
+        },
+    )
+    monkeypatch.setattr(
+        api_module.personal_learning_service,
+        "knowledge_mastery",
+        lambda user, subject_key, strength, limit, offset: {
+            "total": 4,
+            "rows": [],
+        },
+    )
     headers = {"X-Telegram-Init-Data": "signed"}
     assert client.get("/api/me/reviews/due", headers=headers).json()["total"] == 1
     assert client.get(
         "/api/me/wrong-questions?subject=computer", headers=headers
     ).json()["total"] == 2
+    assert client.get(
+        "/api/me/reviews/knowledge?limit=10&offset=2", headers=headers
+    ).json()["total"] == 3
+    daily = client.get(
+        "/api/me/learning/daily?date_from=2026-08-01&date_to=2026-08-08",
+        headers=headers,
+    )
+    assert daily.status_code == 200
+    assert daily.json()["rows"][0]["date"] == "2026-08-08"
+    mastery = client.get(
+        "/api/me/learning/knowledge-points?subject=history&strength=weak&limit=25",
+        headers=headers,
+    )
+    assert mastery.status_code == 200
+    assert mastery.json()["total"] == 4
+
+
+def test_daily_rollup_service_validates_range_and_serializes_dates(monkeypatch):
+    monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
+    captured = {}
+    monkeypatch.setattr(
+        service.personal_learning_repo,
+        "daily_rollups",
+        lambda user_id, **kwargs: captured.update(kwargs) or {"rows": []},
+    )
+
+    result = service.daily_rollups(
+        {"id": 123},
+        date_from=date(2026, 8, 1),
+        date_to=date(2026, 8, 8),
+        limit=500,
+        offset=-4,
+    )
+
+    assert result == {"rows": []}
+    assert captured == {
+        "date_from": "2026-08-01",
+        "date_to": "2026-08-08",
+        "limit": 100,
+        "offset": 0,
+    }
+    with pytest.raises(ValueError, match="Start date"):
+        service.daily_rollups(
+            {"id": 123},
+            date_from=date(2026, 8, 9),
+            date_to=date(2026, 8, 8),
+            limit=30,
+            offset=0,
+        )
+
+
+def test_knowledge_mastery_service_validates_filters(monkeypatch):
+    monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
+    captured = {}
+    monkeypatch.setattr(
+        service.personal_learning_repo,
+        "knowledge_mastery",
+        lambda user_id, **kwargs: captured.update(kwargs) or {"rows": []},
+    )
+
+    assert service.knowledge_mastery(
+        {"id": 123},
+        subject_key="history",
+        strength="weak",
+        limit=500,
+        offset=-1,
+    ) == {"rows": []}
+    assert captured == {
+        "subject_key": "history",
+        "strength": "weak",
+        "limit": 100,
+        "offset": 0,
+    }
+    with pytest.raises(ValueError, match="Unknown subject"):
+        service.knowledge_mastery(
+            {"id": 123},
+            subject_key="invented",
+            strength="all",
+            limit=20,
+            offset=0,
+        )
+    with pytest.raises(ValueError, match="strength"):
+        service.knowledge_mastery(
+            {"id": 123},
+            subject_key=None,
+            strength="invented",
+            limit=20,
+            offset=0,
+        )
 
 
 def test_practice_answer_requires_auth_and_returns_post_attempt_review(monkeypatch):

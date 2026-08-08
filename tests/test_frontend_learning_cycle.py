@@ -100,6 +100,10 @@ def test_preferences_and_privacy_have_a_dedicated_settings_page():
     assert "settings.html" in INDEX
     assert "settings.html" in DASHBOARD
     assert "settings.html" in PRACTICE
+    assert "দৈনিক স্মরণবার্তা — শীঘ্রই আসছে" in SETTINGS
+    reminder = re.search(r'<input id="reminder"[^>]+>', SETTINGS)
+    assert reminder and "disabled" in reminder.group(0)
+    assert "dailyReminderEnabled:false" in SETTINGS
 
 
 def test_revision_feedback_is_explicitly_server_mode_only_and_idempotent():

@@ -21,6 +21,7 @@ from database.contract import (
     LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
     PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
+    PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
@@ -665,6 +666,146 @@ def test_service_role_can_read_leaderboard_privacy_contract(
     assert privacy_contract["ready"] is True
     assert privacy_contract["leaderboard_privacy_rpc_fix_migration_version"] == (
         LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
+    )
+
+
+def test_phase_e_mastery_trigger_history_rollup_and_variant_rotation(
+    database_url: str,
+    versioned_quizzes: dict,
+) -> None:
+    del versioned_quizzes
+    fingerprint_a = "a" * 64
+    fingerprint_b = "b" * 64
+    with connect(database_url) as connection:
+        questions = connection.execute(
+            """
+            select q.id
+            from public.quiz_questions qq
+            join public.questions q on q.id = qq.question_id
+            where qq.quiz_id = '20260602-history'
+            order by qq.question_order
+            limit 2
+            """
+        ).fetchall()
+        assert len(questions) == 2
+        knowledge_point_id = connection.execute(
+            """
+            insert into public.knowledge_points (
+                knowledge_key, subject_key, canonical_claim,
+                entity_key, relation_key, answer_value
+            ) values (%s, 'history', 'Phase E mastery integration claim',
+                'phase-e-integration', 'has-answer', 'verified')
+            returning id
+            """,
+            ("e" * 64,),
+        ).fetchone()["id"]
+        for question, fingerprint in zip(
+            questions,
+            (fingerprint_a, fingerprint_b),
+            strict=True,
+        ):
+            connection.execute(
+                """
+                update public.questions
+                set knowledge_point_id = %s,
+                    variant_fingerprint = %s,
+                    status = 'active',
+                    verification_status = 'verified',
+                    inventory_status = 'verified',
+                    review_required = false
+                where id = %s
+                """,
+                (knowledge_point_id, fingerprint, question["id"]),
+            )
+        user_id = connection.execute(
+            """
+            insert into public.users (telegram_id, first_name)
+            values (%s, 'Phase E learner') returning id
+            """,
+            (9_300_000_000 + uuid.uuid4().int % 600_000_000,),
+        ).fetchone()["id"]
+
+        connection.execute("set role service_role")
+        try:
+            connection.execute(
+                """
+                insert into public.personal_practice_answers (
+                    user_id, question_id, client_attempt_id, source_type, mode,
+                    selected_option, correct_option, is_correct,
+                    response_time_seconds, marked_for_review
+                ) values (%s, %s, %s, 'bookmark', 'practice', 0, 1, false, 18, false)
+                """,
+                (user_id, questions[0]["id"], uuid.uuid4()),
+            )
+            mastery = connection.execute(
+                """
+                select * from public.personal_knowledge_mastery
+                where user_id = %s and knowledge_point_id = %s
+                """,
+                (user_id, knowledge_point_id),
+            ).fetchone()
+            history_count = connection.execute(
+                """
+                select count(*) as count
+                from public.personal_knowledge_variant_history
+                where user_id = %s and knowledge_point_id = %s
+                """,
+                (user_id, knowledge_point_id),
+            ).fetchone()["count"]
+            rollup = connection.execute(
+                """
+                select * from public.learner_daily_rollups
+                where user_id = %s order by activity_date desc limit 1
+                """,
+                (user_id,),
+            ).fetchone()
+            connection.execute(
+                """
+                update public.personal_knowledge_mastery
+                set next_review = current_date
+                where user_id = %s and knowledge_point_id = %s
+                """,
+                (user_id, knowledge_point_id),
+            )
+            queue = connection.execute(
+                """
+                select public.get_user_knowledge_review_queue(%s, 20, 0) as payload
+                """,
+                (user_id,),
+            ).fetchone()["payload"]
+            dashboard = connection.execute(
+                "select public.get_user_learning_dashboard_v2(%s) as payload",
+                (user_id,),
+            ).fetchone()["payload"]
+            contract = connection.execute(
+                "select public.get_phase_e_personal_learning_contract() as contract"
+            ).fetchone()["contract"]
+        finally:
+            connection.execute("reset role")
+        connection.rollback()
+
+    assert mastery["attempt_count"] == 1
+    assert mastery["wrong_attempts"] == 1
+    assert mastery["review_interval_days"] == 1
+    assert mastery["last_variant_fingerprint"] == fingerprint_a
+    assert history_count == 1
+    assert rollup["total_questions"] == 1
+    assert rollup["incorrect_answers"] == 1
+    assert rollup["revision_attempts"] == 1
+    assert queue["total"] == 1
+    assert queue["items"][0]["questionId"] == str(questions[1]["id"])
+    assert queue["items"][0]["variantChanged"] is True
+    assert "correctOption" not in str(queue)
+    assert dashboard["recommendationPolicy"] == {
+        "version": 1,
+        "dueOrWrongPercent": 50,
+        "weakTopicPercent": 30,
+        "broadMaintenancePercent": 20,
+        "nextAction": "continue_due_revision",
+    }
+    assert contract["ready"] is True
+    assert contract["phase_e_personal_learning_migration_version"] == (
+        PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
     )
 
 

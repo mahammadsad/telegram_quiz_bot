@@ -2,7 +2,7 @@
 
 Updated: 2026-08-08
 
-Branch: `codex/phase-d-deterministic-verification`
+Branch: `codex/phase-e-learner-platform`
 
 Baseline commit: `e390751782f6c0acf066b54273da1ceb8c65e5e1`
 
@@ -17,8 +17,8 @@ persistence, durable replenishment, inventory-first due-time path, GitHub CI,
 Render deployment, and fail-closed staging smoke are green. Phase D deterministic
 verification and its adversarial release gate are green on draft PR #29. The
 Phase D current-affairs event/claim migration and public staging gate are green.
-The expanded mathematics, reasoning, English, and Bengali validators are the
-active Phase D checkpoint.
+The expanded mathematics, reasoning, English, and Bengali validators are green
+in staging. Phase E1 personal learning is the active checkpoint.
 Production is unchanged.
 
 ## Implemented
@@ -73,6 +73,13 @@ Production is unchanged.
   rounding policies are checked independently. Typed English/Bengali forms
   require exact authoritative rule spans; uncertain Bengali and translation
   correctness fail into explicit human-review reasons.
+- Phase E1 adds per-user, per-knowledge-point mastery; immutable variant
+  history; alternate verified-variant revision; a transparent
+  1/3/7/14/30/60-day interval policy; daily learner rollups; explicit
+  skipped/net-score/response-time trends; weakest/strongest knowledge points;
+  a 50/30/20 recommendation policy; and server-filtered, paginated mastery.
+  The unwired Telegram reminder control is disabled and explicitly labelled
+  as coming soon.
 
 ## Local evidence
 
@@ -110,10 +117,13 @@ Production is unchanged.
   `dep-d9rgocqfngtc73dbanm0`, and staging smoke run `31254084758` are green on
   commit `8c76c49`. Application `7.5.0` reports ready with migration
   `20260808103500`, `currentAffairsEvents=true`, and no failure categories.
-- Current subject-validator checkpoint: 389 tests pass with 26 hosted database
-  tests skipped locally; Ruff and mypy (71 production files) pass. Application
-  `7.6.0` still requires disposable PostgreSQL, mobile-browser CI, Render
-  staging, and public smoke evidence before this checkpoint is green.
+- Current subject-validator checkpoint: GitHub CI run `31254564452`, Render
+  deploy `dep-d9rh30ijnfac73fmotj0`, and staging smoke run `31254897967` are
+  green at application `7.6.0`.
+- Phase E1 local checkpoint: 394 tests pass with 27 hosted database tests
+  skipped locally; Ruff and mypy (70 production files) pass. The local browser
+  suite could not run because the locked Playwright package download was
+  corrupted; disposable PostgreSQL and browser CI are required before staging.
 
 ## Deployment prerequisites
 

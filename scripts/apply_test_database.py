@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from database.contract import (  # noqa: E402
-    PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
+    PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
 )
 
 BOOTSTRAP = ROOT / "database" / "schema.sql"
@@ -109,10 +109,10 @@ def rebuild(database_url: str) -> dict:
     identity = _migration_identity(latest_supabase)
     if (
         not identity
-        or identity[0] != PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
+        or identity[0] != PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
     ):
         raise RuntimeError(
-            "The Phase D contract does not match the latest migration file."
+            "The Phase E contract does not match the latest migration file."
         )
 
     with psycopg.connect(database_url, autocommit=True) as connection:
@@ -176,12 +176,20 @@ def rebuild(database_url: str) -> dict:
             raise RuntimeError(
                 "Disposable Phase D current-affairs contract is not ready."
             )
+        phase_e_personal_learning_contract = connection.execute(
+            "select public.get_phase_e_personal_learning_contract()"
+        ).fetchone()[0]
+        if not phase_e_personal_learning_contract.get("ready"):
+            raise RuntimeError(
+                "Disposable Phase E personal-learning contract is not ready."
+            )
         contract.update(privacy_contract)
         contract.update(quiz_job_contract)
         contract.update(phase_c_content_contract)
         contract.update(phase_c_inventory_contract)
         contract.update(phase_c_candidate_contract)
         contract.update(phase_d_current_affairs_contract)
+        contract.update(phase_e_personal_learning_contract)
         return contract
 
 
@@ -209,6 +217,8 @@ def main() -> int:
         f" phase_c_inventory={contract['phase_c_inventory_migration_version']}"
         " phase_d_current_affairs="
         f"{contract['phase_d_current_affairs_migration_version']}"
+        " phase_e_personal_learning="
+        f"{contract['phase_e_personal_learning_migration_version']}"
     )
     return 0
 

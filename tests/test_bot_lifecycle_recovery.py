@@ -859,6 +859,24 @@ def test_generation_prompt_treats_dynamic_source_text_as_untrusted_data():
 def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
     monkeypatch.setattr(
         bot.schema_contract_repo,
+        "get_phase_e_personal_learning_contract",
+        lambda: {
+            "ready": True,
+            "knowledge_point_state": True,
+            "variant_history": True,
+            "different_variant_selection": True,
+            "daily_rollups": True,
+            "transparent_recommendations": True,
+            "cohort_definition": True,
+            "phase_e_personal_learning_migration_version": (
+                bot.PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
+            ),
+            "function_permission_failures": [],
+            "table_permission_failures": [],
+        },
+    )
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
         "get_phase_d_current_affairs_contract",
         lambda: {
             "ready": True,
@@ -955,6 +973,24 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
 
 
 def test_database_preflight_fails_closed_on_old_or_misgranted_contract(monkeypatch):
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_phase_e_personal_learning_contract",
+        lambda: {
+            "ready": True,
+            "knowledge_point_state": True,
+            "variant_history": True,
+            "different_variant_selection": True,
+            "daily_rollups": True,
+            "transparent_recommendations": True,
+            "cohort_definition": True,
+            "phase_e_personal_learning_migration_version": (
+                bot.PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
+            ),
+            "function_permission_failures": [],
+            "table_permission_failures": [],
+        },
+    )
     monkeypatch.setattr(
         bot.schema_contract_repo,
         "get_phase_d_current_affairs_contract",

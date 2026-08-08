@@ -142,6 +142,24 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "table_permission_failures": [],
         },
     )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_phase_e_personal_learning_contract",
+        lambda: {
+            "ready": True,
+            "knowledge_point_state": True,
+            "variant_history": True,
+            "different_variant_selection": True,
+            "daily_rollups": True,
+            "transparent_recommendations": True,
+            "cohort_definition": True,
+            "phase_e_personal_learning_migration_version": (
+                readiness_service.PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
+            ),
+            "function_permission_failures": [],
+            "table_permission_failures": [],
+        },
+    )
     readiness_service._CACHE = None
 
 
