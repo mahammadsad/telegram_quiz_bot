@@ -22,6 +22,10 @@ claim_timeout_minutes = 20
 min_reuse_gap_days = 21
 max_reuse_gap_days = 180
 due_grace_minutes = 30
+dispatcher_lease_minutes = 20
+dispatcher_max_retries = 5
+retry_base_seconds = 60
+retry_max_seconds = 1800
 
 [static_fallback]
 recovery_export_enabled = true
@@ -31,3 +35,5 @@ answer_free = true
 [database]
 contract_version = "2.2.0"
 post_finalization_migration_version = "20260808063007"
+quiz_jobs_migration_version = "20260808071500"
+leaderboard_privacy_rpc_fix_migration_version = "20260808084950"

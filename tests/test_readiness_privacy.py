@@ -78,6 +78,18 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "function_permission_failures": [],
         },
     )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_quiz_job_contract",
+        lambda: {
+            "ready": True,
+            "quiz_job_migration_version": (
+                readiness_service.QUIZ_JOBS_MIGRATION_VERSION
+            ),
+            "quiz_job_migration_applied": True,
+            "function_permission_failures": [],
+        },
+    )
     readiness_service._CACHE = None
 
 
@@ -90,6 +102,9 @@ def test_readiness_requires_exact_leaderboard_privacy_contract(monkeypatch) -> N
             "ready": True,
             "leaderboard_privacy_migration_version": (
                 readiness_service.LEADERBOARD_PRIVACY_MIGRATION_VERSION
+            ),
+            "leaderboard_privacy_rpc_fix_migration_version": (
+                readiness_service.LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
             ),
             "leaderboard_privacy_migration_applied": True,
             "identity_projection_ready": True,
@@ -107,6 +122,9 @@ def test_readiness_requires_exact_leaderboard_privacy_contract(monkeypatch) -> N
     assert result.public_payload()["leaderboardPrivacyMigrationVersion"] == (
         readiness_service.LEADERBOARD_PRIVACY_MIGRATION_VERSION
     )
+    assert result.public_payload()[
+        "leaderboardPrivacyRpcFixMigrationVersion"
+    ] == readiness_service.LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
 
 
 def test_readiness_fails_closed_for_unsafe_leaderboard_functions(monkeypatch) -> None:

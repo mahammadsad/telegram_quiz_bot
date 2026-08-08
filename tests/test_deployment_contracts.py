@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from config.schedule import RECOVERY_CRON, SUBJECT_CRONS
+from config.schedule import COMPLETENESS_CRON, DISPATCHER_CRON
 from config.settings import (
     PRODUCTION_CONFIG,
     PRODUCTION_CONFIG_HASH,
@@ -17,8 +17,10 @@ from config.settings import (
 from database.contract import (
     APPLICATION_VERSION,
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
+    LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
+    QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
 )
@@ -96,8 +98,8 @@ def test_workflows_have_minimum_permissions_timeouts_and_environment_guards() ->
     assert run_bot["concurrency"]["cancel-in-progress"] is False
     main_trigger = main.get("on") or main.get(True)
     assert main_trigger["schedule"] == [
-        *({"cron": cron} for cron in SUBJECT_CRONS),
-        {"cron": RECOVERY_CRON},
+        {"cron": DISPATCHER_CRON},
+        {"cron": COMPLETENESS_CRON},
     ]
     bot_preflight = next(
         step
@@ -161,8 +163,11 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert "body.get(\"databaseContractVersion\") != DATABASE_CONTRACT_VERSION" in source
     assert "body.get(\"personalLearningMigrationVersion\")" in source
     assert "body.get(\"leaderboardPrivacyMigrationVersion\")" in source
+    assert "body.get(\"leaderboardPrivacyRpcFixMigrationVersion\")" in source
     assert "body.get(\"postFinalizationMigrationVersion\")" in source
     assert 'body.get("checks", {}).get("postFinalization") is not True' in source
+    assert "body.get(\"quizJobsMigrationVersion\")" in source
+    assert 'body.get("checks", {}).get("durableQuizJobs") is not True' in source
     assert '"7.1.0"' not in source
 
 
@@ -232,7 +237,13 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
 def test_authoritative_migration_version_is_latest_filename() -> None:
     migrations = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
     assert migrations
-    assert migrations[-1].name.startswith(f"{POST_FINALIZATION_MIGRATION_VERSION}_")
+    assert migrations[-1].name.startswith(
+        f"{LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION}_"
+    )
+    assert any(
+        path.name.startswith(f"{POST_FINALIZATION_MIGRATION_VERSION}_")
+        for path in migrations
+    )
     assert any(
         path.name.startswith(f"{LEADERBOARD_PRIVACY_MIGRATION_VERSION}_")
         for path in migrations
@@ -265,6 +276,12 @@ def test_versioned_production_manifest_matches_deployment_intent() -> None:
     assert PRODUCTION_CONFIG["database"]["post_finalization_migration_version"] == (
         POST_FINALIZATION_MIGRATION_VERSION
     )
+    assert PRODUCTION_CONFIG["database"]["quiz_jobs_migration_version"] == (
+        QUIZ_JOBS_MIGRATION_VERSION
+    )
+    assert PRODUCTION_CONFIG["database"][
+        "leaderboard_privacy_rpc_fix_migration_version"
+    ] == LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
 
     render = _load_yaml(ROOT / "render.yaml")
     render_env = {
@@ -287,7 +304,7 @@ def test_python_and_browser_packages_share_the_release_version() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
 
-    assert APPLICATION_VERSION == "7.2.3"
+    assert APPLICATION_VERSION == "7.2.4"
     assert package["version"] == APPLICATION_VERSION
     assert lock["version"] == APPLICATION_VERSION
     assert lock["packages"][""]["version"] == APPLICATION_VERSION

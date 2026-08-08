@@ -3,8 +3,9 @@ from datetime import date
 import pytest
 
 from config.schedule import (
+    COMPLETENESS_CRON,
     CRON_TO_SUBJECT,
-    RECOVERY_CRON,
+    DISPATCHER_CRON,
     SUBJECT_CRONS,
     scheduled_action,
 )
@@ -86,12 +87,14 @@ def test_quiz_ids_are_subject_scoped_and_legacy_readable():
         parse_quiz_id("20260710-general")
 
 
-def test_every_cron_maps_to_immutable_subject_and_recovery_only():
+def test_canonical_subject_times_and_heartbeat_actions_are_distinct():
     assert len(CRON_TO_SUBJECT) == 13
     assert SUBJECT_CRONS == tuple(CRON_TO_SUBJECT)
-    for cron, subject in CRON_TO_SUBJECT.items():
-        assert scheduled_action(cron) == ("subject-quiz", subject)
-    assert scheduled_action(RECOVERY_CRON) == ("recover-missed-quizzes", None)
+    assert scheduled_action(DISPATCHER_CRON) == ("dispatch-due-jobs", None)
+    assert scheduled_action(COMPLETENESS_CRON) == ("daily-completeness", None)
+    for cron in CRON_TO_SUBJECT:
+        with pytest.raises(ValueError, match="Unknown scheduled cron"):
+            scheduled_action(cron)
     with pytest.raises(ValueError, match="Unknown scheduled cron"):
         scheduled_action("30 1-13 * * *")
     expected = {

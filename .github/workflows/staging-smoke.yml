@@ -196,8 +196,10 @@ jobs:
               APPLICATION_VERSION,
               DATABASE_CONTRACT_VERSION,
               LEADERBOARD_PRIVACY_MIGRATION_VERSION,
+              LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
               PERSONAL_LEARNING_MIGRATION_VERSION,
               POST_FINALIZATION_MIGRATION_VERSION,
+              QUIZ_JOBS_MIGRATION_VERSION,
               REQUIRED_MIGRATION_VERSION,
               SOURCE_ROLLOUT_MIGRATION_VERSION,
           )
@@ -227,8 +229,14 @@ jobs:
                   "leaderboardPrivacyMigrationVersion": body.get(
                       "leaderboardPrivacyMigrationVersion"
                   ),
+                  "leaderboardPrivacyRpcFixMigrationVersion": body.get(
+                      "leaderboardPrivacyRpcFixMigrationVersion"
+                  ),
                   "postFinalizationMigrationVersion": body.get(
                       "postFinalizationMigrationVersion"
+                  ),
+                  "quizJobsMigrationVersion": body.get(
+                      "quizJobsMigrationVersion"
                   ),
                   "sourceBackedRotationEnabled": body.get(
                       "sourceBackedRotationEnabled"
@@ -260,6 +268,13 @@ jobs:
                   != LEADERBOARD_PRIVACY_MIGRATION_VERSION
               ):
                   raise SystemExit("Staging leaderboard-privacy migration mismatch.")
+              if (
+                  body.get("leaderboardPrivacyRpcFixMigrationVersion")
+                  != LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
+              ):
+                  raise SystemExit(
+                      "Staging leaderboard-privacy RPC fix migration mismatch."
+                  )
               if body.get("checks", {}).get("leaderboardPrivacy") is not True:
                   raise SystemExit("Staging leaderboard privacy is not ready.")
               if (
@@ -269,6 +284,10 @@ jobs:
                   raise SystemExit("Staging post-finalization migration mismatch.")
               if body.get("checks", {}).get("postFinalization") is not True:
                   raise SystemExit("Staging atomic post finalization is not ready.")
+              if body.get("quizJobsMigrationVersion") != QUIZ_JOBS_MIGRATION_VERSION:
+                  raise SystemExit("Staging durable quiz-jobs migration mismatch.")
+              if body.get("checks", {}).get("durableQuizJobs") is not True:
+                  raise SystemExit("Staging durable quiz jobs are not ready.")
               if (
                   body.get("sourceRolloutMigrationVersion")
                   != SOURCE_ROLLOUT_MIGRATION_VERSION
@@ -292,6 +311,9 @@ jobs:
                       "supabaseConnectivity",
                       "databaseContract",
                       "databasePermissions",
+                      "leaderboardPrivacy",
+                      "postFinalization",
+                      "durableQuizJobs",
                       "activeQuizRetrieval",
                   }
                   if (

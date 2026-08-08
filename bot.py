@@ -40,12 +40,13 @@ from database.contract import (
     DATABASE_CONTRACT_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
+    QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
 )
 from errors import TelegramPostingError
-from services import chapter_selector, question_verification, quiz_pack_service, source_grounding
+from services import chapter_selector, question_verification, quiz_dispatcher, quiz_pack_service, source_grounding
 from services.gemini_provider_pool import GeminiProviderPool
 from services.question_validation import (
     QUESTION_COUNT,
@@ -59,7 +60,7 @@ from services.quiz_lifecycle import (
     SubjectHealth,
     is_successful_outcome,
 )
-from storage import quiz_runs_repo, schema_contract_repo
+from storage import quiz_jobs_repo, quiz_runs_repo, schema_contract_repo
 from telegram.routing import ForumRouter
 from utils.local_time import local_today
 from utils.quiz_ids import build_quiz_id
@@ -477,13 +478,17 @@ def run_subject_quiz(
     force_post: bool = False,
     force_regenerate: bool = False,
     pool: GeminiProviderPool | None = None,
+    durable_job_id: str | None = None,
+    durable_worker_id: str | None = None,
 ) -> RunOutcome:
     subject = get_subject(subject_key, require_quiz_enabled=True)
     router = validate_runtime_config(require_gemini=False)
     thread_id = router.for_subject(subject_key)  # validated before spending Gemini quota
     target_date = target_date or local_today()
     quiz_id = build_quiz_id(target_date, subject_key)
-    worker_id = _worker_id()
+    if bool(durable_job_id) != bool(durable_worker_id):
+        raise ValueError("Durable job ID and worker ID must be supplied together.")
+    worker_id = durable_worker_id or _worker_id()
     run = quiz_runs_repo.get(quiz_id)
     if run and run.get("status") == "posted" and not force_regenerate:
         LOG.info("QUIZ_ALREADY_POSTED subject=%s quiz_id=%s", subject_key, quiz_id)
@@ -638,6 +643,16 @@ def run_subject_quiz(
         )
         LOG.info("CERTIFIED_QUIZ_READY_STATE_RECOVERED subject=%s quiz_id=%s", subject_key, quiz_id)
 
+    if durable_job_id and durable_worker_id:
+        quiz_jobs_repo.transition(
+            job_id=durable_job_id,
+            worker_id=durable_worker_id,
+            target_status="ready",
+            event_type="pack_ready",
+            detail={"saved_pack": used_saved_pack},
+            pack_checksum=quiz_pack_service.checksum_for_pack(pack),
+        )
+
     chapter = (pack.get("meta") or {}).get("chapter") or (run or {}).get("chapter") or ""
     try:
         export_static_quiz_json(pack)
@@ -651,6 +666,14 @@ def run_subject_quiz(
     ):
         LOG.info("QUIZ_POST_ALREADY_CLAIMED subject=%s quiz_id=%s", subject_key, quiz_id)
         return RunOutcome.ALREADY_CLAIMED
+    if durable_job_id and durable_worker_id:
+        quiz_jobs_repo.transition(
+            job_id=durable_job_id,
+            worker_id=durable_worker_id,
+            target_status="posting",
+            event_type="posting_started",
+            detail={"thread_id": thread_id},
+        )
     post_text = _quiz_post_text(subject.telegram_display_name, chapter)
     post_url = build_miniapp_url(quiz_id)
     telegram_acknowledged = False
@@ -795,6 +818,69 @@ def daily_health_report(
     return DailyHealthReport(logical_date, subject_outcomes, details)
 
 
+def durable_daily_health_report(
+    logical_date: date,
+    *,
+    current_hhmm: str,
+) -> DailyHealthReport:
+    """Build completeness from authoritative durable jobs."""
+    job_by_subject = {
+        str(job.get("subject_key")): job
+        for job in quiz_jobs_repo.list_for_date(logical_date.isoformat())
+    }
+    outcomes: dict[str, str] = {}
+    details: dict[str, SubjectHealth] = {}
+    for subject in QUIZ_SUBJECTS:
+        due = bool(
+            subject.scheduled_time_ist and subject.scheduled_time_ist <= current_hhmm
+        )
+        job = job_by_subject.get(subject.key)
+        status = str((job or {}).get("status") or "missing")
+        if not due:
+            outcome = "not_due"
+        elif not job:
+            outcome = "missing"
+        elif status == "posted":
+            outcome = str(RunOutcome.ALREADY_POSTED)
+        elif status == "posting_unknown":
+            outcome = str(RunOutcome.POSTING_OUTCOME_UNKNOWN)
+        elif status in {"due", "claimed", "generating", "ready", "posting", "retry_wait"}:
+            outcome = f"retrying:{status}"
+        else:
+            outcome = f"blocked:{status}"
+        outcomes[subject.key] = outcome
+        details[subject.key] = SubjectHealth(
+            stage=status if due else "not_due",
+            category=(job or {}).get("last_error_category"),
+            retry_count=int((job or {}).get("retry_count") or 0),
+            last_error_at=(job or {}).get("last_error_at"),
+            telegram_message_id=(job or {}).get("telegram_message_id"),
+        )
+    return DailyHealthReport(logical_date, outcomes, details)
+
+
+def dispatch_due_quiz_jobs(*, now: datetime | None = None) -> quiz_dispatcher.DispatchResult:
+    result = quiz_dispatcher.dispatch_due_jobs(
+        run_subject_quiz,
+        now=now,
+        worker_id=_worker_id(),
+    )
+    LOG.info(
+        "DISPATCH_SUMMARY %s",
+        json.dumps(
+            {
+                "date": result.logical_date.isoformat(),
+                "ensured": result.ensured,
+                "claimed": result.claimed,
+                "actionableFailures": result.actionable_failures,
+                "outcomes": result.outcomes,
+            },
+            sort_keys=True,
+        ),
+    )
+    return result
+
+
 def recover_missed_quizzes(*, now: datetime | None = None, pool: GeminiProviderPool | None = None) -> tuple[dict[str, str], bool]:
     current = now or datetime.now(ZoneInfo(APP_TIMEZONE))
     if current.tzinfo is None:
@@ -916,10 +1002,13 @@ def validate_database_schema() -> None:
     """Verify the authoritative versioned schema, signatures, grants, and RLS."""
     contract = schema_contract_repo.get_contract()
     post_contract = schema_contract_repo.get_post_finalization_contract()
+    job_contract = schema_contract_repo.get_quiz_job_contract()
     permission_failures = (
         contract.get("function_permission_failures") or []
     ) + (contract.get("table_permission_failures") or []) + (
         post_contract.get("function_permission_failures") or []
+    ) + (
+        job_contract.get("function_permission_failures") or []
     )
     valid = bool(
         contract.get("ready")
@@ -934,6 +1023,10 @@ def validate_database_schema() -> None:
         and post_contract.get("post_finalization_migration_version")
         == POST_FINALIZATION_MIGRATION_VERSION
         and post_contract.get("post_finalization_migration_applied") is True
+        and job_contract.get("ready") is True
+        and job_contract.get("quiz_job_migration_version")
+        == QUIZ_JOBS_MIGRATION_VERSION
+        and job_contract.get("quiz_job_migration_applied") is True
         and (
             not SOURCE_BACKED_ROTATION_ENABLED
             or (
@@ -1006,6 +1099,8 @@ def main() -> None:
         required=True,
         choices=[
             "subject-quiz",
+            "dispatch-due-jobs",
+            "daily-completeness",
             "recover-missed-quizzes",
             "export-static-fallbacks",
             "announce",
@@ -1035,6 +1130,19 @@ def main() -> None:
             _, unresolved = recover_missed_quizzes()
             if unresolved:
                 raise RuntimeError("Recovery finished with due quizzes unresolved.")
+        elif args.mode == "dispatch-due-jobs":
+            dispatch = dispatch_due_quiz_jobs()
+            if dispatch.actionable_failures:
+                raise RuntimeError("Dispatcher found actionable blocked or unknown jobs.")
+        elif args.mode == "daily-completeness":
+            current = datetime.now(ZoneInfo(APP_TIMEZONE))
+            report = durable_daily_health_report(
+                current.date(), current_hhmm=current.strftime("%H:%M")
+            )
+            LOG.info("DAILY_JOB_HEALTH %s", json.dumps(report.as_dict(), sort_keys=True))
+            LOG.info("DAILY_JOB_HEALTH_TEXT\n%s", report.as_text())
+            if not report.complete:
+                raise RuntimeError("Daily durable-job completeness is not green.")
         elif args.mode == "announce":
             send_schedule_announcement()
         elif args.mode == "export-static-fallbacks":
