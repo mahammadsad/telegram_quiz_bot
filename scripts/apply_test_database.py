@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from database.contract import (  # noqa: E402
-    QUIZ_JOBS_MIGRATION_VERSION,
+    LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
 )
 
 BOOTSTRAP = ROOT / "database" / "schema.sql"
@@ -107,9 +107,12 @@ def rebuild(database_url: str) -> dict:
         path for path in reversed(files) if path.parent == SUPABASE_MIGRATIONS
     )
     identity = _migration_identity(latest_supabase)
-    if not identity or identity[0] != QUIZ_JOBS_MIGRATION_VERSION:
+    if (
+        not identity
+        or identity[0] != LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
+    ):
         raise RuntimeError(
-            "The durable quiz-jobs migration does not match the latest "
+            "The leaderboard privacy RPC fix does not match the latest "
             "migration file."
         )
 

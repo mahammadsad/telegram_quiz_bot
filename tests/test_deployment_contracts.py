@@ -279,6 +279,9 @@ def test_versioned_production_manifest_matches_deployment_intent() -> None:
     assert PRODUCTION_CONFIG["database"]["quiz_jobs_migration_version"] == (
         QUIZ_JOBS_MIGRATION_VERSION
     )
+    assert PRODUCTION_CONFIG["database"][
+        "leaderboard_privacy_rpc_fix_migration_version"
+    ] == LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
 
     render = _load_yaml(ROOT / "render.yaml")
     render_env = {
