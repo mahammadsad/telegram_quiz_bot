@@ -129,6 +129,17 @@ def test_materially_duplicate_and_pattern_leaking_options_are_rejected() -> None
     assert raised.value.code == "option_pattern_leakage"
 
 
+def test_model_verified_candidate_records_pattern_signal_without_hard_failure() -> None:
+    candidate = mathematics_candidate()
+    candidate["options"] = ["দশ", "বিশ", "25", "ত্রিশ"]
+    candidate["deterministic_proof"]["explanation_conclusion"] = "25"
+
+    result = verify_candidate(candidate, require_subject_proof=False)
+
+    assert result.checks["option_pattern_safe"] is False
+    assert result.checks["unique_answer_proved"] is True
+
+
 def test_explanation_contradiction_is_rejected() -> None:
     candidate = mathematics_candidate()
     candidate["deterministic_proof"]["explanation_conclusion"] = "৩০"
