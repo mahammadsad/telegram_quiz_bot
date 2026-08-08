@@ -78,6 +78,18 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "function_permission_failures": [],
         },
     )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_quiz_job_contract",
+        lambda: {
+            "ready": True,
+            "quiz_job_migration_version": (
+                readiness_service.QUIZ_JOBS_MIGRATION_VERSION
+            ),
+            "quiz_job_migration_applied": True,
+            "function_permission_failures": [],
+        },
+    )
     readiness_service._CACHE = None
 
 

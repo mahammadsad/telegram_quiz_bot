@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from database.contract import (  # noqa: E402
-    POST_FINALIZATION_MIGRATION_VERSION,
+    QUIZ_JOBS_MIGRATION_VERSION,
 )
 
 BOOTSTRAP = ROOT / "database" / "schema.sql"
@@ -107,9 +107,9 @@ def rebuild(database_url: str) -> dict:
         path for path in reversed(files) if path.parent == SUPABASE_MIGRATIONS
     )
     identity = _migration_identity(latest_supabase)
-    if not identity or identity[0] != POST_FINALIZATION_MIGRATION_VERSION:
+    if not identity or identity[0] != QUIZ_JOBS_MIGRATION_VERSION:
         raise RuntimeError(
-            "The post-finalization migration does not match the latest "
+            "The durable quiz-jobs migration does not match the latest "
             "migration file."
         )
 
@@ -145,7 +145,15 @@ def rebuild(database_url: str) -> dict:
             raise RuntimeError(
                 "Disposable leaderboard privacy contract is not ready after migrations."
             )
+        quiz_job_contract = connection.execute(
+            "select public.get_quiz_job_contract()"
+        ).fetchone()[0]
+        if not quiz_job_contract.get("ready"):
+            raise RuntimeError(
+                "Disposable durable quiz-jobs contract is not ready after migrations."
+            )
         contract.update(privacy_contract)
+        contract.update(quiz_job_contract)
         return contract
 
 
@@ -168,7 +176,8 @@ def main() -> int:
         f"quiz_quality={contract['quiz_quality_migration_version']} "
         f"personal_learning={contract['personal_learning_migration_version']} "
         "leaderboard_privacy="
-        f"{contract['leaderboard_privacy_migration_version']}"
+        f"{contract['leaderboard_privacy_migration_version']} "
+        f"quiz_jobs={contract['quiz_job_migration_version']}"
     )
     return 0
 

@@ -21,6 +21,11 @@ def get_post_finalization_contract() -> Row:
     return as_row(result.data, "post finalization contract")
 
 
+def get_quiz_job_contract() -> Row:
+    result = get_client().rpc("get_quiz_job_contract", {}).execute()
+    return as_row(result.data, "quiz job contract")
+
+
 def active_quiz_probe() -> Row | None:
     result = (
         get_client()

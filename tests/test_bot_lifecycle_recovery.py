@@ -818,6 +818,16 @@ def test_generation_prompt_treats_dynamic_source_text_as_untrusted_data():
 def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
     monkeypatch.setattr(
         bot.schema_contract_repo,
+        "get_quiz_job_contract",
+        lambda: {
+            "ready": True,
+            "quiz_job_migration_version": bot.QUIZ_JOBS_MIGRATION_VERSION,
+            "quiz_job_migration_applied": True,
+            "function_permission_failures": [],
+        },
+    )
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
         "get_post_finalization_contract",
         lambda: {
             "ready": True,
@@ -861,6 +871,16 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
 
 
 def test_database_preflight_fails_closed_on_old_or_misgranted_contract(monkeypatch):
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_quiz_job_contract",
+        lambda: {
+            "ready": True,
+            "quiz_job_migration_version": bot.QUIZ_JOBS_MIGRATION_VERSION,
+            "quiz_job_migration_applied": True,
+            "function_permission_failures": [],
+        },
+    )
     monkeypatch.setattr(
         bot.schema_contract_repo,
         "get_post_finalization_contract",

@@ -1,8 +1,10 @@
-"""Workflow cadence and immutable UTC-to-subject schedule mapping."""
+"""Low-cost heartbeat cadence for the durable PostgreSQL dispatcher."""
 
 from config.subjects import QUIZ_SUBJECTS
 
-RECOVERY_CRON = "0 15 * * *"
+DISPATCHER_CRON = "*/15 * * * *"
+COMPLETENESS_CRON = "0 15 * * *"
+RECOVERY_CRON = COMPLETENESS_CRON
 
 
 def _utc_cron_for_ist(value: str) -> str:
@@ -23,9 +25,8 @@ if set(CRON_TO_SUBJECT.values()) != {subject.key for subject in QUIZ_SUBJECTS}:
 
 
 def scheduled_action(cron: str) -> tuple[str, str | None]:
-    if cron == RECOVERY_CRON:
-        return "recover-missed-quizzes", None
-    try:
-        return "subject-quiz", CRON_TO_SUBJECT[cron]
-    except KeyError as exc:
-        raise ValueError(f"Unknown scheduled cron expression: {cron}") from exc
+    if cron == DISPATCHER_CRON:
+        return "dispatch-due-jobs", None
+    if cron == COMPLETENESS_CRON:
+        return "daily-completeness", None
+    raise ValueError(f"Unknown scheduled cron expression: {cron}")

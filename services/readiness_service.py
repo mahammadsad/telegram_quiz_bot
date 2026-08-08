@@ -31,6 +31,7 @@ from database.contract import (
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
+    QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
@@ -69,6 +70,7 @@ class Readiness:
             "sourceBackedRotationEnabled": SOURCE_BACKED_ROTATION_ENABLED,
             "databaseContractVersion": DATABASE_CONTRACT_VERSION,
             "postFinalizationMigrationVersion": POST_FINALIZATION_MIGRATION_VERSION,
+            "quizJobsMigrationVersion": QUIZ_JOBS_MIGRATION_VERSION,
             "productionConfigVersion": PRODUCTION_CONFIG_VERSION,
             "productionConfigHash": PRODUCTION_CONFIG_HASH,
         }
@@ -90,6 +92,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
         "databasePermissions": False,
         "leaderboardPrivacy": False,
         "postFinalization": False,
+        "durableQuizJobs": False,
         "activeQuizRetrieval": False,
     }
     failures: list[str] = []
@@ -161,12 +164,22 @@ def assess(*, use_cache: bool = True) -> Readiness:
                     "READINESS_POST_FINALIZATION_FAILURE category=%s",
                     type(exc).__name__,
                 )
+            try:
+                job_contract = schema_contract_repo.get_quiz_job_contract()
+            except Exception as exc:
+                job_contract = {}
+                LOG.warning(
+                    "READINESS_QUIZ_JOBS_FAILURE category=%s",
+                    type(exc).__name__,
+                )
             permission_failures = (
                 contract.get("function_permission_failures") or []
             ) + (contract.get("table_permission_failures") or []) + (
                 privacy_contract.get("function_permission_failures") or []
             ) + (
                 post_contract.get("function_permission_failures") or []
+            ) + (
+                job_contract.get("function_permission_failures") or []
             )
             checks["databasePermissions"] = not permission_failures
             checks["leaderboardPrivacy"] = bool(
@@ -192,6 +205,13 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and post_contract.get("post_finalization_migration_applied") is True
                 and not post_contract.get("missing_columns")
                 and not post_contract.get("function_permission_failures")
+            )
+            checks["durableQuizJobs"] = bool(
+                job_contract.get("ready") is True
+                and job_contract.get("quiz_job_migration_version")
+                == QUIZ_JOBS_MIGRATION_VERSION
+                and job_contract.get("quiz_job_migration_applied") is True
+                and not job_contract.get("function_permission_failures")
             )
             source_rollout_ready = bool(
                 contract.get("source_rollout_migration_version")
@@ -225,6 +245,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 )
                 and personal_learning_ready
                 and checks["postFinalization"]
+                and checks["durableQuizJobs"]
                 and float(contract.get("verification_threshold") or 0)
                 == QUESTION_VERIFICATION_MIN_CONFIDENCE
             )
@@ -250,6 +271,8 @@ def assess(*, use_cache: bool = True) -> Readiness:
         failures.append("leaderboard_privacy")
     if not checks["postFinalization"]:
         failures.append("post_finalization")
+    if not checks["durableQuizJobs"]:
+        failures.append("durable_quiz_jobs")
     if not checks["databasePermissions"]:
         failures.append("database_permissions")
     if not checks["activeQuizRetrieval"]:

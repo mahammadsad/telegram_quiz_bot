@@ -8,7 +8,7 @@ from pathlib import Path
 
 import yaml
 
-from config.schedule import RECOVERY_CRON, SUBJECT_CRONS
+from config.schedule import COMPLETENESS_CRON, DISPATCHER_CRON
 from config.settings import (
     PRODUCTION_CONFIG,
     PRODUCTION_CONFIG_HASH,
@@ -19,6 +19,7 @@ from database.contract import (
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
+    QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
 )
@@ -96,8 +97,8 @@ def test_workflows_have_minimum_permissions_timeouts_and_environment_guards() ->
     assert run_bot["concurrency"]["cancel-in-progress"] is False
     main_trigger = main.get("on") or main.get(True)
     assert main_trigger["schedule"] == [
-        *({"cron": cron} for cron in SUBJECT_CRONS),
-        {"cron": RECOVERY_CRON},
+        {"cron": DISPATCHER_CRON},
+        {"cron": COMPLETENESS_CRON},
     ]
     bot_preflight = next(
         step
@@ -232,7 +233,11 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
 def test_authoritative_migration_version_is_latest_filename() -> None:
     migrations = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
     assert migrations
-    assert migrations[-1].name.startswith(f"{POST_FINALIZATION_MIGRATION_VERSION}_")
+    assert migrations[-1].name.startswith(f"{QUIZ_JOBS_MIGRATION_VERSION}_")
+    assert any(
+        path.name.startswith(f"{POST_FINALIZATION_MIGRATION_VERSION}_")
+        for path in migrations
+    )
     assert any(
         path.name.startswith(f"{LEADERBOARD_PRIVACY_MIGRATION_VERSION}_")
         for path in migrations
@@ -264,6 +269,9 @@ def test_versioned_production_manifest_matches_deployment_intent() -> None:
     }
     assert PRODUCTION_CONFIG["database"]["post_finalization_migration_version"] == (
         POST_FINALIZATION_MIGRATION_VERSION
+    )
+    assert PRODUCTION_CONFIG["database"]["quiz_jobs_migration_version"] == (
+        QUIZ_JOBS_MIGRATION_VERSION
     )
 
     render = _load_yaml(ROOT / "render.yaml")

@@ -219,6 +219,19 @@ QUIZ_CLAIM_TIMEOUT_MINUTES = max(
         PRODUCTION_CONFIG["scheduler"]["claim_timeout_minutes"],
     )),
 )
+QUIZ_JOB_LEASE_MINUTES = max(
+    5, int(PRODUCTION_CONFIG["scheduler"]["dispatcher_lease_minutes"])
+)
+QUIZ_JOB_MAX_RETRIES = max(
+    1, int(PRODUCTION_CONFIG["scheduler"]["dispatcher_max_retries"])
+)
+QUIZ_JOB_RETRY_BASE_SECONDS = max(
+    10, int(PRODUCTION_CONFIG["scheduler"]["retry_base_seconds"])
+)
+QUIZ_JOB_RETRY_MAX_SECONDS = max(
+    QUIZ_JOB_RETRY_BASE_SECONDS,
+    int(PRODUCTION_CONFIG["scheduler"]["retry_max_seconds"]),
+)
 CURRENT_AFFAIRS_MIN = 2
 CURRENT_AFFAIRS_MAX = 3
 GEOGRAPHY_MIN = 1

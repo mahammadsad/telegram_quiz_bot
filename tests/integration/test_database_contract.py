@@ -7,6 +7,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from dataclasses import dataclass
+from datetime import date, datetime, timezone
 
 import psycopg
 import pytest
@@ -24,6 +25,7 @@ from database.contract import (
     SOURCE_ROLLOUT_MIGRATION_VERSION,
 )
 from services.question_validation import content_checksum, validate_questions
+from services.quiz_dispatcher import daily_job_specs
 from utils.hashing import normalize_text
 
 pytestmark = pytest.mark.database_integration
@@ -1476,3 +1478,46 @@ def test_revision_report_is_attempt_owned_and_idempotent(
             """,
             (question_id, attempted_quiz["users"][0], revision_id),
         )
+
+
+def test_durable_daily_jobs_are_exactly_thirteen_and_idempotent(database_url: str) -> None:
+    logical_date = date(2036, 8, 8)
+    specs = daily_job_specs(logical_date)
+    with connect(database_url) as connection:
+        first = connection.execute(
+            "select * from public.ensure_daily_quiz_jobs(%s, %s, %s, null)",
+            (Jsonb(specs), "a" * 64, "integration-sha"),
+        ).fetchall()
+        second = connection.execute(
+            "select * from public.ensure_daily_quiz_jobs(%s, %s, %s, null)",
+            (Jsonb(specs), "a" * 64, "integration-sha"),
+        ).fetchall()
+    assert len(first) == len(second) == 13
+    assert {row["id"] for row in first} == {row["id"] for row in second}
+    assert len({row["subject_key"] for row in first}) == 13
+
+
+def test_durable_claims_are_exclusive_across_workers(database_url: str) -> None:
+    logical_date = date(2036, 8, 9)
+    specs = daily_job_specs(logical_date)
+    now = datetime(2036, 8, 9, 23, tzinfo=timezone.utc)
+    with connect(database_url) as connection:
+        connection.execute(
+            "select * from public.ensure_daily_quiz_jobs(%s, %s, %s, null)",
+            (Jsonb(specs), "b" * 64, "race-sha"),
+        ).fetchall()
+        connection.commit()
+
+    def claim(worker: str) -> set[uuid.UUID]:
+        with connect(database_url) as connection:
+            rows = connection.execute(
+                "select * from public.claim_due_quiz_jobs(%s, %s, 20, 13)",
+                (worker, now),
+            ).fetchall()
+            connection.commit()
+            return {row["id"] for row in rows}
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        claimed = list(pool.map(claim, ("race-a", "race-b")))
+    assert claimed[0].isdisjoint(claimed[1])
+    assert len(claimed[0] | claimed[1]) == 13

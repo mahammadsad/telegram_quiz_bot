@@ -252,9 +252,10 @@ def test_resource_feedback_ui_and_maintenance_workflows_are_bounded():
     assert "--limit \"$LIMIT\"" in resource_workflow
     assert 'python -m scripts.check_learning_resources --limit "$LIMIT"' in resource_workflow
     assert 'python -m scripts.discover_learning_resources --limit "$LIMIT"' in resource_workflow
-    assert schedule_workflow.count("- cron:") == 14
+    assert schedule_workflow.count("- cron:") == 2
     assert 'cron: "30 1-13 * * *"' not in schedule_workflow
     assert "python bot.py --mode export-static-fallbacks" in schedule_workflow
     assert "if: always() && needs.resolve_job.outputs.commit_fallbacks == 'true'" in schedule_workflow
-    assert 'python bot.py "${args[@]}" 2>&1 | tee "$log_file"' in schedule_workflow
-    assert "RUN_FAILED category=quiz_content_collision" in schedule_workflow
+    assert 'python bot.py "${args[@]}" || status=$?' in schedule_workflow
+    assert "dispatch-due-jobs" in schedule_workflow
+    assert "daily-completeness" in schedule_workflow
