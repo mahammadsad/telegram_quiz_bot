@@ -18,6 +18,7 @@ from config.source_rollout import ROTATION_CHAPTER_KEYS
 from database.contract import (
     DATABASE_CONTRACT_VERSION,
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
+    LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
@@ -548,6 +549,9 @@ def test_exact_database_contract_and_permissions(database_url: str) -> None:
     assert privacy_contract["leaderboard_privacy_migration_version"] == (
         LEADERBOARD_PRIVACY_MIGRATION_VERSION
     )
+    assert privacy_contract["leaderboard_privacy_rpc_fix_migration_version"] == (
+        LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
+    )
     assert privacy_contract["leaderboard_privacy_migration_applied"] is True
     for key in (
         "missing_functions",
@@ -557,6 +561,26 @@ def test_exact_database_contract_and_permissions(database_url: str) -> None:
         "function_permission_failures",
     ):
         assert privacy_contract[key] == []
+
+
+def test_service_role_can_read_leaderboard_privacy_contract(
+    database_url: str,
+) -> None:
+    with psycopg.connect(
+        database_url, row_factory=dict_row, autocommit=True
+    ) as connection:
+        connection.execute("set role service_role")
+        try:
+            privacy_contract = connection.execute(
+                "select public.get_leaderboard_privacy_contract() as contract"
+            ).fetchone()["contract"]
+        finally:
+            connection.execute("reset role")
+
+    assert privacy_contract["ready"] is True
+    assert privacy_contract["leaderboard_privacy_rpc_fix_migration_version"] == (
+        LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
+    )
 
 
 def test_database_rotation_is_exactly_the_reviewed_source_allowlist(
@@ -1257,6 +1281,9 @@ def test_public_leaderboards_enforce_reversible_identity_consent(
         assert privacy_contract["leaderboard_privacy_migration_version"] == (
             LEADERBOARD_PRIVACY_MIGRATION_VERSION
         )
+        assert privacy_contract[
+            "leaderboard_privacy_rpc_fix_migration_version"
+        ] == LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
         assert privacy_contract["missing_functions"] == []
         assert privacy_contract["unsafe_function_definitions"] == []
         assert privacy_contract["missing_identity_markers"] == []

@@ -103,6 +103,9 @@ def test_readiness_requires_exact_leaderboard_privacy_contract(monkeypatch) -> N
             "leaderboard_privacy_migration_version": (
                 readiness_service.LEADERBOARD_PRIVACY_MIGRATION_VERSION
             ),
+            "leaderboard_privacy_rpc_fix_migration_version": (
+                readiness_service.LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
+            ),
             "leaderboard_privacy_migration_applied": True,
             "identity_projection_ready": True,
             "missing_functions": [],
@@ -119,6 +122,9 @@ def test_readiness_requires_exact_leaderboard_privacy_contract(monkeypatch) -> N
     assert result.public_payload()["leaderboardPrivacyMigrationVersion"] == (
         readiness_service.LEADERBOARD_PRIVACY_MIGRATION_VERSION
     )
+    assert result.public_payload()[
+        "leaderboardPrivacyRpcFixMigrationVersion"
+    ] == readiness_service.LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
 
 
 def test_readiness_fails_closed_for_unsafe_leaderboard_functions(monkeypatch) -> None:

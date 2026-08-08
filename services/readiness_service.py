@@ -29,6 +29,7 @@ from database.contract import (
     DATABASE_CONTRACT_KEY,
     DATABASE_CONTRACT_VERSION,
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
+    LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
@@ -66,6 +67,9 @@ class Readiness:
             ),
             "leaderboardPrivacyMigrationVersion": (
                 LEADERBOARD_PRIVACY_MIGRATION_VERSION
+            ),
+            "leaderboardPrivacyRpcFixMigrationVersion": (
+                LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
             ),
             "sourceBackedRotationEnabled": SOURCE_BACKED_ROTATION_ENABLED,
             "databaseContractVersion": DATABASE_CONTRACT_VERSION,
@@ -188,6 +192,10 @@ def assess(*, use_cache: bool = True) -> Readiness:
                     "leaderboard_privacy_migration_version"
                 )
                 == LEADERBOARD_PRIVACY_MIGRATION_VERSION
+                and privacy_contract.get(
+                    "leaderboard_privacy_rpc_fix_migration_version"
+                )
+                == LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
                 and privacy_contract.get(
                     "leaderboard_privacy_migration_applied"
                 )
