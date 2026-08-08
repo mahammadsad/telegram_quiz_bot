@@ -1498,9 +1498,9 @@ def test_durable_daily_jobs_are_exactly_thirteen_and_idempotent(database_url: st
 
 
 def test_durable_claims_are_exclusive_across_workers(database_url: str) -> None:
-    logical_date = date(2036, 8, 9)
+    logical_date = date(2036, 8, 7)
     specs = daily_job_specs(logical_date)
-    now = datetime(2036, 8, 9, 23, tzinfo=timezone.utc)
+    now = datetime(2036, 8, 7, 23, tzinfo=timezone.utc)
     with connect(database_url) as connection:
         connection.execute(
             "select * from public.ensure_daily_quiz_jobs(%s, %s, %s, null)",
