@@ -28,7 +28,7 @@ min_reuse_gap_days = 21
 max_reuse_gap_days = 180
 due_grace_minutes = 30
 dispatcher_lease_minutes = 20
-dispatcher_max_retries = 5
+dispatcher_max_retries = 8
 retry_base_seconds = 60
 retry_max_seconds = 1800
 
