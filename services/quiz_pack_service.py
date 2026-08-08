@@ -52,6 +52,8 @@ REPORT_REASONS = {
     "outdated",
     "outside_syllabus",
     "broken_source",
+    "duplicate_question",
+    "translation_error",
     "other",
 }
 
@@ -73,9 +75,7 @@ def get_quiz_pack(quiz_id: str) -> dict | None:
             if isinstance(question, list):
                 question = question[0] if question else {}
             if not question:
-                raise DatabaseIntegrityError(
-                    f"Quiz {quiz_id} has an ordered mapping without a question."
-                )
+                raise DatabaseIntegrityError(f"Quiz {quiz_id} has an ordered mapping without a question.")
             mapped_items.append({"mapping": mapping, "question": question})
         return _pack_from_items(quiz_id, mapped_items)
 
@@ -114,17 +114,11 @@ def get_recoverable_quiz_pack(quiz_id: str, run: dict | None) -> dict | None:
     """
     status = run.get("status") if run else None
     certified_generation_failure = bool(
-        run
-        and status == "generation_failed"
-        and run.get("question_count") == QUESTION_COUNT
-        and run.get("ready_at")
+        run and status == "generation_failed" and run.get("question_count") == QUESTION_COUNT and run.get("ready_at")
     )
     if (
         not run
-        or (
-            status not in {"ready", "posting", "posting_failed", "posted"}
-            and not certified_generation_failure
-        )
+        or (status not in {"ready", "posting", "posting_failed", "posted"} and not certified_generation_failure)
         or run.get("integrity_verified") is not True
         or int(run.get("checksum_contract_version") or 0) != 2
         or not run.get("generated_checksum")
@@ -164,39 +158,41 @@ def _validate_saved_pack_source_contract(pack: dict) -> None:
         prior_topic = allowed_source_topics.setdefault(source_id, topic)
         if prior_topic != topic:
             raise ValueError("One source document cannot own multiple persisted micro-topics.")
-        raw.append({
-            "question": question.get("question_text"),
-            "options": [
-                question.get("option_a"),
-                question.get("option_b"),
-                question.get("option_c"),
-                question.get("option_d"),
-            ],
-            "correct_index": OPTION_LETTERS.find(str(question.get("correct_option") or "")),
-            "explanation": question.get("explanation"),
-            "detailed_explanation": question.get("detailed_explanation"),
-            "subject_key": subject_key,
-            "chapter": chapter,
-            "micro_topic_id": question.get("micro_topic_id"),
-            "micro_topic_key": question.get("micro_topic_key"),
-            "source_document_id": source_id,
-            "source_url": question.get("source_url"),
-            "source_title": question.get("source_title"),
-            "source_domain": question.get("source_domain"),
-            "source_kind": question.get("source_kind"),
-            "source_published_at": question.get("source_published_at"),
-            "source_accessed_at": question.get("source_accessed_at"),
-            "evidence_summary": question.get("evidence_summary"),
-            "fact_version": question.get("fact_version"),
-            "difficulty": question.get("difficulty"),
-            "language": question.get("language"),
-            "verification_status": question.get("verification_status"),
-            "verification_score": question.get("verification_score"),
-            "verification_notes": question.get("verification_notes"),
-            "verification_checks": question.get("verification_checks"),
-            "verified_at": question.get("verified_at"),
-            "verification_model": question.get("verification_model"),
-        })
+        raw.append(
+            {
+                "question": question.get("question_text"),
+                "options": [
+                    question.get("option_a"),
+                    question.get("option_b"),
+                    question.get("option_c"),
+                    question.get("option_d"),
+                ],
+                "correct_index": OPTION_LETTERS.find(str(question.get("correct_option") or "")),
+                "explanation": question.get("explanation"),
+                "detailed_explanation": question.get("detailed_explanation"),
+                "subject_key": subject_key,
+                "chapter": chapter,
+                "micro_topic_id": question.get("micro_topic_id"),
+                "micro_topic_key": question.get("micro_topic_key"),
+                "source_document_id": source_id,
+                "source_url": question.get("source_url"),
+                "source_title": question.get("source_title"),
+                "source_domain": question.get("source_domain"),
+                "source_kind": question.get("source_kind"),
+                "source_published_at": question.get("source_published_at"),
+                "source_accessed_at": question.get("source_accessed_at"),
+                "evidence_summary": question.get("evidence_summary"),
+                "fact_version": question.get("fact_version"),
+                "difficulty": question.get("difficulty"),
+                "language": question.get("language"),
+                "verification_status": question.get("verification_status"),
+                "verification_score": question.get("verification_score"),
+                "verification_notes": question.get("verification_notes"),
+                "verification_checks": question.get("verification_checks"),
+                "verified_at": question.get("verified_at"),
+                "verification_model": question.get("verification_model"),
+            }
+        )
     validate_questions(
         raw,
         subject_key,
@@ -265,9 +261,7 @@ def record_quiz_pack(
         replace=replace,
     )
     if not save_result.get("ready"):
-        raise DatabaseIntegrityError(
-            "Saved quiz checksum did not match generated content; posting is blocked."
-        )
+        raise DatabaseIntegrityError("Saved quiz checksum did not match generated content; posting is blocked.")
     saved = get_quiz_pack(quiz_id)
     if not saved or len(saved.get("items") or []) != QUESTION_COUNT:
         raise DatabaseIntegrityError("Atomic quiz save did not produce a complete readable pack.")
@@ -277,10 +271,7 @@ def record_quiz_pack(
         chapter,
         [_content_row_from_saved_item(item) for item in saved["items"]],
     )
-    if (
-        readback_checksum != checksum
-        or readback_checksum != save_result.get("persisted_checksum")
-    ):
+    if readback_checksum != checksum or readback_checksum != save_result.get("persisted_checksum"):
         quiz_packs_repo.record_readback_integrity_failure(
             quiz_id=quiz_id,
             worker_id=worker_id,
@@ -288,9 +279,7 @@ def record_quiz_pack(
             persisted_checksum=readback_checksum,
             question_ids=[str(item["question"]["id"]) for item in saved["items"]],
         )
-        raise DatabaseIntegrityError(
-            "Quiz read-back checksum did not match generated content; posting is blocked."
-        )
+        raise DatabaseIntegrityError("Quiz read-back checksum did not match generated content; posting is blocked.")
     LOG.info("Recorded and checksum-verified quiz pack %s with 10 immutable versions.", quiz_id)
     return saved
 
@@ -323,8 +312,7 @@ def public_quiz_payload(pack: dict) -> dict:
         "capabilities": {
             "submission": True,
             "source": "api",
-            "marking": pack.get("marking_scheme")
-            or _marking_scheme(QUIZ_INCORRECT_PENALTY),
+            "marking": pack.get("marking_scheme") or _marking_scheme(QUIZ_INCORRECT_PENALTY),
         },
         "qs": [
             {
@@ -491,7 +479,9 @@ def _build_question(quiz_id: str, item: dict, meta: dict) -> Question:
         verification_status=_str(item.get("verification_status")),
         verification_score=item.get("verification_score"),
         verification_notes=_str(item.get("verification_notes")),
-        verification_checks=item.get("verification_checks") if isinstance(item.get("verification_checks"), dict) else {},
+        verification_checks=item.get("verification_checks")
+        if isinstance(item.get("verification_checks"), dict)
+        else {},
         verified_at=_str(item.get("verified_at")) or None,
         verification_model=_str(item.get("verification_model")) or None,
         stem_hash=_str(item.get("stem_hash")) or question_hash(question_text),

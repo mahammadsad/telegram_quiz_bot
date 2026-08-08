@@ -24,6 +24,7 @@ from database.contract import (
     PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION,
     PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
     PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION,
+    PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
@@ -62,9 +63,7 @@ def connect(database_url: str) -> psycopg.Connection:
 
 @pytest.fixture(scope="module")
 def catalogue(database_url: str) -> Catalogue:
-    with psycopg.connect(
-        database_url, row_factory=dict_row, autocommit=True
-    ) as connection:
+    with psycopg.connect(database_url, row_factory=dict_row, autocommit=True) as connection:
         chapter = connection.execute(
             """
             select c.id, mt.id as micro_topic_id, mt.key
@@ -262,16 +261,10 @@ def test_post_finalization_contract_and_atomic_idempotent_usage(
         question["question"] = f"পোস্ট চূড়ান্তকরণ পরীক্ষা {index} কী?"
     save_quiz(database_url, quiz_id, "2026-10-10", raw, worker_id=worker_id)
 
-    with psycopg.connect(
-        database_url, row_factory=dict_row, autocommit=True
-    ) as connection:
-        contract = connection.execute(
-            "select public.get_post_finalization_contract() as result"
-        ).fetchone()["result"]
+    with psycopg.connect(database_url, row_factory=dict_row, autocommit=True) as connection:
+        contract = connection.execute("select public.get_post_finalization_contract() as result").fetchone()["result"]
         assert contract["ready"] is True
-        assert contract["post_finalization_migration_version"] == (
-            POST_FINALIZATION_MIGRATION_VERSION
-        )
+        assert contract["post_finalization_migration_version"] == (POST_FINALIZATION_MIGRATION_VERSION)
         question_before = connection.execute(
             """
             select q.id, q.usage_count
@@ -324,23 +317,30 @@ def test_post_finalization_contract_and_atomic_idempotent_usage(
             """,
             (quiz_id,),
         ).fetchall()
-        assert [row["usage_count"] for row in question_after] == [
-            row["usage_count"] + 1 for row in question_before
-        ]
-        assert connection.execute(
-            "select usage_count from public.quiz_micro_topics where id = %s",
-            (catalogue.micro_topic_id,),
-        ).fetchone()["usage_count"] == topic_before + 10
-        assert connection.execute(
-            "select usage_count from public.source_documents where id = %s",
-            (SOURCE_ID,),
-        ).fetchone()["usage_count"] == source_before + 10
-        assert connection.execute(
-            """
+        assert [row["usage_count"] for row in question_after] == [row["usage_count"] + 1 for row in question_before]
+        assert (
+            connection.execute(
+                "select usage_count from public.quiz_micro_topics where id = %s",
+                (catalogue.micro_topic_id,),
+            ).fetchone()["usage_count"]
+            == topic_before + 10
+        )
+        assert (
+            connection.execute(
+                "select usage_count from public.source_documents where id = %s",
+                (SOURCE_ID,),
+            ).fetchone()["usage_count"]
+            == source_before + 10
+        )
+        assert (
+            connection.execute(
+                """
             select usage_count from public.quiz_chapters
             where subject_key = 'history' and name = 'আধুনিক ভারত'
             """
-        ).fetchone()["usage_count"] == chapter_before + 1
+            ).fetchone()["usage_count"]
+            == chapter_before + 1
+        )
         history = connection.execute(
             """
             select quiz_id from public.chapter_history
@@ -374,9 +374,7 @@ def test_post_finalization_rolls_back_every_usage_write_on_failure(
         question["question"] = f"পোস্ট রোলব্যাক পরীক্ষা {index} কী?"
     save_quiz(database_url, quiz_id, "2026-10-11", raw, worker_id=worker_id)
 
-    with psycopg.connect(
-        database_url, row_factory=dict_row, autocommit=True
-    ) as connection:
+    with psycopg.connect(database_url, row_factory=dict_row, autocommit=True) as connection:
         connection.execute(
             "select * from public.claim_quiz_run(%s, %s, 'posting', 20, false)",
             (quiz_id, worker_id),
@@ -440,9 +438,7 @@ def test_post_finalization_rolls_back_every_usage_write_on_failure(
             ).fetchone()
             assert run == {"status": "posting", "telegram_message_id": None}
         finally:
-            connection.execute(
-                "drop trigger if exists reject_test_source_usage on public.source_documents"
-            )
+            connection.execute("drop trigger if exists reject_test_source_usage on public.source_documents")
             connection.execute("drop function if exists public.reject_test_source_usage()")
 
 
@@ -489,9 +485,7 @@ def versioned_quizzes(database_url: str, catalogue: Catalogue) -> dict:
         worker_id="version-worker-2",
     )
     with connect(database_url) as connection:
-        before_repeat = connection.execute(
-            "select count(*) as count from public.questions"
-        ).fetchone()["count"]
+        before_repeat = connection.execute("select count(*) as count from public.questions").fetchone()["count"]
     save_quiz(
         database_url,
         "20260603-history",
@@ -508,33 +502,24 @@ def versioned_quizzes(database_url: str, catalogue: Catalogue) -> dict:
 
 def test_exact_database_contract_and_permissions(database_url: str) -> None:
     with connect(database_url) as connection:
-        contract = connection.execute(
-            "select public.get_application_schema_contract() as contract"
-        ).fetchone()["contract"]
+        contract = connection.execute("select public.get_application_schema_contract() as contract").fetchone()[
+            "contract"
+        ]
         privacy_contract = connection.execute(
             "select public.get_leaderboard_privacy_contract() as contract"
         ).fetchone()["contract"]
     assert contract["ready"] is True
     assert contract["contract_version"] == DATABASE_CONTRACT_VERSION
     assert contract["required_migration_version"] == REQUIRED_MIGRATION_VERSION
-    assert (
-        contract["source_rollout_migration_version"]
-        == SOURCE_ROLLOUT_MIGRATION_VERSION
-    )
+    assert contract["source_rollout_migration_version"] == SOURCE_ROLLOUT_MIGRATION_VERSION
     assert contract["source_rollout_migration_applied"] is True
     assert contract["source_backed_rotation_ready"] is True
     assert isinstance(contract["source_coverage_ready"], bool)
-    assert (
-        contract["quiz_quality_migration_version"]
-        == QUIZ_QUALITY_MIGRATION_VERSION
-    )
+    assert contract["quiz_quality_migration_version"] == QUIZ_QUALITY_MIGRATION_VERSION
     assert contract["quiz_quality_migration_applied"] is True
     assert contract["diverse_grounding_ready"] is True
     assert contract["negative_marking_ready"] is True
-    assert (
-        contract["personal_learning_migration_version"]
-        == PERSONAL_LEARNING_MIGRATION_VERSION
-    )
+    assert contract["personal_learning_migration_version"] == PERSONAL_LEARNING_MIGRATION_VERSION
     assert contract["personal_learning_migration_applied"] is True
     assert contract["personal_learning_projection_ready"] is True
     for key in (
@@ -551,9 +536,7 @@ def test_exact_database_contract_and_permissions(database_url: str) -> None:
     ):
         assert contract[key] == []
     assert privacy_contract["ready"] is True
-    assert privacy_contract["leaderboard_privacy_migration_version"] == (
-        LEADERBOARD_PRIVACY_MIGRATION_VERSION
-    )
+    assert privacy_contract["leaderboard_privacy_migration_version"] == (LEADERBOARD_PRIVACY_MIGRATION_VERSION)
     assert privacy_contract["leaderboard_privacy_rpc_fix_migration_version"] == (
         LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
     )
@@ -633,9 +616,9 @@ def test_phase_d_current_affairs_event_claim_and_pool_contract(database_url: str
             "select * from public.get_current_affairs_grounding_bundle(%s, %s, %s)",
             ("জাতীয় সাম্প্রতিক ঘটনা", date(2026, 8, 8), 8),
         ).fetchall()
-        contract = connection.execute(
-            "select public.get_phase_d_current_affairs_contract() as contract"
-        ).fetchone()["contract"]
+        contract = connection.execute("select public.get_phase_d_current_affairs_contract() as contract").fetchone()[
+            "contract"
+        ]
 
     assert stored["verification_status"] == "verified"
     assert stored["review_required"] is False
@@ -646,17 +629,13 @@ def test_phase_d_current_affairs_event_claim_and_pool_contract(database_url: str
     assert contract["ready"] is True
     assert contract["atomic_claims"] is True
     assert contract["multi_source_clusters"] is True
-    assert contract["phase_d_current_affairs_migration_version"] == (
-        PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
-    )
+    assert contract["phase_d_current_affairs_migration_version"] == (PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION)
 
 
 def test_service_role_can_read_leaderboard_privacy_contract(
     database_url: str,
 ) -> None:
-    with psycopg.connect(
-        database_url, row_factory=dict_row, autocommit=True
-    ) as connection:
+    with psycopg.connect(database_url, row_factory=dict_row, autocommit=True) as connection:
         connection.execute("set role service_role")
         try:
             privacy_contract = connection.execute(
@@ -806,19 +785,13 @@ def test_phase_e_mastery_trigger_history_rollup_and_variant_rotation(
         "nextAction": "continue_due_revision",
     }
     assert contract["ready"] is True
-    assert contract["phase_e_personal_learning_migration_version"] == (
-        PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION
-    )
+    assert contract["phase_e_personal_learning_migration_version"] == (PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION)
 
 
 def test_database_rotation_is_exactly_the_reviewed_source_allowlist(
     database_url: str,
 ) -> None:
-    expected = {
-        key
-        for chapter_keys in ROTATION_CHAPTER_KEYS.values()
-        for key in chapter_keys
-    }
+    expected = {key for chapter_keys in ROTATION_CHAPTER_KEYS.values() for key in chapter_keys}
     with connect(database_url) as connection:
         rows = connection.execute(
             """
@@ -838,9 +811,9 @@ def test_phase_e_exam_contract_backfills_shared_daily_quick_model(
 ) -> None:
     del versioned_quizzes
     with connect(database_url) as connection:
-        contract = connection.execute(
-            "select public.get_phase_e_exam_configuration_contract() as contract"
-        ).fetchone()["contract"]
+        contract = connection.execute("select public.get_phase_e_exam_configuration_contract() as contract").fetchone()[
+            "contract"
+        ]
         instance = connection.execute(
             """
             select instance.id
@@ -854,9 +827,7 @@ def test_phase_e_exam_contract_backfills_shared_daily_quick_model(
         ).fetchone()["payload"]
 
     assert contract["ready"] is True
-    assert contract["phase_e_exam_configuration_migration_version"] == (
-        PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION
-    )
+    assert contract["phase_e_exam_configuration_migration_version"] == (PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION)
     assert contract["daily_quick_definition"] is True
     assert contract["historical_ids_preserved"] is True
     assert contract["attempt_links_backfilled"] is True
@@ -878,9 +849,7 @@ def test_phase_e_exam_tables_and_rpcs_are_service_role_only(
                 with pytest.raises(psycopg.errors.InsufficientPrivilege):
                     connection.execute("select count(*) from public.exams")
                 with pytest.raises(psycopg.errors.InsufficientPrivilege):
-                    connection.execute(
-                        "select public.get_test_definition_catalog(current_date, null, 20, 0)"
-                    )
+                    connection.execute("select public.get_test_definition_catalog(current_date, null, 20, 0)")
             finally:
                 connection.execute("reset role")
 
@@ -891,9 +860,9 @@ def test_phase_e_previous_year_mock_contract_and_legacy_mirror(
 ) -> None:
     del versioned_quizzes
     with connect(database_url) as connection:
-        contract = connection.execute(
-            "select public.get_phase_e_previous_year_mock_contract() as contract"
-        ).fetchone()["contract"]
+        contract = connection.execute("select public.get_phase_e_previous_year_mock_contract() as contract").fetchone()[
+            "contract"
+        ]
         counts = connection.execute(
             """
             select
@@ -907,9 +876,7 @@ def test_phase_e_previous_year_mock_contract_and_legacy_mirror(
         ).fetchone()
 
     assert contract["ready"] is True
-    assert contract["phase_e_previous_year_mock_migration_version"] == (
-        PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION
-    )
+    assert contract["phase_e_previous_year_mock_migration_version"] == (PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION)
     for key in (
         "real_pyq_provenance",
         "correction_audit",
@@ -937,23 +904,17 @@ def test_phase_e_previous_year_and_attempt_tables_are_service_role_only(
             connection.execute(f"set role {role}")
             try:
                 with pytest.raises(psycopg.errors.InsufficientPrivilege):
-                    connection.execute(
-                        "select count(*) from public.previous_year_question_provenance"
-                    )
+                    connection.execute("select count(*) from public.previous_year_question_provenance")
                 with pytest.raises(psycopg.errors.InsufficientPrivilege):
                     connection.execute("select count(*) from public.test_attempts")
                 with pytest.raises(psycopg.errors.InsufficientPrivilege):
-                    connection.execute(
-                        "select public.get_test_attempt_for_user(null, null)"
-                    )
+                    connection.execute("select public.get_test_attempt_for_user(null, null)")
             finally:
                 connection.execute("reset role")
 
 
 @pytest.mark.parametrize("role", ["anon", "authenticated"])
-def test_browser_roles_cannot_read_private_tables_or_call_service_rpcs(
-    database_url: str, role: str
-) -> None:
+def test_browser_roles_cannot_read_private_tables_or_call_service_rpcs(database_url: str, role: str) -> None:
     with psycopg.connect(database_url, autocommit=True) as connection:
         connection.execute(f"set role {role}")
         try:
@@ -975,9 +936,9 @@ def test_service_role_can_execute_the_authoritative_contract(database_url: str) 
     with psycopg.connect(database_url, row_factory=dict_row, autocommit=True) as connection:
         connection.execute("set role service_role")
         try:
-            contract = connection.execute(
-                "select public.get_application_schema_contract() as contract"
-            ).fetchone()["contract"]
+            contract = connection.execute("select public.get_application_schema_contract() as contract").fetchone()[
+                "contract"
+            ]
         finally:
             connection.execute("reset role")
     assert contract["ready"] is True
@@ -1035,9 +996,7 @@ def test_dashboard_and_due_reviews_preserve_object_response_shape(
     assert due["rows"][0]["subjectKey"] == "history"
 
 
-def test_same_stem_versions_and_identical_reuse(
-    database_url: str, versioned_quizzes: dict
-) -> None:
+def test_same_stem_versions_and_identical_reuse(database_url: str, versioned_quizzes: dict) -> None:
     clean, _ = atomic_rows(versioned_quizzes["original"])
     stems = [row["stem_hash"] for row in clean[:4]]
     with connect(database_url) as connection:
@@ -1049,9 +1008,7 @@ def test_same_stem_versions_and_identical_reuse(
             """,
             (stems,),
         ).fetchall()
-        after_repeat = connection.execute(
-            "select count(*) as count from public.questions"
-        ).fetchone()["count"]
+        after_repeat = connection.execute("select count(*) as count from public.questions").fetchone()["count"]
         repeated_ids = connection.execute(
             """
             select a.question_id = b.question_id as reused
@@ -1065,9 +1022,7 @@ def test_same_stem_versions_and_identical_reuse(
     assert len(repeated_ids) == 10 and all(row["reused"] for row in repeated_ids)
 
 
-def test_concurrent_generation_serializes_same_stem_versions(
-    database_url: str, versioned_quizzes: dict
-) -> None:
+def test_concurrent_generation_serializes_same_stem_versions(database_url: str, versioned_quizzes: dict) -> None:
     first = deepcopy(versioned_quizzes["corrected"])
     second = deepcopy(versioned_quizzes["corrected"])
     first[0]["explanation"] = "সমসাময়িক সংস্করণ ক-এর যাচাইকৃত বাংলা ব্যাখ্যা।"
@@ -1133,9 +1088,7 @@ def submit_attempt(
         ).fetchone()["result"]
 
 
-def test_concurrent_duplicate_submission_is_idempotent(
-    database_url: str, attempted_quiz: dict
-) -> None:
+def test_concurrent_duplicate_submission_is_idempotent(database_url: str, attempted_quiz: dict) -> None:
     barrier = threading.Barrier(2)
 
     def submit_once() -> dict:
@@ -1163,9 +1116,7 @@ def test_concurrent_duplicate_submission_is_idempotent(
     assert results[0]["attemptId"] == results[1]["attemptId"]
 
 
-def test_attempt_result_recovery_is_scoped_to_the_authenticated_owner(
-    database_url: str, attempted_quiz: dict
-) -> None:
+def test_attempt_result_recovery_is_scoped_to_the_authenticated_owner(database_url: str, attempted_quiz: dict) -> None:
     with connect(database_url) as connection:
         owned = connection.execute(
             """
@@ -1182,12 +1133,8 @@ def test_attempt_result_recovery_is_scoped_to_the_authenticated_owner(
     assert owned["attemptId"] == str(ATTEMPT_ID)
     assert owned["quizId"] == attempted_quiz["quizId"]
     assert len(owned["review"]) == 10
-    assert float(owned["netScore"]) == pytest.approx(
-        owned["score"] - owned["incorrect"] * 0.25
-    )
-    assert float(owned["negativeMarks"]) == pytest.approx(
-        owned["incorrect"] * 0.25
-    )
+    assert float(owned["netScore"]) == pytest.approx(owned["score"] - owned["incorrect"] * 0.25)
+    assert float(owned["negativeMarks"]) == pytest.approx(owned["incorrect"] * 0.25)
     assert owned["markingScheme"] == {
         "rightMarks": 1,
         "wrongPenalty": 0.25,
@@ -1197,9 +1144,7 @@ def test_attempt_result_recovery_is_scoped_to_the_authenticated_owner(
     assert not_owned is None
 
 
-def test_retakes_are_new_but_do_not_replace_official_rank(
-    database_url: str, attempted_quiz: dict
-) -> None:
+def test_retakes_are_new_but_do_not_replace_official_rank(database_url: str, attempted_quiz: dict) -> None:
     second_attempt = submit_attempt(
         database_url,
         attempted_quiz["quizId"],
@@ -1250,8 +1195,7 @@ def test_retakes_are_new_but_do_not_replace_official_rank(
     assert float(board["markingScheme"]["wrongPenalty"]) == pytest.approx(0.25)
     assert board["currentUser"]["isCurrentUser"] is True
     assert float(board["currentUser"]["netScore"]) == pytest.approx(
-        board["currentUser"]["score"]
-        - board["currentUser"]["incorrect"] * 0.25
+        board["currentUser"]["score"] - board["currentUser"]["incorrect"] * 0.25
     )
     assert board["currentUser"]["rank"] == 2
     assert board["separatorRequired"] is True
@@ -1296,9 +1240,7 @@ def test_public_leaderboards_enforce_reversible_identity_consent(
 
     def scalar_values(value: object) -> set[str]:
         if isinstance(value, dict):
-            return {
-                item for child in value.values() for item in scalar_values(child)
-            }
+            return {item for child in value.values() for item in scalar_values(child)}
         if isinstance(value, list):
             return {item for child in value for item in scalar_values(child)}
         if value is None or isinstance(value, bool):
@@ -1307,9 +1249,7 @@ def test_public_leaderboards_enforce_reversible_identity_consent(
 
     def keys(value: object) -> set[str]:
         if isinstance(value, dict):
-            return set(value) | {
-                item for child in value.values() for item in keys(child)
-            }
+            return set(value) | {item for child in value.values() for item in keys(child)}
         if isinstance(value, list):
             return {item for child in value for item in keys(child)}
         return set()
@@ -1450,19 +1390,10 @@ def test_public_leaderboards_enforce_reversible_identity_consent(
 
         answer_sets = {
             "anonymous": correct,
-            "display": [
-                (answer + 1) % 4 if index == 0 else answer
-                for index, answer in enumerate(correct)
-            ],
-            "username": [
-                (answer + 1) % 4 if index == 0 else answer
-                for index, answer in enumerate(correct)
-            ],
+            "display": [(answer + 1) % 4 if index == 0 else answer for index, answer in enumerate(correct)],
+            "username": [(answer + 1) % 4 if index == 0 else answer for index, answer in enumerate(correct)],
             "hidden": correct,
-            "withdrawn": [
-                (answer + 1) % 4 if index < 2 else answer
-                for index, answer in enumerate(correct)
-            ],
+            "withdrawn": [(answer + 1) % 4 if index < 2 else answer for index, answer in enumerate(correct)],
         }
         durations = {
             "anonymous": 180,
@@ -1485,12 +1416,8 @@ def test_public_leaderboards_enforce_reversible_identity_consent(
             """,
             (quiz_id, users["withdrawn"]),
         ).fetchone()["board"]
-        assert before_withdrawal["currentUser"]["displayName"] == (
-            "আগের প্রকাশ্য নাম"
-        )
-        assert before_withdrawal["currentUser"]["identitySource"] == (
-            "public_display_name"
-        )
+        assert before_withdrawal["currentUser"]["displayName"] == ("আগের প্রকাশ্য নাম")
+        assert before_withdrawal["currentUser"]["identitySource"] == ("public_display_name")
 
         connection.execute(
             """
@@ -1540,18 +1467,10 @@ def test_public_leaderboards_enforce_reversible_identity_consent(
         assert float(quiz_board["rows"][0]["netScore"]) == pytest.approx(8.75)
         assert quiz_board["rows"][0]["displayName"] == "@chosen_user"
         assert quiz_board["rows"][1]["displayName"] == "স্বেচ্ছায় দেওয়া নাম"
-        assert quiz_board_again["currentUser"]["displayName"] == (
-            quiz_board["currentUser"]["displayName"]
-        )
-        assert ANONYMOUS_LEADER_ALIAS.fullmatch(
-            quiz_board["currentUser"]["displayName"]
-        )
+        assert quiz_board_again["currentUser"]["displayName"] == (quiz_board["currentUser"]["displayName"])
+        assert ANONYMOUS_LEADER_ALIAS.fullmatch(quiz_board["currentUser"]["displayName"])
         assert quiz_board["currentUser"]["initials"] == "শি"
-        withdrawn_row = next(
-            row
-            for row in quiz_board_again["rows"]
-            if row["rank"] == 4
-        )
+        withdrawn_row = next(row for row in quiz_board_again["rows"] if row["rank"] == 4)
         assert withdrawn_row["identitySource"] == "anonymous"
         assert ANONYMOUS_LEADER_ALIAS.fullmatch(withdrawn_row["displayName"])
         assert withdrawn_row["initials"] == "শি"
@@ -1573,19 +1492,13 @@ def test_public_leaderboards_enforce_reversible_identity_consent(
             ).fetchone()["board"]
             typed_boards.append(board)
             assert board["type"] == board_type
-            assert board["participants"] == (
-                baseline_typed_participants[board_type] + 4
-            )
+            assert board["participants"] == (baseline_typed_participants[board_type] + 4)
             assert board["limit"] == 2
             assert board["offset"] == 0
             assert board["currentUser"]["isCurrentUser"] is True
-            assert ANONYMOUS_LEADER_ALIAS.fullmatch(
-                board["currentUser"]["displayName"]
-            )
+            assert ANONYMOUS_LEADER_ALIAS.fullmatch(board["currentUser"]["displayName"])
 
-        global_page = connection.execute(
-            "select public.get_global_leaderboard_page(2, 1) as board"
-        ).fetchone()["board"]
+        global_page = connection.execute("select public.get_global_leaderboard_page(2, 1) as board").fetchone()["board"]
         assert global_page["participants"] == baseline_global_participants + 4
         assert global_page["limit"] == 2
         assert global_page["offset"] == 1
@@ -1597,9 +1510,7 @@ def test_public_leaderboards_enforce_reversible_identity_consent(
             global_page,
             *typed_boards,
         ]
-        exposed_keys = {
-            item for payload in all_payloads for item in keys(payload)
-        }
+        exposed_keys = {item for payload in all_payloads for item in keys(payload)}
         assert not exposed_keys.intersection(
             {
                 "telegram_id",
@@ -1615,21 +1526,18 @@ def test_public_leaderboards_enforce_reversible_identity_consent(
                 "profilePhotoUrl",
             }
         )
-        exposed_values = {
-            item for payload in all_payloads for item in scalar_values(payload)
-        }
+        exposed_values = {item for payload in all_payloads for item in scalar_values(payload)}
         assert not exposed_values.intersection(private_values)
 
         privacy_contract = connection.execute(
             "select public.get_leaderboard_privacy_contract() as contract"
         ).fetchone()["contract"]
         assert privacy_contract["ready"] is True
-        assert privacy_contract["leaderboard_privacy_migration_version"] == (
-            LEADERBOARD_PRIVACY_MIGRATION_VERSION
+        assert privacy_contract["leaderboard_privacy_migration_version"] == (LEADERBOARD_PRIVACY_MIGRATION_VERSION)
+        assert (
+            privacy_contract["leaderboard_privacy_rpc_fix_migration_version"]
+            == LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
         )
-        assert privacy_contract[
-            "leaderboard_privacy_rpc_fix_migration_version"
-        ] == LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
         assert privacy_contract["missing_functions"] == []
         assert privacy_contract["unsafe_function_definitions"] == []
         assert privacy_contract["missing_identity_markers"] == []
@@ -1661,9 +1569,7 @@ def test_public_roles_cannot_execute_leaderboard_privacy_rpcs(
                 connection.execute("reset role")
 
 
-def test_revision_schedule_and_idempotent_answer(
-    database_url: str, attempted_quiz: dict
-) -> None:
+def test_revision_schedule_and_idempotent_answer(database_url: str, attempted_quiz: dict) -> None:
     with connect(database_url) as connection:
         question_id = connection.execute(
             """
@@ -1722,14 +1628,10 @@ def test_revision_schedule_and_idempotent_answer(
     assert intervals == [1, 3, 7, 14, 30, 60]
     assert wrong_queue["mode"] == "revision"
     assert wrong_queue["sourceType"] == "weak_topic"
-    assert question_id not in {
-        uuid.UUID(row["questionId"]) for row in wrong_queue["rows"]
-    }
+    assert question_id not in {uuid.UUID(row["questionId"]) for row in wrong_queue["rows"]}
 
 
-def test_uncertified_posted_quiz_cannot_accept_an_attempt(
-    database_url: str, attempted_quiz: dict
-) -> None:
+def test_uncertified_posted_quiz_cannot_accept_an_attempt(database_url: str, attempted_quiz: dict) -> None:
     with psycopg.connect(database_url, row_factory=dict_row, autocommit=True) as connection:
         connection.execute(
             """
@@ -1766,9 +1668,7 @@ def test_uncertified_posted_quiz_cannot_accept_an_attempt(
                 )
 
 
-def test_reports_quarantine_after_distinct_credible_users(
-    database_url: str, attempted_quiz: dict
-) -> None:
+def test_reports_quarantine_after_distinct_credible_users(database_url: str, attempted_quiz: dict) -> None:
     with connect(database_url) as connection:
         question_id = connection.execute(
             """
@@ -1805,9 +1705,75 @@ def test_reports_quarantine_after_distinct_credible_users(
     assert outcomes[-1]["credibleReportCount"] == 2
 
 
-def test_revision_report_is_attempt_owned_and_idempotent(
-    database_url: str, attempted_quiz: dict
-) -> None:
+def test_phase_e4_contract_and_authoritative_review_history(database_url: str, attempted_quiz: dict) -> None:
+    with connect(database_url) as connection:
+        contract = connection.execute("select public.get_phase_e_question_quality_contract() as value").fetchone()[
+            "value"
+        ]
+        assert contract["ready"] is True
+        assert contract["phase_e_question_quality_migration_version"] == (PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION)
+        assert contract["function_permission_failures"] == []
+        assert contract["table_permission_failures"] == []
+
+        question_id = connection.execute(
+            """
+            select question_id from public.quiz_questions
+            where quiz_id = %s and question_order = 6
+            """,
+            (attempted_quiz["quizId"],),
+        ).fetchone()["question_id"]
+        quarantine = connection.execute(
+            """
+            select public.quarantine_question_authoritatively(
+                %s, 'deterministic_contradiction', 'integration-admin',
+                'Independent deterministic solver contradiction.', null
+            ) as value
+            """,
+            (question_id,),
+        ).fetchone()["value"]
+        assert quarantine["status"] == "quarantined"
+        assert quarantine["scoreEffectPolicy"] == "preserve_historical"
+
+        queue = connection.execute(
+            "select public.get_question_moderation_queue('quarantined', 10, 0) as value"
+        ).fetchone()["value"]
+        item = next(row for row in queue["items"] if row["questionId"] == str(question_id))
+        assert item["question"]["correctOption"] in {"A", "B", "C", "D"}
+        assert item["history"][-1]["type"] == "authoritative_quarantine"
+        assert queue["answerVisibility"] == "administrator_only"
+
+        reviewed = connection.execute(
+            """
+            select public.review_question_moderation_case(
+                %s, 'dismiss', 'integration-admin',
+                'Solver input was malformed; verified question reinstated.', null
+            ) as value
+            """,
+            (quarantine["caseId"],),
+        ).fetchone()["value"]
+        assert reviewed["status"] == "dismissed"
+        status = connection.execute(
+            "select status, review_required from public.questions where id = %s",
+            (question_id,),
+        ).fetchone()
+        assert status == {"status": "active", "review_required": False}
+
+        with pytest.raises(
+            psycopg.errors.RaiseException,
+            match="question moderation events are append-only",
+        ):
+            with connection.transaction():
+                connection.execute(
+                    """
+                    update public.question_moderation_events set reason = 'tampered'
+                    where case_id = %s
+                    """,
+                    (quarantine["caseId"],),
+                )
+        connection.rollback()
+
+
+def test_revision_report_is_attempt_owned_and_idempotent(database_url: str, attempted_quiz: dict) -> None:
     with connect(database_url) as connection:
         question_id = connection.execute(
             """
@@ -1835,13 +1801,16 @@ def test_revision_report_is_attempt_owned_and_idempotent(
         ).fetchone()["result"]
     assert accepted["status"] == "accepted"
 
-    with psycopg.connect(
-        database_url,
-        row_factory=dict_row,
-        autocommit=True,
-    ) as connection, pytest.raises(
-        psycopg.errors.RaiseException,
-        match="already reported for this revision attempt",
+    with (
+        psycopg.connect(
+            database_url,
+            row_factory=dict_row,
+            autocommit=True,
+        ) as connection,
+        pytest.raises(
+            psycopg.errors.RaiseException,
+            match="already reported for this revision attempt",
+        ),
     ):
         connection.execute(
             """

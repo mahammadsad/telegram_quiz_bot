@@ -22,7 +22,9 @@ in staging. Phase E1 personal learning is green on PR #30, including CI,
 Supabase staging, Render staging, and non-posting smoke #24. Phase E2 exam
 configuration is green on PR #31, including CI, Supabase staging, Render
 staging, and non-posting smoke #25. Phase E3 previous-year provenance and
-generalized timed mocks are the active checkpoint.
+generalized timed mocks are green on PR #32, including CI, Supabase staging,
+Render staging, and non-posting smoke #26. Phase E4 question-quality
+administration is the active checkpoint.
 Production is unchanged.
 
 ## Implemented
@@ -97,6 +99,14 @@ Production is unchanged.
   mark-for-review, section marking, deadline autosubmit, first-attempt rank
   cohorts, and subject/topic/knowledge-point analysis. Existing daily quiz
   attempts and answers are mirrored with their identifiers preserved.
+- Phase E4 retains every existing report reason and adds duplicate/translation
+  reasons; counts only independent credible reporters; discounts configured
+  risk profiles, shared abuse clusters, and report bursts; and immediately
+  quarantines deterministic contradictions or authoritative corrections.
+  A service-role-only review queue exposes full evidence to allow review,
+  dismissal, confirmed quarantine, explicit supersession, and reinstatement.
+  Every transition is append-only and records the reviewer, resolution,
+  replacement version, and the declared historical-score policy.
 
 ## Local evidence
 
@@ -164,6 +174,14 @@ Production is unchanged.
   direct verified-answer tampering. All synthetic rows were removed and the
   Phase E3 contract remains ready with no permission failures or unindexed new
   foreign keys.
+- Phase E3 final gate: CI run `31258330375`, Render deployment
+  `dep-d9rifk0n74is73etipc0`, and non-posting smoke run `31258516067` are green
+  on commit `d7cb628`. The staging exercises also verified exact deadline
+  accounting and append-only PYQ correction protection.
+- Phase E4 local checkpoint: 414 tests pass with 31 hosted database tests
+  skipped locally; Ruff and mypy (76 production files) pass. The disposable
+  PostgreSQL migration and mobile-browser jobs remain required before the
+  staging database can be changed.
 
 ## Deployment prerequisites
 

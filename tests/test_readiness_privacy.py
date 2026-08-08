@@ -39,17 +39,11 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "ready": True,
             "contract_key": readiness_service.DATABASE_CONTRACT_KEY,
             "contract_version": readiness_service.DATABASE_CONTRACT_VERSION,
-            "required_migration_version": (
-                readiness_service.REQUIRED_MIGRATION_VERSION
-            ),
-            "personal_learning_migration_version": (
-                readiness_service.PERSONAL_LEARNING_MIGRATION_VERSION
-            ),
+            "required_migration_version": (readiness_service.REQUIRED_MIGRATION_VERSION),
+            "personal_learning_migration_version": (readiness_service.PERSONAL_LEARNING_MIGRATION_VERSION),
             "personal_learning_migration_applied": True,
             "personal_learning_projection_ready": True,
-            "verification_threshold": (
-                readiness_service.QUESTION_VERIFICATION_MIN_CONFIDENCE
-            ),
+            "verification_threshold": (readiness_service.QUESTION_VERIFICATION_MIN_CONFIDENCE),
             "function_permission_failures": [],
             "table_permission_failures": [],
         },
@@ -70,9 +64,7 @@ def _configure_ready_dependencies(monkeypatch) -> None:
         "get_post_finalization_contract",
         lambda: {
             "ready": True,
-            "post_finalization_migration_version": (
-                readiness_service.POST_FINALIZATION_MIGRATION_VERSION
-            ),
+            "post_finalization_migration_version": (readiness_service.POST_FINALIZATION_MIGRATION_VERSION),
             "post_finalization_migration_applied": True,
             "missing_columns": [],
             "function_permission_failures": [],
@@ -83,9 +75,7 @@ def _configure_ready_dependencies(monkeypatch) -> None:
         "get_quiz_job_contract",
         lambda: {
             "ready": True,
-            "quiz_job_migration_version": (
-                readiness_service.QUIZ_JOBS_MIGRATION_VERSION
-            ),
+            "quiz_job_migration_version": (readiness_service.QUIZ_JOBS_MIGRATION_VERSION),
             "quiz_job_migration_applied": True,
             "function_permission_failures": [],
         },
@@ -107,9 +97,7 @@ def _configure_ready_dependencies(monkeypatch) -> None:
         "get_phase_c_inventory_contract",
         lambda: {
             "ready": True,
-            "phase_c_inventory_migration_version": (
-                readiness_service.PHASE_C_INVENTORY_MIGRATION_VERSION
-            ),
+            "phase_c_inventory_migration_version": (readiness_service.PHASE_C_INVENTORY_MIGRATION_VERSION),
             "function_permission_failures": [],
         },
     )
@@ -119,9 +107,7 @@ def _configure_ready_dependencies(monkeypatch) -> None:
         lambda: {
             "ready": True,
             "stable_identity_parity": True,
-            "phase_c_candidate_migration_version": (
-                readiness_service.PHASE_C_CANDIDATE_MIGRATION_VERSION
-            ),
+            "phase_c_candidate_migration_version": (readiness_service.PHASE_C_CANDIDATE_MIGRATION_VERSION),
             "function_permission_failures": [],
         },
     )
@@ -135,9 +121,7 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "multi_source_clusters": True,
             "correction_and_expiry": True,
             "weighted_revision_pools": True,
-            "phase_d_current_affairs_migration_version": (
-                readiness_service.PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
-            ),
+            "phase_d_current_affairs_migration_version": (readiness_service.PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION),
             "function_permission_failures": [],
             "table_permission_failures": [],
         },
@@ -203,6 +187,27 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "table_permission_failures": [],
         },
     )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_phase_e_question_quality_contract",
+        lambda: {
+            "ready": True,
+            "legacy_report_reasons_retained": True,
+            "new_report_reasons": True,
+            "independent_report_threshold": True,
+            "abuse_resistance": True,
+            "authoritative_quarantine": True,
+            "append_only_history": True,
+            "explicit_supersession": True,
+            "protected_admin_queue": True,
+            "silent_edit_protection": True,
+            "phase_e_question_quality_migration_version": (
+                readiness_service.PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION
+            ),
+            "function_permission_failures": [],
+            "table_permission_failures": [],
+        },
+    )
     readiness_service._CACHE = None
 
 
@@ -213,9 +218,7 @@ def test_readiness_requires_exact_leaderboard_privacy_contract(monkeypatch) -> N
         "get_leaderboard_privacy_contract",
         lambda: {
             "ready": True,
-            "leaderboard_privacy_migration_version": (
-                readiness_service.LEADERBOARD_PRIVACY_MIGRATION_VERSION
-            ),
+            "leaderboard_privacy_migration_version": (readiness_service.LEADERBOARD_PRIVACY_MIGRATION_VERSION),
             "leaderboard_privacy_rpc_fix_migration_version": (
                 readiness_service.LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
             ),
@@ -235,9 +238,10 @@ def test_readiness_requires_exact_leaderboard_privacy_contract(monkeypatch) -> N
     assert result.public_payload()["leaderboardPrivacyMigrationVersion"] == (
         readiness_service.LEADERBOARD_PRIVACY_MIGRATION_VERSION
     )
-    assert result.public_payload()[
-        "leaderboardPrivacyRpcFixMigrationVersion"
-    ] == readiness_service.LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
+    assert (
+        result.public_payload()["leaderboardPrivacyRpcFixMigrationVersion"]
+        == readiness_service.LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
+    )
 
 
 def test_readiness_fails_closed_for_unsafe_leaderboard_functions(monkeypatch) -> None:

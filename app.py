@@ -1,6 +1,5 @@
 """Quiz delivery, authenticated learning workflows, and safe leaderboards."""
 
-
 from __future__ import annotations
 
 import json
@@ -30,6 +29,7 @@ from services import (
     leaderboard_privacy,
     learning_resources_service,
     personal_learning_service,
+    question_moderation_service,
     quiz_pack_service,
     rate_limit,
     readiness_service,
@@ -60,9 +60,7 @@ async def security_and_privacy_headers(request: Request, call_next):
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
-    response.headers["Permissions-Policy"] = (
-        "camera=(), microphone=(), geolocation=(), payment=()"
-    )
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://telegram.org; "
@@ -77,9 +75,7 @@ async def security_and_privacy_headers(request: Request, call_next):
     if request.url.scheme == "https" or forwarded_proto == "https":
         response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     if _is_leaderboard_path(request.url.path):
-        response.headers["Cache-Control"] = (
-            "no-store, private, max-age=0, must-revalidate"
-        )
+        response.headers["Cache-Control"] = "no-store, private, max-age=0, must-revalidate"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
         response.headers["Surrogate-Control"] = "no-store"
@@ -98,10 +94,7 @@ def _is_leaderboard_path(path: str) -> bool:
     return bool(
         path == "/api/leaderboard"
         or path.startswith("/api/leaderboards/")
-        or (
-            path.startswith("/api/quiz/")
-            and path.endswith("/leaderboard")
-        )
+        or (path.startswith("/api/quiz/") and path.endswith("/leaderboard"))
     )
 
 
@@ -130,7 +123,9 @@ class SubmitQuizRequest(BaseModel):
         if not isinstance(value, list) or len(value) != 10:
             raise ValueError("answers must contain exactly 10 entries")
         for answer in value:
-            if answer is not None and (isinstance(answer, bool) or not isinstance(answer, int) or answer not in range(4)):
+            if answer is not None and (
+                isinstance(answer, bool) or not isinstance(answer, int) or answer not in range(4)
+            ):
                 raise ValueError("answers may contain only 0, 1, 2, 3, or null")
         return value
 
@@ -143,9 +138,7 @@ class SubmitQuizRequest(BaseModel):
             raise ValueError("responseTimes must contain exactly 10 entries")
         for seconds in value:
             if seconds is not None and (
-                isinstance(seconds, bool)
-                or not isinstance(seconds, (int, float))
-                or not 0 <= seconds <= 3600
+                isinstance(seconds, bool) or not isinstance(seconds, (int, float)) or not 0 <= seconds <= 3600
             ):
                 raise ValueError("responseTimes entries must be between 0 and 3600 seconds")
         return value
@@ -257,6 +250,32 @@ class ResourceFeedbackRequest(BaseModel):
 class ResourceReviewRequest(BaseModel):
     init_data: str = Field(default="", alias="initData")
     decision: str
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
+class QuestionReviewRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    decision: str = Field(min_length=1, max_length=40)
+    resolution: str = Field(min_length=1, max_length=2000)
+    superseding_question_id: uuid.UUID | None = Field(
+        default=None,
+        alias="supersedingQuestionId",
+    )
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
+class AuthoritativeQuarantineRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    trigger: str = Field(min_length=1, max_length=50)
+    reason: str = Field(min_length=1, max_length=2000)
+    superseding_question_id: uuid.UUID | None = Field(
+        default=None,
+        alias="supersedingQuestionId",
+    )
     dev_user: dict | None = Field(default=None, alias="devUser")
 
     model_config = {"populate_by_name": True}
@@ -637,9 +656,7 @@ def admin_operations(
     init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
 ) -> dict:
     try:
-        return resource_quality_service.admin_operational_status(
-            _telegram_user_from_init_data(init_data)
-        )
+        return resource_quality_service.admin_operational_status(_telegram_user_from_init_data(init_data))
     except TelegramAuthError as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except PermissionError as exc:
@@ -689,6 +706,77 @@ def review_resource(
         raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Resource review could not be saved.") from exc
+
+
+@app.get("/api/admin/questions/reviews")
+def admin_question_reviews(
+    status: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        return question_moderation_service.admin_review_queue(
+            _telegram_user_from_init_data(init_data),
+            status=status,
+            limit=limit,
+            offset=offset,
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Question review queue is unavailable.") from exc
+
+
+@app.post("/api/admin/questions/reviews/{case_id}")
+def review_question_case(case_id: uuid.UUID, payload: QuestionReviewRequest) -> dict:
+    try:
+        return question_moderation_service.review_case(
+            _write_user_from_payload(payload, "question-moderation", str(case_id)),
+            case_id=str(case_id),
+            decision=payload.decision,
+            resolution=payload.resolution,
+            superseding_question_id=(str(payload.superseding_question_id) if payload.superseding_question_id else None),
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Question review could not be saved.") from exc
+
+
+@app.post("/api/admin/questions/{question_id}/quarantine")
+def quarantine_question(
+    question_id: uuid.UUID,
+    payload: AuthoritativeQuarantineRequest,
+) -> dict:
+    try:
+        return question_moderation_service.authoritative_quarantine(
+            _write_user_from_payload(payload, "question-moderation", str(question_id)),
+            question_id=str(question_id),
+            trigger=payload.trigger,
+            reason=payload.reason,
+            superseding_question_id=(str(payload.superseding_question_id) if payload.superseding_question_id else None),
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except PermissionError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Question quarantine could not be saved.") from exc
 
 
 @app.post("/api/quiz/{quiz_id}/submit")
@@ -1124,6 +1212,8 @@ def _write_user_from_payload(
         | PracticeQuestionReportRequest
         | ResourceFeedbackRequest
         | ResourceReviewRequest
+        | QuestionReviewRequest
+        | AuthoritativeQuarantineRequest
         | StartTestAttemptRequest
         | SaveTestProgressRequest
         | AdvanceTestSectionRequest
@@ -1146,6 +1236,7 @@ def _write_user_from_payload(
         "preferences": (20, 3600),
         "resource-feedback": (20, 3600),
         "resource-review": (60, 3600),
+        "question-moderation": (60, 3600),
         "test-attempt-start": (30, 3600),
         "test-attempt-progress": (600, 3600),
         "test-attempt-section": (100, 3600),
@@ -1213,5 +1304,8 @@ def _load_public_fallback(quiz_id: str) -> dict | None:
         "meta": payload.get("meta") or {"quiz_id": quiz_id},
         "capabilities": {"submission": False, "source": "static_fallback"},
         "legacy": len(quiz_id) == 8,
-        "qs": [{"q": item.get("q") or item.get("question"), "o": item.get("o") or item.get("options")} for item in questions],
+        "qs": [
+            {"q": item.get("q") or item.get("question"), "o": item.get("o") or item.get("options")}
+            for item in questions
+        ],
     }

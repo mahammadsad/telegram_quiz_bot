@@ -52,17 +52,18 @@ def get_phase_e_personal_learning_contract() -> Row:
 
 
 def get_phase_e_exam_configuration_contract() -> Row:
-    result = get_client().rpc(
-        "get_phase_e_exam_configuration_contract", {}
-    ).execute()
+    result = get_client().rpc("get_phase_e_exam_configuration_contract", {}).execute()
     return as_row(result.data, "Phase E exam-configuration contract")
 
 
 def get_phase_e_previous_year_mock_contract() -> Row:
-    result = get_client().rpc(
-        "get_phase_e_previous_year_mock_contract", {}
-    ).execute()
+    result = get_client().rpc("get_phase_e_previous_year_mock_contract", {}).execute()
     return as_row(result.data, "Phase E previous-year/mock contract")
+
+
+def get_phase_e_question_quality_contract() -> Row:
+    result = get_client().rpc("get_phase_e_question_quality_contract", {}).execute()
+    return as_row(result.data, "Phase E question-quality contract")
 
 
 def active_quiz_probe() -> Row | None:

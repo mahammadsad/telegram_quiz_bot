@@ -205,6 +205,7 @@ jobs:
               PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION,
               PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
               PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION,
+              PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION,
               POST_FINALIZATION_MIGRATION_VERSION,
               QUIZ_JOBS_MIGRATION_VERSION,
               REQUIRED_MIGRATION_VERSION,
@@ -265,6 +266,9 @@ jobs:
                   ),
                   "phaseEPreviousYearMockMigrationVersion": body.get(
                       "phaseEPreviousYearMockMigrationVersion"
+                  ),
+                  "phaseEQuestionQualityMigrationVersion": body.get(
+                      "phaseEQuestionQualityMigrationVersion"
                   ),
                   "sourceBackedRotationEnabled": body.get(
                       "sourceBackedRotationEnabled"
@@ -363,6 +367,16 @@ jobs:
                   raise SystemExit("Staging Phase E previous-year/mock migration mismatch.")
               if body.get("checks", {}).get("previousYearMocks") is not True:
                   raise SystemExit("Staging previous-year/mock engine is not ready.")
+              if (
+                  body.get("phaseEQuestionQualityMigrationVersion")
+                  != PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION
+              ):
+                  raise SystemExit("Staging Phase E question-quality migration mismatch.")
+              if (
+                  body.get("checks", {}).get("questionQualityAdministration")
+                  is not True
+              ):
+                  raise SystemExit("Staging question-quality administration is not ready.")
               if (
                   body.get("sourceRolloutMigrationVersion")
                   != SOURCE_ROLLOUT_MIGRATION_VERSION

@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from database.contract import (  # noqa: E402
-    PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION,
+    PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION,
 )
 
 BOOTSTRAP = ROOT / "database" / "schema.sql"
@@ -103,17 +103,10 @@ def _prepare_roles_and_extensions(connection: psycopg.Connection) -> None:
 
 def rebuild(database_url: str) -> dict:
     files = migration_files()
-    latest_supabase = next(
-        path for path in reversed(files) if path.parent == SUPABASE_MIGRATIONS
-    )
+    latest_supabase = next(path for path in reversed(files) if path.parent == SUPABASE_MIGRATIONS)
     identity = _migration_identity(latest_supabase)
-    if (
-        not identity
-        or identity[0] != PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION
-    ):
-        raise RuntimeError(
-            "The Phase E contract does not match the latest migration file."
-        )
+    if not identity or identity[0] != PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION:
+        raise RuntimeError("The Phase E quality contract does not match the latest migration file.")
 
     with psycopg.connect(database_url, autocommit=True) as connection:
         _reset_schemas(connection)
@@ -135,68 +128,49 @@ def rebuild(database_url: str) -> dict:
             except Exception as exc:
                 raise RuntimeError(f"Migration failed: {path.relative_to(ROOT)}") from exc
 
-        contract = connection.execute(
-            "select public.get_application_schema_contract()"
-        ).fetchone()[0]
+        contract = connection.execute("select public.get_application_schema_contract()").fetchone()[0]
         if not contract.get("ready"):
             raise RuntimeError("Disposable database contract is not ready after migrations.")
-        privacy_contract = connection.execute(
-            "select public.get_leaderboard_privacy_contract()"
-        ).fetchone()[0]
+        privacy_contract = connection.execute("select public.get_leaderboard_privacy_contract()").fetchone()[0]
         if not privacy_contract.get("ready"):
-            raise RuntimeError(
-                "Disposable leaderboard privacy contract is not ready after migrations."
-            )
-        quiz_job_contract = connection.execute(
-            "select public.get_quiz_job_contract()"
-        ).fetchone()[0]
+            raise RuntimeError("Disposable leaderboard privacy contract is not ready after migrations.")
+        quiz_job_contract = connection.execute("select public.get_quiz_job_contract()").fetchone()[0]
         if not quiz_job_contract.get("ready"):
-            raise RuntimeError(
-                "Disposable durable quiz-jobs contract is not ready after migrations."
-            )
-        phase_c_content_contract = connection.execute(
-            "select public.get_phase_c_content_contract()"
-        ).fetchone()[0]
+            raise RuntimeError("Disposable durable quiz-jobs contract is not ready after migrations.")
+        phase_c_content_contract = connection.execute("select public.get_phase_c_content_contract()").fetchone()[0]
         if not phase_c_content_contract.get("ready"):
             raise RuntimeError("Disposable Phase C content contract is not ready.")
-        phase_c_inventory_contract = connection.execute(
-            "select public.get_phase_c_inventory_contract()"
-        ).fetchone()[0]
+        phase_c_inventory_contract = connection.execute("select public.get_phase_c_inventory_contract()").fetchone()[0]
         if not phase_c_inventory_contract.get("ready"):
             raise RuntimeError("Disposable Phase C inventory contract is not ready.")
-        phase_c_candidate_contract = connection.execute(
-            "select public.get_phase_c_candidate_contract()"
-        ).fetchone()[0]
+        phase_c_candidate_contract = connection.execute("select public.get_phase_c_candidate_contract()").fetchone()[0]
         if not phase_c_candidate_contract.get("ready"):
             raise RuntimeError("Disposable Phase C candidate contract is not ready.")
         phase_d_current_affairs_contract = connection.execute(
             "select public.get_phase_d_current_affairs_contract()"
         ).fetchone()[0]
         if not phase_d_current_affairs_contract.get("ready"):
-            raise RuntimeError(
-                "Disposable Phase D current-affairs contract is not ready."
-            )
+            raise RuntimeError("Disposable Phase D current-affairs contract is not ready.")
         phase_e_personal_learning_contract = connection.execute(
             "select public.get_phase_e_personal_learning_contract()"
         ).fetchone()[0]
         if not phase_e_personal_learning_contract.get("ready"):
-            raise RuntimeError(
-                "Disposable Phase E personal-learning contract is not ready."
-            )
+            raise RuntimeError("Disposable Phase E personal-learning contract is not ready.")
         phase_e_exam_configuration_contract = connection.execute(
             "select public.get_phase_e_exam_configuration_contract()"
         ).fetchone()[0]
         if not phase_e_exam_configuration_contract.get("ready"):
-            raise RuntimeError(
-                "Disposable Phase E exam-configuration contract is not ready."
-            )
+            raise RuntimeError("Disposable Phase E exam-configuration contract is not ready.")
         phase_e_previous_year_mock_contract = connection.execute(
             "select public.get_phase_e_previous_year_mock_contract()"
         ).fetchone()[0]
         if not phase_e_previous_year_mock_contract.get("ready"):
-            raise RuntimeError(
-                "Disposable Phase E previous-year/mock contract is not ready."
-            )
+            raise RuntimeError("Disposable Phase E previous-year/mock contract is not ready.")
+        phase_e_question_quality_contract = connection.execute(
+            "select public.get_phase_e_question_quality_contract()"
+        ).fetchone()[0]
+        if not phase_e_question_quality_contract.get("ready"):
+            raise RuntimeError("Disposable Phase E question-quality contract is not ready.")
         contract.update(privacy_contract)
         contract.update(quiz_job_contract)
         contract.update(phase_c_content_contract)
@@ -206,6 +180,7 @@ def rebuild(database_url: str) -> dict:
         contract.update(phase_e_personal_learning_contract)
         contract.update(phase_e_exam_configuration_contract)
         contract.update(phase_e_previous_year_mock_contract)
+        contract.update(phase_e_question_quality_contract)
         return contract
 
 
@@ -239,6 +214,8 @@ def main() -> int:
         f"{contract['phase_e_exam_configuration_migration_version']}"
         " phase_e_previous_year_mock="
         f"{contract['phase_e_previous_year_mock_migration_version']}"
+        " phase_e_question_quality="
+        f"{contract['phase_e_question_quality_migration_version']}"
     )
     return 0
 
