@@ -170,6 +170,50 @@ def test_refresh_combines_every_official_pib_endpoint_for_broad_coverage():
     }
 
 
+def test_refresh_skips_one_release_without_safe_atomic_claims():
+    invalid_url = "https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=2290401"
+    valid_url = "https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=2290402"
+    rss = (
+        "<rss><channel>"
+        f"<item><link>{invalid_url}</link></item>"
+        f"<item><link>{valid_url}</link></item>"
+        "</channel></rss>"
+    )
+    invalid_html = f"""
+    <html><body>
+      <div id="MinistryName">Cabinet Secretariat</div>
+      <h2 id="Titleh2">Official national administrative notice</h2>
+      <div id="PrDateTime">প্রবিষ্টি তिथि: 27 JUL 2026 10:40PM by PIB Delhi</div>
+      <p>{'x' * 300}</p>
+      <span id="lblViews">Visitors: 10</span>
+    </body></html>
+    """
+    valid_html = _release_html(
+        title="Government announces a national policy decision",
+        body=_long_body("cabinet policy decision"),
+        ministry="Cabinet Secretariat",
+    )
+
+    def fetch(url: str) -> str:
+        if url == PIB_RSS_URL:
+            return rss
+        if url == PIB_SECONDARY_RSS_URL:
+            return "<rss><channel></channel></rss>"
+        if url == PIB_ALL_RELEASES_URL:
+            return "<html></html>"
+        return invalid_html if url.endswith("2290401") else valid_html
+
+    rows, stats = refresh_rows(
+        fetch_text=fetch,
+        now=datetime(2026, 7, 28, tzinfo=timezone.utc),
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["source_url"].endswith("2290402")
+    assert stats.accepted == 1
+    assert stats.skipped == 1
+
+
 def test_release_url_guard_rejects_non_pib_hosts_and_non_release_paths():
     with pytest.raises(CurrentAffairsRefreshError, match="outside"):
         canonical_release_url(
