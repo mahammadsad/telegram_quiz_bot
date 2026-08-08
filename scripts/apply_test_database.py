@@ -17,9 +17,7 @@ import psycopg
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from database.contract import (  # noqa: E402
-    SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION,
-)
+from database.contract import LATEST_MIGRATION_VERSION  # noqa: E402
 
 BOOTSTRAP = ROOT / "database" / "schema.sql"
 DATABASE_MIGRATIONS = ROOT / "database" / "migrations"
@@ -105,9 +103,9 @@ def rebuild(database_url: str) -> dict:
     files = migration_files()
     latest_supabase = next(path for path in reversed(files) if path.parent == SUPABASE_MIGRATIONS)
     identity = _migration_identity(latest_supabase)
-    if not identity or identity[0] != SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION:
+    if not identity or identity[0] != LATEST_MIGRATION_VERSION:
         raise RuntimeError(
-            "The source-optional generation contract does not match the latest migration file."
+            "The authoritative database contract does not match the latest migration file."
         )
 
     with psycopg.connect(database_url, autocommit=True) as connection:

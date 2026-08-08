@@ -1,5 +1,5 @@
 [meta]
-version = "2026-08-09.1"
+version = "2026-08-09.2"
 
 [gemini]
 primary_model = "gemini-3.1-flash-lite"
@@ -28,7 +28,7 @@ min_reuse_gap_days = 21
 max_reuse_gap_days = 180
 due_grace_minutes = 30
 dispatcher_lease_minutes = 20
-dispatcher_max_retries = 5
+dispatcher_max_retries = 8
 retry_base_seconds = 60
 retry_max_seconds = 1800
 
@@ -45,7 +45,7 @@ leaderboard_privacy_rpc_fix_migration_version = "20260808084950"
 phase_c_identity_migration_version = "20260808093610"
 phase_c_inventory_migration_version = "20260808093621"
 phase_c_candidate_migration_version = "20260808094602"
-phase_d_current_affairs_migration_version = "20260808103500"
+phase_d_current_affairs_migration_version = "20260809010000"
 phase_e_personal_learning_migration_version = "20260808113000"
 phase_e_exam_configuration_migration_version = "20260808123000"
 phase_e_previous_year_mock_migration_version = "20260808133000"

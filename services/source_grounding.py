@@ -38,6 +38,7 @@ class SourceDocument:
     current_affairs_event_date: str | None = None
     current_affairs_practice_pool: str | None = None
     current_affairs_verification_policy: str | None = None
+    current_affairs_canonical_claim: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,6 +122,9 @@ class GroundingBundle:
                 "current_affairs_practice_pool": row.current_affairs_practice_pool,
                 "current_affairs_verification_policy": (
                     row.current_affairs_verification_policy
+                ),
+                "current_affairs_canonical_claim": (
+                    row.current_affairs_canonical_claim
                 ),
             }
             for row in self.documents
@@ -280,6 +284,9 @@ def _validated_document(row: dict, subject_key: str, target_date: date) -> Sourc
         ),
         current_affairs_verification_policy=_optional(
             row.get("current_affairs_verification_policy")
+        ),
+        current_affairs_canonical_claim=_optional(
+            row.get("current_affairs_canonical_claim")
         ),
     )
 

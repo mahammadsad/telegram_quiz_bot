@@ -16,6 +16,7 @@ from config.settings import (
 )
 from database.contract import (
     APPLICATION_VERSION,
+    LATEST_MIGRATION_VERSION,
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
     LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
@@ -255,7 +256,7 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
 def test_authoritative_migration_version_is_latest_filename() -> None:
     migrations = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
     assert migrations
-    assert migrations[-1].name.startswith(f"{SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION}_")
+    assert migrations[-1].name.startswith(f"{LATEST_MIGRATION_VERSION}_")
     assert any(path.name.startswith(f"{PHASE_C_IDENTITY_MIGRATION_VERSION}_") for path in migrations)
     assert any(path.name.startswith(f"{POST_FINALIZATION_MIGRATION_VERSION}_") for path in migrations)
     assert any(path.name.startswith(f"{LEADERBOARD_PRIVACY_MIGRATION_VERSION}_") for path in migrations)
@@ -267,7 +268,7 @@ def test_authoritative_migration_version_is_latest_filename() -> None:
 def test_versioned_production_manifest_matches_deployment_intent() -> None:
     manifest_path = ROOT / "config" / "production.toml"
     assert manifest_path.is_file()
-    assert PRODUCTION_CONFIG_VERSION == "2026-08-09.1"
+    assert PRODUCTION_CONFIG_VERSION == "2026-08-09.2"
     assert re.fullmatch(r"[0-9a-f]{64}", PRODUCTION_CONFIG_HASH)
     assert PRODUCTION_CONFIG["quiz"]["source_backed_rotation_enabled"] is True
     assert PRODUCTION_CONFIG["quiz"]["source_optional_stable_subjects_enabled"] is True
@@ -280,6 +281,7 @@ def test_versioned_production_manifest_matches_deployment_intent() -> None:
         "deterministic_proof_version": 1,
         "require_new_candidate_proof": True,
     }
+    assert PRODUCTION_CONFIG["scheduler"]["dispatcher_max_retries"] == 8
     assert PRODUCTION_CONFIG["database"]["post_finalization_migration_version"] == (POST_FINALIZATION_MIGRATION_VERSION)
     assert PRODUCTION_CONFIG["database"]["quiz_jobs_migration_version"] == (QUIZ_JOBS_MIGRATION_VERSION)
     assert (

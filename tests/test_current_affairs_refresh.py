@@ -342,3 +342,19 @@ def test_classifier_and_coverage_gate_require_both_chapters_and_topic_diversity(
 
     with pytest.raises(CurrentAffairsRefreshError, match="below"):
         validate_current_affairs_coverage(clean[:7], minimum_per_chapter=4)
+
+
+def test_classifier_does_not_treat_a_tribunal_report_as_science_for_one_weak_term():
+    release = Release(
+        prid="2290500",
+        url="https://pib.gov.in/PressReleaseIframePage.aspx?PRID=2290500",
+        ministry="Rajya Sabha Secretariat",
+        title="Report on review of functioning of tribunal system in the country",
+        published_at=datetime(2026, 8, 7, 12, tzinfo=timezone.utc),
+        body=(
+            "The parliamentary committee reviewed judicial vacancies and tribunal "
+            "administration. Its research section compiled the report for Parliament."
+        ),
+    )
+
+    assert classify_release(release)[2] == "current-affairs:national:t03"
