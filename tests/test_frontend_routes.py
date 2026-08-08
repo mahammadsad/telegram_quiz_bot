@@ -23,6 +23,7 @@ def test_frontend_routes_include_index_alias_for_cached_mini_apps() -> None:
 
 def test_pwa_shell_routes_and_cache_boundaries() -> None:
     expected = {
+        "/miniapp-shell.css": "text/css",
         "/miniapp-shell.js": "text/javascript",
         "/service-worker.js": "text/javascript",
         "/manifest.webmanifest": "application/manifest+json",
@@ -35,6 +36,7 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     worker = CLIENT.get("/service-worker.js")
     assert worker.headers["cache-control"] == "no-cache, max-age=0"
     assert worker.headers["service-worker-allowed"] == "/"
+    assert CLIENT.get("/miniapp-shell.css").headers["cache-control"] == "public, max-age=300"
 
 
 def test_only_answer_free_pre_submission_projections_are_cache_eligible(monkeypatch) -> None:

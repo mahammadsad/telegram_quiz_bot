@@ -131,6 +131,12 @@ def test_pwa_cache_is_fail_closed_for_answer_material() -> None:
     assert 'fetch(request, {cache: "no-store"})' in WORKER
 
 
+def test_missing_quiz_message_is_user_facing_not_an_operator_instruction() -> None:
+    assert "এই কুইজটি এখনও পাওয়া যাচ্ছে না" in INDEX
+    assert "API status:" not in INDEX
+    assert "Bot workflow আবার চালালে" not in INDEX
+
+
 def test_timed_mock_ui_has_durable_progress_sections_and_results() -> None:
     for contract in (
         "telegram-mock-draft:",

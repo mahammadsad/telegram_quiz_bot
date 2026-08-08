@@ -1,7 +1,7 @@
 "use strict";
 
-const SHELL_CACHE = "quiz-miniapp-shell-v8.5.0";
-const ANSWER_FREE_CACHE = "quiz-answer-free-v8.5.0";
+const SHELL_CACHE = "quiz-miniapp-shell-v8.5.0-ui1";
+const ANSWER_FREE_CACHE = "quiz-answer-free-v8.5.0-ui1";
 const SHELL_URLS = [
   "/",
   "/index.html",

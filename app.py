@@ -384,6 +384,15 @@ def miniapp_shell() -> FileResponse:
     )
 
 
+@app.get("/miniapp-shell.css")
+def miniapp_shell_styles() -> FileResponse:
+    return FileResponse(
+        ROOT / "miniapp-shell.css",
+        media_type="text/css",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
 @app.get("/service-worker.js")
 def service_worker() -> FileResponse:
     return FileResponse(

@@ -523,7 +523,6 @@
   var timeLeft = 0;
   var timerHandle = null;
   var screen = "loading";
-  var lastApiError = null;
   var submitting = false;
   var attemptId = "";
   var markedForReview = [];
@@ -765,7 +764,6 @@
     byId("btn-retry").textContent = "আবার চেষ্টা করুন";
     show("loading");
     byId("loading-message").textContent = "কুইজ তৈরি/লোড হচ্ছে...";
-    lastApiError = null;
     fetch(api("/api/quiz/" + encodeURIComponent(quizId)))
       .then(function(resp){ return jsonOrThrow(resp, "Quiz API"); })
       .then(function(data){
@@ -778,7 +776,6 @@
       })
       .catch(function(err){
         console.error(err);
-        lastApiError = err;
         if (err.status === 404) {
           loadLegacyQuiz();
           return;
@@ -831,10 +828,7 @@
   }
 
   function buildMissingQuizMessage(){
-    var apiText = lastApiError && lastApiError.status
-      ? "API status: " + lastApiError.status + ". "
-      : "";
-    return apiText + "আজকের কুইজ ডেটা এখনও পাওয়া যায়নি। Bot workflow আবার চালালে Gemini কুইজ তৈরি করবে, Supabase-এ রাখবে, এবং static fallback ফাইল বানাবে।";
+    return "এই কুইজটি এখনও পাওয়া যাচ্ছে না। কুইজ তৈরি বা পুনরুদ্ধার চলছে—কিছুক্ষণ পরে আবার চেষ্টা করুন।";
   }
 
   function renderIntro(){
