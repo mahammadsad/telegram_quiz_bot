@@ -26,9 +26,11 @@ def save_atomic(
     questions: list[Row],
     content_checksum: str,
     replace: bool,
+    source_required: bool = True,
 ) -> Row:
+    rpc_name = "save_quiz_pack_atomic" if source_required else "save_model_validated_quiz_pack_atomic"
     result = get_client().rpc(
-        "save_quiz_pack_atomic",
+        rpc_name,
         {
             "p_quiz_id": quiz_id,
             "p_worker_id": worker_id,
@@ -37,7 +39,7 @@ def save_atomic(
             "p_replace": replace,
         },
     ).execute()
-    data = as_row(result.data, "save_quiz_pack_atomic")
+    data = as_row(result.data, rpc_name)
     if (
         int(data.get("question_count") or 0) != 10
         or not data.get("generated_checksum")

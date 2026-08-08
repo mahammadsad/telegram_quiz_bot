@@ -43,6 +43,7 @@ from database.contract import (
     QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
+    SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
 )
 from storage import schema_contract_repo
@@ -85,6 +86,7 @@ class Readiness:
             "phaseEExamConfigurationMigrationVersion": (PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION),
             "phaseEPreviousYearMockMigrationVersion": (PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION),
             "phaseEQuestionQualityMigrationVersion": (PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION),
+            "sourceOptionalGenerationMigrationVersion": (SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION),
             "productionConfigVersion": PRODUCTION_CONFIG_VERSION,
             "productionConfigHash": PRODUCTION_CONFIG_HASH,
         }
@@ -114,6 +116,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
         "examConfiguration": False,
         "previousYearMocks": False,
         "questionQualityAdministration": False,
+        "sourceOptionalGeneration": False,
         "activeQuizRetrieval": False,
     }
     failures: list[str] = []
@@ -194,6 +197,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 phase_e_exam_configuration = schema_contract_repo.get_phase_e_exam_configuration_contract()
                 phase_e_previous_year_mock = schema_contract_repo.get_phase_e_previous_year_mock_contract()
                 phase_e_question_quality = schema_contract_repo.get_phase_e_question_quality_contract()
+                source_optional_generation = schema_contract_repo.get_source_optional_generation_contract()
             except Exception as exc:
                 phase_c_content = {}
                 phase_c_inventory = {}
@@ -203,6 +207,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 phase_e_exam_configuration = {}
                 phase_e_previous_year_mock = {}
                 phase_e_question_quality = {}
+                source_optional_generation = {}
                 LOG.warning(
                     "READINESS_PHASE_C_FAILURE category=%s",
                     type(exc).__name__,
@@ -225,6 +230,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 + (phase_e_previous_year_mock.get("table_permission_failures") or [])
                 + (phase_e_question_quality.get("function_permission_failures") or [])
                 + (phase_e_question_quality.get("table_permission_failures") or [])
+                + (source_optional_generation.get("function_permission_failures") or [])
             )
             checks["databasePermissions"] = not permission_failures
             checks["leaderboardPrivacy"] = bool(
@@ -332,6 +338,14 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and phase_e_question_quality.get("phase_e_question_quality_migration_version")
                 == PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION
             )
+            checks["sourceOptionalGeneration"] = bool(
+                source_optional_generation.get("ready") is True
+                and source_optional_generation.get("migration_version")
+                == SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION
+                and source_optional_generation.get("current_affairs_source_required") is True
+                and source_optional_generation.get("knowledge_cooldown_days") == 30
+                and not source_optional_generation.get("function_permission_failures")
+            )
             source_rollout_ready = bool(
                 contract.get("source_rollout_migration_version") == SOURCE_ROLLOUT_MIGRATION_VERSION
                 and contract.get("source_rollout_migration_applied") is True
@@ -365,6 +379,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and checks["examConfiguration"]
                 and checks["previousYearMocks"]
                 and checks["questionQualityAdministration"]
+                and checks["sourceOptionalGeneration"]
                 and float(contract.get("verification_threshold") or 0) == QUESTION_VERIFICATION_MIN_CONFIDENCE
             )
             active = schema_contract_repo.active_quiz_probe()
@@ -404,6 +419,8 @@ def assess(*, use_cache: bool = True) -> Readiness:
         failures.append("previous_year_mocks")
     if not checks["questionQualityAdministration"]:
         failures.append("question_quality_administration")
+    if not checks["sourceOptionalGeneration"]:
+        failures.append("source_optional_generation")
     if not checks["databasePermissions"]:
         failures.append("database_permissions")
     if not checks["activeQuizRetrieval"]:

@@ -31,6 +31,7 @@ from database.contract import (
     QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
+    SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION,
 )
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -254,7 +255,7 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
 def test_authoritative_migration_version_is_latest_filename() -> None:
     migrations = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
     assert migrations
-    assert migrations[-1].name.startswith(f"{PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION}_")
+    assert migrations[-1].name.startswith(f"{SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION}_")
     assert any(path.name.startswith(f"{PHASE_C_IDENTITY_MIGRATION_VERSION}_") for path in migrations)
     assert any(path.name.startswith(f"{POST_FINALIZATION_MIGRATION_VERSION}_") for path in migrations)
     assert any(path.name.startswith(f"{LEADERBOARD_PRIVACY_MIGRATION_VERSION}_") for path in migrations)
@@ -266,9 +267,10 @@ def test_authoritative_migration_version_is_latest_filename() -> None:
 def test_versioned_production_manifest_matches_deployment_intent() -> None:
     manifest_path = ROOT / "config" / "production.toml"
     assert manifest_path.is_file()
-    assert PRODUCTION_CONFIG_VERSION == "2026-08-08.10"
+    assert PRODUCTION_CONFIG_VERSION == "2026-08-08.11"
     assert re.fullmatch(r"[0-9a-f]{64}", PRODUCTION_CONFIG_HASH)
     assert PRODUCTION_CONFIG["quiz"]["source_backed_rotation_enabled"] is True
+    assert PRODUCTION_CONFIG["quiz"]["source_optional_stable_subjects_enabled"] is True
     assert PRODUCTION_CONFIG["gemini"] == {
         "primary_model": "gemini-3.1-flash-lite",
         "fallback_model": "gemini-2.5-flash",
@@ -307,6 +309,10 @@ def test_versioned_production_manifest_matches_deployment_intent() -> None:
         PRODUCTION_CONFIG["database"]["phase_e_question_quality_migration_version"]
         == PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION
     )
+    assert (
+        PRODUCTION_CONFIG["database"]["source_optional_generation_migration_version"]
+        == SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION
+    )
 
     render = _load_yaml(ROOT / "render.yaml")
     render_env = {row["key"]: row.get("value") for row in render["services"][0]["envVars"] if "value" in row}
@@ -321,7 +327,7 @@ def test_python_and_browser_packages_share_the_release_version() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
 
-    assert APPLICATION_VERSION == "8.4.0"
+    assert APPLICATION_VERSION == "8.5.0"
     assert package["version"] == APPLICATION_VERSION
     assert lock["version"] == APPLICATION_VERSION
     assert lock["packages"][""]["version"] == APPLICATION_VERSION

@@ -57,6 +57,6 @@
   window.__miniAppContract = Object.freeze({
     locale: "bn",
     supportedLocales: supportedLocales,
-    shellVersion: "8.4.0",
+    shellVersion: "8.5.0",
   });
 })();

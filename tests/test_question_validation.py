@@ -168,6 +168,95 @@ def test_unverified_question_is_rejected(valid_questions):
         validate_questions(rows, "history", "আধুনিক ভারত")
 
 
+def _timeless_model_rows(valid_questions):
+    rows = deepcopy(valid_questions)
+    allowed = {}
+    for index, row in enumerate(rows):
+        topic_number = index % 4 + 1
+        topic_key = f"history:modern-india:t{topic_number:02d}"
+        topic_id = f"11111111-1111-4111-8111-{topic_number:012d}"
+        allowed[topic_key] = topic_id
+        row.update({
+            "micro_topic_id": topic_id,
+            "micro_topic_key": topic_key,
+            "source_document_id": "",
+            "source_url": "",
+            "source_title": "",
+            "source_domain": "",
+            "source_kind": "",
+            "source_published_at": None,
+            "source_accessed_at": None,
+            "evidence_summary": "",
+            "fact_version": "",
+            "canonical_claim": f"স্থায়ী পরীক্ষামূলক দাবি {index}",
+            "knowledge_entity": f"entity-{index}",
+            "knowledge_relation": "stable-relation",
+            "knowledge_answer_value": f"answer-{index}",
+            "knowledge_time_scope": "timeless",
+            "verification_checks": {
+                **row["verification_checks"],
+                "independent_model": True,
+                "source_grounded": False,
+            },
+        })
+    return rows, allowed
+
+
+def test_timeless_model_validated_pack_needs_no_external_source(valid_questions):
+    rows, allowed = _timeless_model_rows(valid_questions)
+    clean = validate_questions(
+        rows,
+        "history",
+        "আধুনিক ভারত",
+        source_required=False,
+        allowed_micro_topics=allowed,
+        required_source_diversity=0,
+        required_topic_diversity=4,
+    )
+    assert len(clean) == 10
+    assert all(not row["source_document_id"] for row in clean)
+    assert len({row["micro_topic_key"] for row in clean}) == 4
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    [
+        ({"source_document_id": "22222222-2222-4222-8222-222222222222"}, "invent a source"),
+        ({"knowledge_time_scope": "2026"}, "timeless knowledge"),
+        ({"knowledge_entity": ""}, "knowledge identity"),
+    ],
+)
+def test_timeless_model_pack_rejects_unsafe_identity(valid_questions, mutation, message):
+    rows, allowed = _timeless_model_rows(valid_questions)
+    rows[0].update(mutation)
+    with pytest.raises(QuizValidationError, match=message):
+        validate_questions(
+            rows,
+            "history",
+            "আধুনিক ভারত",
+            source_required=False,
+            allowed_micro_topics=allowed,
+            required_source_diversity=0,
+            required_topic_diversity=4,
+        )
+
+
+def test_timeless_model_pack_rejects_duplicate_knowledge_relationship(valid_questions):
+    rows, allowed = _timeless_model_rows(valid_questions)
+    for field in ("knowledge_entity", "knowledge_relation", "knowledge_answer_value"):
+        rows[1][field] = rows[0][field]
+    with pytest.raises(QuizValidationError, match="question-answer relationship"):
+        validate_questions(
+            rows,
+            "history",
+            "আধুনিক ভারত",
+            source_required=False,
+            allowed_micro_topics=allowed,
+            required_source_diversity=0,
+            required_topic_diversity=4,
+        )
+
+
 def test_content_checksum_is_stable_and_content_sensitive(valid_questions):
     first = content_checksum("20260710-history", "history", "আধুনিক ভারত", valid_questions)
     second = content_checksum("20260710-history", "history", "আধুনিক ভারত", deepcopy(valid_questions))

@@ -208,6 +208,19 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "table_permission_failures": [],
         },
     )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_source_optional_generation_contract",
+        lambda: {
+            "ready": True,
+            "migration_version": (
+                readiness_service.SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION
+            ),
+            "current_affairs_source_required": True,
+            "knowledge_cooldown_days": 30,
+            "function_permission_failures": [],
+        },
+    )
     readiness_service._CACHE = None
 
 

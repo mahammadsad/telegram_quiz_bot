@@ -46,6 +46,8 @@ services:
         value: "3"
       - key: SOURCE_BACKED_ROTATION_ENABLED
         value: "true"
+      - key: SOURCE_OPTIONAL_STABLE_SUBJECTS_ENABLED
+        value: "true"
       - key: CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS
         value: "45"
       - key: TELEGRAM_INIT_DATA_MAX_AGE_SECONDS

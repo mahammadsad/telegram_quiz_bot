@@ -7,7 +7,7 @@ from storage import chapter_history_repo, stats_repo
 
 def test_chapter_selector_prefers_unseen_chapters():
     history = [{"chapter": "প্রাচীন ভারত", "selected_for": "2026-07-09"}]
-    assert select_chapter("history", date(2026, 7, 10), history) == "ভারতের জাতীয় আন্দোলন"
+    assert select_chapter("history", date(2026, 7, 10), history) == "মধ্যযুগীয় ভারত"
 
 
 def test_chapter_selector_avoids_immediate_repeat_after_catalogue_coverage():
@@ -52,12 +52,12 @@ def test_chapter_selector_keeps_latest_date_for_duplicate_history_rows():
         {"chapter": "সামাজিক-ধর্মীয় সংস্কার আন্দোলন", "selected_for": (today - timedelta(days=71)).isoformat()},
         {"chapter": "আধুনিক ভারত", "selected_for": (today - timedelta(days=200)).isoformat()},
     ]
-    assert select_chapter("history", today, history) == "ভারতের জাতীয় আন্দোলন"
+    assert select_chapter("history", today, history) == "সিন্ধু ও বৈদিক সভ্যতা"
     assert select_chapter("history", today, history) != "প্রাচীন ভারত"
 
 
 def test_chapter_selector_never_crosses_subject_catalogues():
-    assert select_chapter("science", date(2026, 7, 10), []) == "পরিমাপ, গতি ও যান্ত্রিকী"
+    assert select_chapter("science", date(2026, 7, 10), []) == "পদার্থবিদ্যা"
     assert select_chapter("science", date(2026, 7, 10), []) != "প্রাচীন ভারত"
 
 

@@ -209,6 +209,23 @@ def get_recent(bot_type: str = BOT_TYPE, days: int = 14) -> list[Row]:
     return as_rows(res.data, "recent questions")
 
 
+def get_generation_exclusions(subject: str, limit: int = 240) -> list[Row]:
+    """Latest subject questions used to steer generation away from repeats."""
+    result = (
+        get_client()
+        .table("questions")
+        .select(
+            "question_text,option_a,option_b,option_c,option_d,correct_option,"
+            "topic,micro_topic_key,created_at,last_used_at"
+        )
+        .eq("subject", subject)
+        .order("created_at", desc=True)
+        .limit(max(10, min(limit, 500)))
+        .execute()
+    )
+    return as_rows(result.data, "generation exclusions")
+
+
 def get_used_on_date(target_date: date, bot_type: str = BOT_TYPE) -> list[Row]:
     """Questions whose last_used_at falls on an exact date — feeds the
     spaced-repetition resurfacing block of the Gemini prompt (3/7/14 days

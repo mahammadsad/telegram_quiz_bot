@@ -122,6 +122,8 @@ def validate_questions(
     micro_topic_key: str | None = None,
     allowed_source_ids: set[str] | None = None,
     allowed_source_topics: dict[str, tuple[str, str]] | None = None,
+    allowed_micro_topics: dict[str, str] | None = None,
+    source_required: bool = True,
     required_source_diversity: int = 1,
     required_topic_diversity: int = 1,
     require_verification: bool = True,
@@ -137,6 +139,7 @@ def validate_questions(
 
     clean: list[dict] = []
     seen_questions: set[str] = set()
+    seen_knowledge_keys: set[str] = set()
     expected_topic_id = _text(micro_topic_id)
     expected_topic_key = _text(micro_topic_key)
     for number, raw in enumerate(raw_questions, start=1):
@@ -163,6 +166,12 @@ def validate_questions(
         source_accessed_at = _text(raw.get("source_accessed_at"))
         evidence_summary = _text(raw.get("evidence_summary"))
         fact_version = _text(raw.get("fact_version"))
+        canonical_claim = _text(raw.get("canonical_claim"))
+        knowledge_entity = _text(raw.get("knowledge_entity"))
+        knowledge_relation = _text(raw.get("knowledge_relation"))
+        knowledge_answer_value = _text(raw.get("knowledge_answer_value"))
+        knowledge_time_scope = _text(raw.get("knowledge_time_scope")) or "timeless"
+        knowledge_relation_inverse = bool(raw.get("knowledge_relation_inverse"))
         language = _text(raw.get("language") or ("bn-en" if subject_key == "english" else "bn")).lower()
         correct = raw.get("correct_index", raw.get("a"))
 
@@ -190,11 +199,13 @@ def validate_questions(
             raise QuizValidationError(f"Question {number} must contain a normalized micro-topic id.")
         if not raw_micro_topic_key:
             raise QuizValidationError(f"Question {number} must contain a reusable micro-topic key.")
-        if not source_document_id or not _is_uuid(source_document_id):
+        if source_required and (not source_document_id or not _is_uuid(source_document_id)):
             raise QuizValidationError(f"Question {number} must cite a verified source document.")
-        if allowed_source_ids is not None and source_document_id not in allowed_source_ids:
+        if not source_required and source_document_id:
+            raise QuizValidationError(f"Question {number} must not invent a source document.")
+        if source_required and allowed_source_ids is not None and source_document_id not in allowed_source_ids:
             raise QuizValidationError(f"Question {number} cites a source outside the grounding bundle.")
-        if allowed_source_topics is not None:
+        if source_required and allowed_source_topics is not None:
             source_topic = allowed_source_topics.get(source_document_id)
             if source_topic is None:
                 raise QuizValidationError(
@@ -203,6 +214,11 @@ def validate_questions(
             if (raw_micro_topic_id, raw_micro_topic_key) != source_topic:
                 raise QuizValidationError(
                     f"Question {number} has a micro-topic that does not match its source."
+                )
+        elif allowed_micro_topics is not None:
+            if allowed_micro_topics.get(raw_micro_topic_key) != raw_micro_topic_id:
+                raise QuizValidationError(
+                    f"Question {number} has a micro-topic outside the curated chapter."
                 )
         else:
             if not expected_topic_id:
@@ -220,6 +236,35 @@ def validate_questions(
             raise QuizValidationError(f"Question {number} has an invalid difficulty.")
         if language not in {"bn", "en", "bn-en"}:
             raise QuizValidationError(f"Question {number} has an invalid language.")
+        if not source_required:
+            if subject_key == "current-affairs":
+                raise QuizValidationError("Current-affairs questions require verified sources.")
+            if not all((canonical_claim, knowledge_entity, knowledge_relation, knowledge_answer_value)):
+                raise QuizValidationError(
+                    f"Question {number} is missing stable knowledge identity fields."
+                )
+            if knowledge_time_scope != "timeless":
+                raise QuizValidationError(
+                    f"Question {number} must use timeless knowledge without a source."
+                )
+            try:
+                semantic_key = knowledge_key(
+                    subject=subject_key,
+                    entity=knowledge_entity,
+                    relation=knowledge_relation,
+                    answer_value=knowledge_answer_value,
+                    time_scope=knowledge_time_scope,
+                    inverse=knowledge_relation_inverse,
+                )
+            except ValueError as exc:
+                raise QuizValidationError(
+                    f"Question {number} has an invalid stable knowledge identity."
+                ) from exc
+            if semantic_key in seen_knowledge_keys:
+                raise QuizValidationError(
+                    f"Question {number} repeats a question-answer relationship."
+                )
+            seen_knowledge_keys.add(semantic_key)
 
         verification_status = _text(raw.get("verification_status"))
         verification_notes = _text(raw.get("verification_notes"))
@@ -237,21 +282,29 @@ def validate_questions(
                 raise QuizValidationError(f"Question {number} has an invalid verification score.")
             if not verification_notes or not verified_at:
                 raise QuizValidationError(f"Question {number} is missing verification evidence.")
-            parsed_source = urlparse(source_url)
-            if (
-                parsed_source.scheme != "https"
-                or not parsed_source.hostname
-                or not source_domain
-                or (
-                    parsed_source.hostname.lower() != source_domain
-                    and not parsed_source.hostname.lower().endswith(f".{source_domain}")
-                )
+            if source_required:
+                parsed_source = urlparse(source_url)
+                if (
+                    parsed_source.scheme != "https"
+                    or not parsed_source.hostname
+                    or not source_domain
+                    or (
+                        parsed_source.hostname.lower() != source_domain
+                        and not parsed_source.hostname.lower().endswith(f".{source_domain}")
+                    )
+                ):
+                    raise QuizValidationError(f"Question {number} has an invalid verified source URL.")
+                if not source_title or source_kind not in {"official", "primary", "secondary"}:
+                    raise QuizValidationError(f"Question {number} is missing verified source metadata.")
+                if not source_accessed_at or not evidence_summary or not fact_version:
+                    raise QuizValidationError(f"Question {number} is missing immutable source evidence.")
+            elif (
+                not isinstance(raw.get("verification_checks"), dict)
+                or raw["verification_checks"].get("independent_model") is not True
             ):
-                raise QuizValidationError(f"Question {number} has an invalid verified source URL.")
-            if not source_title or source_kind not in {"official", "primary", "secondary"}:
-                raise QuizValidationError(f"Question {number} is missing verified source metadata.")
-            if not source_accessed_at or not evidence_summary or not fact_version:
-                raise QuizValidationError(f"Question {number} is missing immutable source evidence.")
+                raise QuizValidationError(
+                    f"Question {number} lacks independent model verification."
+                )
 
         normalized_question = normalize_text(text)
         if not normalized_question or normalized_question in seen_questions:
@@ -296,12 +349,12 @@ def validate_questions(
             "verification_checks": raw.get("verification_checks") if isinstance(raw.get("verification_checks"), dict) else {},
             "verified_at": verified_at or None,
             "verification_model": _text(raw.get("verification_model")) or None,
-            "canonical_claim": _text(raw.get("canonical_claim")),
-            "knowledge_entity": _text(raw.get("knowledge_entity")),
-            "knowledge_relation": _text(raw.get("knowledge_relation")),
-            "knowledge_answer_value": _text(raw.get("knowledge_answer_value")),
-            "knowledge_time_scope": _text(raw.get("knowledge_time_scope")) or "timeless",
-            "knowledge_relation_inverse": bool(raw.get("knowledge_relation_inverse")),
+            "canonical_claim": canonical_claim,
+            "knowledge_entity": knowledge_entity,
+            "knowledge_relation": knowledge_relation,
+            "knowledge_answer_value": knowledge_answer_value,
+            "knowledge_time_scope": knowledge_time_scope,
+            "knowledge_relation_inverse": knowledge_relation_inverse,
             "deterministic_proof": (
                 raw.get("deterministic_proof")
                 if isinstance(raw.get("deterministic_proof"), dict)
@@ -332,6 +385,7 @@ def validate_questions(
         clean,
         required_source_diversity=required_source_diversity,
         required_topic_diversity=required_topic_diversity,
+        source_required=source_required,
     )
     if enforce_composition:
         _validate_quiz_composition(clean)
@@ -438,8 +492,9 @@ def _validate_grounding_diversity(
     *,
     required_source_diversity: int,
     required_topic_diversity: int,
+    source_required: bool = True,
 ) -> None:
-    required_sources = max(1, min(QUESTION_COUNT, required_source_diversity))
+    required_sources = max(1, min(QUESTION_COUNT, required_source_diversity)) if source_required else 0
     required_topics = max(1, min(QUESTION_COUNT, required_topic_diversity))
     source_counts = Counter(item["source_document_id"] for item in questions)
     topic_counts = Counter(item["micro_topic_key"] for item in questions)
@@ -451,7 +506,7 @@ def _validate_grounding_diversity(
         for item in questions
     )
 
-    if len(source_counts) < required_sources:
+    if source_required and len(source_counts) < required_sources:
         raise QuizValidationError(
             "Quiz source diversity is below the grounded-pack requirement."
         )
@@ -460,17 +515,18 @@ def _validate_grounding_diversity(
             "Quiz micro-topic diversity is below the grounded-pack requirement."
         )
 
-    maximum_source_reuse = (QUESTION_COUNT + required_sources - 1) // required_sources
-    if required_sources > 1 and max(source_counts.values()) > maximum_source_reuse:
-        raise QuizValidationError(
-            "Quiz source facts are not balanced across the grounded pack."
-        )
+    if source_required:
+        maximum_source_reuse = (QUESTION_COUNT + required_sources - 1) // required_sources
+        if required_sources > 1 and max(source_counts.values()) > maximum_source_reuse:
+            raise QuizValidationError(
+                "Quiz source facts are not balanced across the grounded pack."
+            )
     maximum_topic_reuse = (QUESTION_COUNT + required_topics - 1) // required_topics
     if required_topics > 1 and max(topic_counts.values()) > maximum_topic_reuse:
         raise QuizValidationError(
             "Quiz micro-topics are not balanced across the grounded pack."
         )
-    if max(source_answer_counts.values()) > 1:
+    if source_required and max(source_answer_counts.values()) > 1:
         raise QuizValidationError(
             "Quiz repeats a question-answer relationship from the same source fact."
         )

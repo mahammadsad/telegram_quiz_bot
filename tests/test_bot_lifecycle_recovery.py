@@ -393,7 +393,7 @@ def test_missing_source_stops_before_run_creation_gemini_or_alert(
         lambda *args, **kwargs: pytest.fail("A misleading provider alert was sent"),
     )
 
-    result = bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
+    result = bot.run_subject_quiz("current-affairs", target_date=date(2026, 7, 10))
 
     assert result == "source_not_ready"
     assert not any(event[0] == "run_upsert" for event in events)
@@ -879,7 +879,22 @@ def _ready_phase_e3_contract() -> dict:
     }
 
 
+def _ready_source_optional_contract() -> dict:
+    return {
+        "ready": True,
+        "migration_version": bot.SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION,
+        "current_affairs_source_required": True,
+        "knowledge_cooldown_days": 30,
+        "function_permission_failures": [],
+    }
+
+
 def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_source_optional_generation_contract",
+        _ready_source_optional_contract,
+    )
     monkeypatch.setattr(
         bot.schema_contract_repo,
         "get_phase_e_previous_year_mock_contract",
@@ -1020,6 +1035,11 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
 
 
 def test_database_preflight_fails_closed_on_old_or_misgranted_contract(monkeypatch):
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_source_optional_generation_contract",
+        _ready_source_optional_contract,
+    )
     monkeypatch.setattr(
         bot.schema_contract_repo,
         "get_phase_e_previous_year_mock_contract",

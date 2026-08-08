@@ -30,26 +30,21 @@ Education source pilot already refer to them.
 
 ## Rotation and source gate
 
-`ALL_CHAPTERS` exposes the complete curriculum. `CHAPTERS` contains only the
-currently generation-enabled rotation chapters. With
-`SOURCE_BACKED_ROTATION_ENABLED=false`, the legacy seven-chapter view remains
-available during cutover. With the flag true, the v1 allowlist contains the
-seven established Computer chapters and exactly two reviewed chapters for
-every other subject. The database migration disables every unapproved chapter
-in the 13 canonical subjects.
+`ALL_CHAPTERS` exposes the complete curriculum. `CHAPTERS` contains all curated
+chapters for the twelve stable subjects and the two reviewed source-backed
+current-affairs chapters. Stable chapters prefer verified source bundles when
+available; otherwise Gemini generates only timeless competitive-exam material
+from the four curated micro-topics and a separate model independently solves it.
 
-This is deliberate. A new chapter must not enter daily generation merely
-because its title exists. It becomes eligible only after:
-
-1. its official or primary source bundle has been reviewed and imported;
-2. every intended micro-topic has reusable verified facts;
-3. its configuration and database `rotation_enabled` flag are enabled in a
-   forward migration;
-4. a staging quiz passes generation, independent verification, delivery, and
-   answer-review checks.
+Source-optional questions must provide stable entity–relation–answer identity,
+cannot claim a source, cannot be time-sensitive, and cannot enter current
+affairs. The database enforces a 30-day knowledge-point cooldown in addition to
+recent-question prompt exclusions, exact hashes, variant fingerprints, and
+fuzzy text collision detection. Current affairs continues to fail closed when
+fresh primary or official evidence is unavailable.
 
 `get_grounding_bundle` continues to ignore micro-topics without verified source
-documents, so the 648 catalogue rows cannot weaken the fail-closed integrity
+documents; `load_generation_bundle` supplies the controlled timeless fallback
 policy. Current-affairs publication and expiry dates are evaluated in
 `Asia/Kolkata`.
 

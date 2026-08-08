@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from config.settings import SOURCE_BACKED_ROTATION_ENABLED
+from config.settings import SOURCE_OPTIONAL_STABLE_SUBJECTS_ENABLED
 from config.source_rollout import ROTATION_CHAPTER_KEYS
 from config.subjects import QUIZ_SUBJECT_KEYS
 from config.syllabus_catalog import CATALOGUE_ROWS, EXAM_TAGS, SUBJECT_EXAM_TAGS
@@ -47,14 +47,13 @@ def _build_catalogue() -> dict[str, tuple[ChapterConfig, ...]]:
         exam_tags = SUBJECT_EXAM_TAGS[subject_key]
         chapters = []
         approved_rotation = set(ROTATION_CHAPTER_KEYS[subject_key])
+        # Stable syllabus subjects can be generated from the curated catalogue
+        # and independently model-verified; only current affairs must remain
+        # behind the reviewed, fresh-source gate.
         runtime_rotation = (
             approved_rotation
-            if SOURCE_BACKED_ROTATION_ENABLED
-            else {
-                f"{subject_key}:{chapter_key}"
-                for chapter_key, _name, _priority, legacy_rotation, _topics in rows
-                if legacy_rotation
-            }
+            if subject_key == "current-affairs" or not SOURCE_OPTIONAL_STABLE_SUBJECTS_ENABLED
+            else {f"{subject_key}:{chapter_key}" for chapter_key, *_rest in rows}
         )
         for display_order, (chapter_key, name, priority, _legacy_rotation, topic_names) in enumerate(rows, 1):
             full_chapter_key = f"{subject_key}:{chapter_key}"
@@ -86,8 +85,8 @@ def _build_catalogue() -> dict[str, tuple[ChapterConfig, ...]]:
 SYLLABUS: dict[str, tuple[ChapterConfig, ...]] = _build_catalogue()
 
 # ALL_CHAPTERS is the full curriculum view. CHAPTERS remains the generation
-# view used by the current selector, so newly catalogued material cannot enter
-# live rotation before its source bundle is reviewed and explicitly enabled.
+# view used by the current selector. Stable subjects use the complete curated
+# syllabus; current affairs remains limited to source-approved chapters.
 ALL_CHAPTERS: dict[str, tuple[str, ...]] = {
     subject_key: tuple(chapter.name for chapter in chapters)
     for subject_key, chapters in SYLLABUS.items()
@@ -136,13 +135,8 @@ def validate_syllabus_catalogue() -> None:
         )
         expected_runtime_keys = (
             approved_keys
-            if SOURCE_BACKED_ROTATION_ENABLED
-            else tuple(
-                f"{subject_key}:{chapter_key}"
-                for chapter_key, _name, _priority, legacy_rotation, _topics
-                in CATALOGUE_ROWS[subject_key]
-                if legacy_rotation
-            )
+            if subject_key == "current-affairs" or not SOURCE_OPTIONAL_STABLE_SUBJECTS_ENABLED
+            else tuple(chapter.key for chapter in chapters)
         )
         if actual_runtime_keys != expected_runtime_keys:
             raise RuntimeError(f"{subject_key} runtime chapter gate is invalid.")
