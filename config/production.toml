@@ -1,5 +1,5 @@
 [meta]
-version = "2026-08-08.2"
+version = "2026-08-08.3"
 
 [gemini]
 primary_model = "gemini-3.1-flash-lite"
@@ -15,6 +15,10 @@ incorrect_penalty = 0.25
 
 [current_affairs]
 max_source_age_days = 45
+
+[verification]
+deterministic_proof_version = 1
+require_new_candidate_proof = true
 
 [scheduler]
 timezone = "Asia/Kolkata"

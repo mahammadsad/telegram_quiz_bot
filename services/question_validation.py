@@ -14,7 +14,11 @@ from config.settings import (
     QUESTIONS_PER_RUN,
     QUIZ_DIFFICULTY_DISTRIBUTION,
 )
-from services.content_identity import variant_fingerprint
+from services.content_identity import knowledge_key, variant_fingerprint
+from services.deterministic_verification import (
+    DeterministicVerificationError,
+    verify_candidate as verify_candidate_deterministically,
+)
 from utils.hashing import (
     normalize_text,
     question_content_hash,
@@ -40,11 +44,13 @@ class QuizValidationError(ValueError):
         *,
         attempts: list[dict[str, Any]] | None = None,
         retryable: bool = False,
+        reason_code: str | None = None,
     ) -> None:
         super().__init__(message)
         self.category = "validation_failed"
         self.attempts = attempts or []
         self.retryable = retryable
+        self.reason_code = reason_code
 
 
 def randomize_balanced_answer_positions(
@@ -117,6 +123,7 @@ def validate_questions(
     required_source_diversity: int = 1,
     required_topic_diversity: int = 1,
     require_verification: bool = True,
+    require_deterministic_proof: bool = False,
     _expected_count: int = QUESTION_COUNT,
 ) -> list[dict]:
     if not isinstance(raw_questions, list) or len(raw_questions) != _expected_count:
@@ -249,6 +256,17 @@ def validate_questions(
             raise QuizValidationError(f"Question {number} is blank or duplicated.")
         seen_questions.add(normalized_question)
 
+        try:
+            deterministic = verify_candidate_deterministically(
+                raw,
+                require_subject_proof=require_deterministic_proof,
+            )
+        except DeterministicVerificationError as exc:
+            raise QuizValidationError(
+                f"Question {number} failed deterministic verification: {exc}",
+                reason_code=exc.code,
+            ) from exc
+
         clean_row: dict[str, Any] = {
             "question": text,
             "options": options,
@@ -282,6 +300,17 @@ def validate_questions(
             "knowledge_answer_value": _text(raw.get("knowledge_answer_value")),
             "knowledge_time_scope": _text(raw.get("knowledge_time_scope")) or "timeless",
             "knowledge_relation_inverse": bool(raw.get("knowledge_relation_inverse")),
+            "deterministic_proof": (
+                raw.get("deterministic_proof")
+                if isinstance(raw.get("deterministic_proof"), dict)
+                else None
+            ),
+            "deterministic_verification": deterministic.as_dict(),
+            "source_expires_at": _text(
+                raw.get("source_expires_at") or raw.get("expires_at")
+            )
+            or None,
+            "fact_effective_at": _text(raw.get("fact_effective_at")) or None,
         }
         try:
             clean_row["stem_hash"] = question_hash(text)
@@ -335,19 +364,53 @@ def validate_question_candidates(
     **kwargs: Any,
 ) -> tuple[list[dict], list[dict[str, Any]]]:
     """Validate candidates independently and retain every accepted item."""
-    accepted: list[dict] = []
+    accepted_rows: list[tuple[int, dict]] = []
     rejected: list[dict[str, Any]] = []
     for index, candidate in enumerate(raw_questions):
         try:
-            accepted.append(
-                validate_question_candidate(candidate, subject_key, chapter, **kwargs)
+            accepted_rows.append(
+                (
+                    index,
+                    validate_question_candidate(candidate, subject_key, chapter, **kwargs),
+                )
             )
         except QuizValidationError as exc:
             rejected.append({
                 "index": index,
-                "code": _candidate_rejection_code(str(exc)),
+                "code": exc.reason_code or _candidate_rejection_code(str(exc)),
                 "message": str(exc),
             })
+    accepted: list[dict] = []
+    seen_knowledge: set[str] = set()
+    for index, row in accepted_rows:
+        semantic_fields = (
+            row.get("knowledge_entity"),
+            row.get("knowledge_relation"),
+            row.get("knowledge_answer_value"),
+        )
+        semantic_key = ""
+        if all(str(value or "").strip() for value in semantic_fields):
+            try:
+                semantic_key = knowledge_key(
+                    subject=subject_key,
+                    entity=str(row["knowledge_entity"]),
+                    relation=str(row["knowledge_relation"]),
+                    answer_value=str(row["knowledge_answer_value"]),
+                    time_scope=str(row.get("knowledge_time_scope") or "timeless"),
+                    inverse=bool(row.get("knowledge_relation_inverse")),
+                )
+            except ValueError:
+                semantic_key = ""
+        if semantic_key and semantic_key in seen_knowledge:
+            rejected.append({
+                "index": index,
+                "code": "duplicate_knowledge_point",
+                "message": "Candidate duplicates a knowledge point already accepted in this batch.",
+            })
+            continue
+        if semantic_key:
+            seen_knowledge.add(semantic_key)
+        accepted.append(row)
     return accepted, rejected
 
 

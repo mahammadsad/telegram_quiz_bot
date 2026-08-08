@@ -2,7 +2,7 @@
 
 Updated: 2026-08-08
 
-Branch: `codex/phase-c-question-bank`
+Branch: `codex/phase-d-deterministic-verification`
 
 Baseline commit: `e390751782f6c0acf066b54273da1ceb8c65e5e1`
 
@@ -12,9 +12,10 @@ Phase A is published in draft PR #26 and both GitHub Actions jobs are green.
 Phase B durable scheduling is published in draft PR #27. Its complete GitHub
 gate, hosted staging database gate, Render deployment, and fail-closed staging
 preflight are green. Production remains unchanged.
-Phase C is in progress on a stacked branch. Its additive identity, evidence,
-candidate persistence, durable replenishment, and inventory-first due-time path
-are compiled and contract-verified on hosted staging; production is unchanged.
+Phase C is green on draft PR #28. Its additive identity, evidence, candidate
+persistence, durable replenishment, inventory-first due-time path, GitHub CI,
+Render deployment, and fail-closed staging smoke are green. Phase D deterministic
+verification is in progress on a separate stacked branch. Production is unchanged.
 
 ## Implemented
 
@@ -52,6 +53,11 @@ are compiled and contract-verified on hosted staging; production is unchanged.
 - Due-time assembly now tries verified inventory first and uses Gemini only when
   a safe ten-question pack cannot be assembled. Correctness, source freshness,
   review-required state, and quarantine are never relaxed.
+- Phase D adds a versioned deterministic proof contract. New inventory candidates
+  must pass common Unicode, option-pattern, date/effective-period, source-evidence,
+  unique-answer, and explanation-conclusion checks. Supported mathematics and
+  reasoning families are solved from machine-readable inputs; unsupported or
+  under-constrained items fail closed before the probabilistic verifier runs.
 
 ## Local evidence
 
@@ -68,19 +74,24 @@ are compiled and contract-verified on hosted staging; production is unchanged.
   contracts report `ready=true` with no permission failures, a rollback-only
   13-job ensure/claim/event simulation passed, and the Security Advisor has zero
   errors (the one warning is the pre-existing `public.pg_trgm` extension).
-- Render staging is live on application `7.2.4`. Staging preflight run
-  `31249805580` passed with HTTP 200 readiness, no failure categories, and all
-  checks true, including privacy, post finalization, and durable jobs.
+- Render staging is live on Phase C application `7.3.0` at commit `b20fb87`.
+  Final staging smoke run `31252232235` passed and explicitly required all three
+  Phase C migration versions plus `contentIdentity` and `verifiedInventory`.
 - Phase C local checkpoint: 347 non-database tests pass; Ruff and mypy (69
   production files) pass. Staging compiled all three Phase C migrations;
   identity hashes match Python and PostgreSQL exactly, all Phase C contracts
   report ready with no permission failures, historical 69 question mappings
   remain readable, and rollback-only candidate/job/bundle gates passed.
+- Phase D local checkpoint: 359 tests pass and 25 hosted database tests are
+  skipped locally; Ruff and mypy (70 production files) pass. Adversarial tests
+  reject wrong answers, two correct options, explanation contradictions, stale
+  facts, broken Bengali/terminology, invalid maths, inconsistent reasoning, and
+  duplicate current-affairs knowledge points with stable reason codes.
 
 ## Deployment prerequisites
 
-1. Keep PR #27 in draft until its stacked Phase A dependency and review plan are
-   explicit.
+1. Keep PRs #27 and #28 in draft until their stacked dependencies and review plan
+   are explicit.
 2. Preserve the successful staging evidence and rerun preflight after any code,
    migration, credential, or configuration change.
 3. Before production, require a truthful 13-subject daily report and a reviewed

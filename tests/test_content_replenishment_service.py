@@ -36,11 +36,17 @@ def grounding(valid_questions) -> GroundingBundle:
 def generated_candidates(valid_questions):
     rows = deepcopy(valid_questions[:5])
     for index, row in enumerate(rows):
-        row["canonical_claim"] = f"ঐতিহাসিক পরীক্ষামূলক তথ্য {index}"
+        answer = row["options"][row["correct_index"]]
+        row["canonical_claim"] = f"ঐতিহাসিক পরীক্ষামূলক তথ্য {index}: {answer}"
         row["knowledge_entity"] = f"entity-{index}"
         row["knowledge_relation"] = "has_value"
-        row["knowledge_answer_value"] = row["options"][row["correct_index"]]
+        row["knowledge_answer_value"] = answer
         row["knowledge_time_scope"] = "timeless"
+        row["proof_family"] = "evidence_single_answer"
+        row["proof_parameters_json"] = "{}"
+        row["proof_option_values"] = list(row["options"])
+        row["proof_evidence_values"] = list(row["options"])
+        row["proof_explanation_conclusion"] = answer
         for field in (
             "verification_status", "verification_score", "verification_notes",
             "verification_checks", "verified_at", "verification_model",

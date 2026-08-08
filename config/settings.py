@@ -145,6 +145,12 @@ SOURCE_BACKED_ROTATION_ENABLED = _locked_value(
     "SOURCE_BACKED_ROTATION_ENABLED",
     PRODUCTION_CONFIG["quiz"]["source_backed_rotation_enabled"],
 ).lower() == "true"
+DETERMINISTIC_PROOF_VERSION = int(
+    PRODUCTION_CONFIG["verification"]["deterministic_proof_version"]
+)
+DETERMINISTIC_PROOF_REQUIRED = bool(
+    PRODUCTION_CONFIG["verification"]["require_new_candidate_proof"]
+)
 CONTENT_INVENTORY_TARGET_DAYS = int(PRODUCTION_CONFIG["content_inventory"]["target_days"])
 CONTENT_INVENTORY_BATCH_SIZE = int(
     PRODUCTION_CONFIG["content_inventory"]["generation_batch_size"]

@@ -105,12 +105,16 @@ def verify_questions(
             )
             continue
         notes = str(result.get("notes") or "").strip()
+        deterministic = question.get("deterministic_verification")
         clean.append({
             **question,
             "verification_status": "verified",
             "verification_score": float(confidence),
             "verification_notes": notes or "All source-grounded checks passed.",
-            "verification_checks": {name: True for name in CHECK_FIELDS},
+            "verification_checks": {
+                **{name: True for name in CHECK_FIELDS},
+                "deterministic": deterministic,
+            },
             "verified_at": verified_at,
             "verification_model": metadata.get("model"),
         })
@@ -158,6 +162,7 @@ def _verification_prompt(questions: list[dict], bundle: GroundingBundle) -> str:
             "difficulty": row["difficulty"],
             "micro_topic_key": row["micro_topic_key"],
             "source_document_id": row["source_document_id"],
+            "deterministic_verification": row.get("deterministic_verification"),
         }
         for index, row in enumerate(questions, start=1)
     ]
