@@ -21,6 +21,12 @@ test("quiz loading, keyboard navigation, reduced motion, and mobile layout are a
   await expect(page.locator("#loading-message")).toContainText("লোড হচ্ছে");
   await navigation;
   await expect(page.locator("#screen-intro")).toBeVisible();
+  const skipLink = page.locator(".skip-link");
+  await expect(skipLink).toHaveCount(1);
+  await expect(skipLink).not.toBeInViewport();
+  await skipLink.focus();
+  await expect(skipLink).toBeInViewport();
+  await expect(skipLink).toContainText("মূল অংশে যান");
 
   const reducedMotion = await page.evaluate(() => {
     const loader = getComputedStyle(document.querySelector(".loader"));
