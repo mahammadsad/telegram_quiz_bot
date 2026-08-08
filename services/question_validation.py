@@ -9,7 +9,11 @@ from random import Random, SystemRandom
 from typing import Any
 from urllib.parse import urlparse
 
-from config.settings import QUESTION_VERIFICATION_MIN_CONFIDENCE, QUIZ_DIFFICULTY_DISTRIBUTION
+from config.settings import (
+    QUESTION_VERIFICATION_MIN_CONFIDENCE,
+    QUESTIONS_PER_RUN,
+    QUIZ_DIFFICULTY_DISTRIBUTION,
+)
 from utils.hashing import (
     normalize_text,
     question_content_hash,
@@ -17,7 +21,7 @@ from utils.hashing import (
     quiz_content_checksum,
 )
 
-QUESTION_COUNT = 10
+QUESTION_COUNT = QUESTIONS_PER_RUN
 _BENGALI_RE = re.compile(r"[\u0980-\u09ff]")
 _DIFFICULTIES = {"easy", "medium", "hard"}
 _DERIVED_VERSION_FIELDS = {

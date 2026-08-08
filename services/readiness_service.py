@@ -10,6 +10,8 @@ from config.settings import (
     EXPECTED_SUPABASE_PROJECT_REF,
     GEMINI_FAILOVER_ENABLED,
     MINIAPP_SHORT_NAME,
+    PRODUCTION_CONFIG_HASH,
+    PRODUCTION_CONFIG_VERSION,
     QUESTION_VERIFICATION_MIN_CONFIDENCE,
     SOURCE_BACKED_ROTATION_ENABLED,
     SUPABASE_SERVICE_KEY,
@@ -28,6 +30,7 @@ from database.contract import (
     DATABASE_CONTRACT_VERSION,
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
+    POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
@@ -65,6 +68,9 @@ class Readiness:
             ),
             "sourceBackedRotationEnabled": SOURCE_BACKED_ROTATION_ENABLED,
             "databaseContractVersion": DATABASE_CONTRACT_VERSION,
+            "postFinalizationMigrationVersion": POST_FINALIZATION_MIGRATION_VERSION,
+            "productionConfigVersion": PRODUCTION_CONFIG_VERSION,
+            "productionConfigHash": PRODUCTION_CONFIG_HASH,
         }
 
 
@@ -83,6 +89,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
         "databaseContract": False,
         "databasePermissions": False,
         "leaderboardPrivacy": False,
+        "postFinalization": False,
         "activeQuizRetrieval": False,
     }
     failures: list[str] = []
@@ -146,10 +153,20 @@ def assess(*, use_cache: bool = True) -> Readiness:
                     "READINESS_LEADERBOARD_PRIVACY_FAILURE category=%s",
                     type(exc).__name__,
                 )
+            try:
+                post_contract = schema_contract_repo.get_post_finalization_contract()
+            except Exception as exc:
+                post_contract = {}
+                LOG.warning(
+                    "READINESS_POST_FINALIZATION_FAILURE category=%s",
+                    type(exc).__name__,
+                )
             permission_failures = (
                 contract.get("function_permission_failures") or []
             ) + (contract.get("table_permission_failures") or []) + (
                 privacy_contract.get("function_permission_failures") or []
+            ) + (
+                post_contract.get("function_permission_failures") or []
             )
             checks["databasePermissions"] = not permission_failures
             checks["leaderboardPrivacy"] = bool(
@@ -167,6 +184,14 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and not privacy_contract.get("unsafe_function_definitions")
                 and not privacy_contract.get("function_configuration_failures")
                 and not privacy_contract.get("function_permission_failures")
+            )
+            checks["postFinalization"] = bool(
+                post_contract.get("ready") is True
+                and post_contract.get("post_finalization_migration_version")
+                == POST_FINALIZATION_MIGRATION_VERSION
+                and post_contract.get("post_finalization_migration_applied") is True
+                and not post_contract.get("missing_columns")
+                and not post_contract.get("function_permission_failures")
             )
             source_rollout_ready = bool(
                 contract.get("source_rollout_migration_version")
@@ -199,6 +224,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                     or (source_rollout_ready and quiz_quality_ready)
                 )
                 and personal_learning_ready
+                and checks["postFinalization"]
                 and float(contract.get("verification_threshold") or 0)
                 == QUESTION_VERIFICATION_MIN_CONFIDENCE
             )
@@ -222,6 +248,8 @@ def assess(*, use_cache: bool = True) -> Readiness:
         failures.append("database_contract")
     if not checks["leaderboardPrivacy"]:
         failures.append("leaderboard_privacy")
+    if not checks["postFinalization"]:
+        failures.append("post_finalization")
     if not checks["databasePermissions"]:
         failures.append("database_permissions")
     if not checks["activeQuizRetrieval"]:

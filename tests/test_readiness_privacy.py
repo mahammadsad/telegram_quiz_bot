@@ -65,6 +65,19 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "persisted_checksum": "same",
         },
     )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_post_finalization_contract",
+        lambda: {
+            "ready": True,
+            "post_finalization_migration_version": (
+                readiness_service.POST_FINALIZATION_MIGRATION_VERSION
+            ),
+            "post_finalization_migration_applied": True,
+            "missing_columns": [],
+            "function_permission_failures": [],
+        },
+    )
     readiness_service._CACHE = None
 
 

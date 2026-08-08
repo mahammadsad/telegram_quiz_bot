@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime
 from typing import Any
 
 from config.settings import (
@@ -35,7 +35,6 @@ from storage import (
     quiz_attempts_repo,
     quiz_packs_repo,
     quiz_runs_repo,
-    source_documents_repo,
     users_repo,
 )
 from utils.hashing import normalize_text, question_content_hash, question_hash
@@ -103,10 +102,29 @@ def get_quiz_pack(quiz_id: str) -> dict | None:
 
 def get_ready_quiz_pack(quiz_id: str) -> dict | None:
     """Return only a complete pack whose saved database content is certified."""
-    run = quiz_runs_repo.get(quiz_id)
+    return get_recoverable_quiz_pack(quiz_id, quiz_runs_repo.get(quiz_id))
+
+
+def get_recoverable_quiz_pack(quiz_id: str, run: dict | None) -> dict | None:
+    """Read and revalidate a checksum-certified persisted pack.
+
+    Persisted source ownership is reconstructed per source document so a valid
+    multi-micro-topic pack remains recoverable without weakening the original
+    source/topic relationship checks.
+    """
+    status = run.get("status") if run else None
+    certified_generation_failure = bool(
+        run
+        and status == "generation_failed"
+        and run.get("question_count") == QUESTION_COUNT
+        and run.get("ready_at")
+    )
     if (
         not run
-        or run.get("status") not in {"ready", "posting", "posting_failed", "posted"}
+        or (
+            status not in {"ready", "posting", "posting_failed", "posted"}
+            and not certified_generation_failure
+        )
         or run.get("integrity_verified") is not True
         or int(run.get("checksum_contract_version") or 0) != 2
         or not run.get("generated_checksum")
@@ -116,6 +134,11 @@ def get_ready_quiz_pack(quiz_id: str) -> dict | None:
     pack = get_quiz_pack(quiz_id)
     if not pack or len(pack.get("items") or []) != QUESTION_COUNT:
         return None
+    try:
+        _validate_saved_pack_source_contract(pack)
+    except (ValueError, TypeError):
+        LOG.warning("QUIZ_READ_BLOCKED invalid_saved_source_contract quiz_id=%s", quiz_id)
+        return None
     if checksum_for_pack(pack) != run["persisted_checksum"]:
         LOG.error("QUIZ_READ_BLOCKED checksum_mismatch quiz_id=%s", quiz_id)
         return None
@@ -123,6 +146,67 @@ def get_ready_quiz_pack(quiz_id: str) -> dict | None:
         run.get("negative_mark_penalty"),
     )
     return pack
+
+
+def _validate_saved_pack_source_contract(pack: dict) -> None:
+    meta = pack.get("meta") or {}
+    subject_key = str(meta.get("subject_key") or meta.get("subject") or "")
+    chapter = str(meta.get("chapter") or "")
+    raw: list[dict] = []
+    allowed_source_topics: dict[str, tuple[str, str]] = {}
+    for item in pack.get("items") or []:
+        question = item.get("question") or {}
+        source_id = str(question.get("source_document_id") or "")
+        topic = (
+            str(question.get("micro_topic_id") or ""),
+            str(question.get("micro_topic_key") or ""),
+        )
+        prior_topic = allowed_source_topics.setdefault(source_id, topic)
+        if prior_topic != topic:
+            raise ValueError("One source document cannot own multiple persisted micro-topics.")
+        raw.append({
+            "question": question.get("question_text"),
+            "options": [
+                question.get("option_a"),
+                question.get("option_b"),
+                question.get("option_c"),
+                question.get("option_d"),
+            ],
+            "correct_index": OPTION_LETTERS.find(str(question.get("correct_option") or "")),
+            "explanation": question.get("explanation"),
+            "detailed_explanation": question.get("detailed_explanation"),
+            "subject_key": subject_key,
+            "chapter": chapter,
+            "micro_topic_id": question.get("micro_topic_id"),
+            "micro_topic_key": question.get("micro_topic_key"),
+            "source_document_id": source_id,
+            "source_url": question.get("source_url"),
+            "source_title": question.get("source_title"),
+            "source_domain": question.get("source_domain"),
+            "source_kind": question.get("source_kind"),
+            "source_published_at": question.get("source_published_at"),
+            "source_accessed_at": question.get("source_accessed_at"),
+            "evidence_summary": question.get("evidence_summary"),
+            "fact_version": question.get("fact_version"),
+            "difficulty": question.get("difficulty"),
+            "language": question.get("language"),
+            "verification_status": question.get("verification_status"),
+            "verification_score": question.get("verification_score"),
+            "verification_notes": question.get("verification_notes"),
+            "verification_checks": question.get("verification_checks"),
+            "verified_at": question.get("verified_at"),
+            "verification_model": question.get("verification_model"),
+        })
+    validate_questions(
+        raw,
+        subject_key,
+        chapter,
+        enforce_composition=False,
+        allowed_source_ids=set(allowed_source_topics),
+        allowed_source_topics=allowed_source_topics,
+        required_source_diversity=len(allowed_source_topics),
+        required_topic_diversity=len(set(allowed_source_topics.values())),
+    )
 
 
 def _pack_from_items(quiz_id: str, items: list[dict], session_id: str | None = None) -> dict:
@@ -211,21 +295,26 @@ def record_quiz_pack(
     return saved
 
 
-def mark_pack_posted(pack: dict) -> None:
-    used_at = datetime.now(timezone.utc).isoformat()
-    micro_topic_ids: set[str] = set()
-    for item in pack.get("items", []):
-        question = item["question"]
-        questions_repo.mark_used(
-            question_id=question["id"],
-            usage_count=question.get("usage_count", 0),
-            min_gap_days=SCHEDULER_MIN_REUSE_GAP_DAYS,
-            max_gap_days=SCHEDULER_MAX_REUSE_GAP_DAYS,
-        )
-        if question.get("micro_topic_id"):
-            micro_topic_ids.add(str(question["micro_topic_id"]))
-    for micro_topic_id in micro_topic_ids:
-        source_documents_repo.mark_micro_topic_used(micro_topic_id, used_at)
+def finalize_quiz_post(
+    *,
+    quiz_id: str,
+    worker_id: str,
+    telegram_message_id: int,
+    acknowledged_at: datetime,
+    telegram_chat_id: int,
+    telegram_thread_id: int,
+) -> dict:
+    """Atomically finalize acknowledged delivery and every usage dimension."""
+    return quiz_runs_repo.finalize_post(
+        quiz_id=quiz_id,
+        worker_id=worker_id,
+        telegram_message_id=telegram_message_id,
+        acknowledged_at=acknowledged_at,
+        telegram_chat_id=telegram_chat_id,
+        telegram_thread_id=telegram_thread_id,
+        min_gap_days=SCHEDULER_MIN_REUSE_GAP_DAYS,
+        max_gap_days=SCHEDULER_MAX_REUSE_GAP_DAYS,
+    )
 
 
 def public_quiz_payload(pack: dict) -> dict:

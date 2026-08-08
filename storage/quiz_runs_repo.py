@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from config.settings import QUIZ_CLAIM_TIMEOUT_MINUTES
 from database.client import get_client
-from storage.contracts import Row, as_rows, first_row
+from storage.contracts import Row, as_row, as_rows, first_row
 
 
 def get(quiz_id: str) -> Row | None:
@@ -68,3 +68,74 @@ def update_status(
 def list_for_date(quiz_date: str) -> list[Row]:
     result = get_client().table("quiz_runs").select("*").eq("quiz_date", quiz_date).execute()
     return as_rows(result.data, "quiz_runs.list_for_date")
+
+
+def record_post_intent(
+    *,
+    quiz_id: str,
+    worker_id: str,
+    fingerprint: str,
+    intended_at: str,
+) -> Row:
+    result = get_client().rpc(
+        "record_quiz_post_intent",
+        {
+            "p_quiz_id": quiz_id,
+            "p_worker_id": worker_id,
+            "p_fingerprint": fingerprint,
+            "p_intended_at": intended_at,
+        },
+    ).execute()
+    return as_row(result.data, "record_quiz_post_intent")
+
+
+def finalize_post(
+    *,
+    quiz_id: str,
+    worker_id: str,
+    telegram_message_id: int,
+    acknowledged_at: datetime,
+    telegram_chat_id: int,
+    telegram_thread_id: int,
+    min_gap_days: int,
+    max_gap_days: int,
+) -> Row:
+    result = get_client().rpc(
+        "finalize_quiz_post",
+        {
+            "p_quiz_id": quiz_id,
+            "p_worker_id": worker_id,
+            "p_telegram_message_id": telegram_message_id,
+            "p_acknowledged_at": acknowledged_at.isoformat(),
+            "p_telegram_chat_id": telegram_chat_id,
+            "p_telegram_thread_id": telegram_thread_id,
+            "p_min_gap_days": min_gap_days,
+            "p_max_gap_days": max_gap_days,
+        },
+    ).execute()
+    return as_row(result.data, "finalize_quiz_post")
+
+
+def record_post_unknown(
+    *,
+    quiz_id: str,
+    worker_id: str,
+    telegram_message_id: int,
+    acknowledged_at: datetime,
+    telegram_chat_id: int,
+    telegram_thread_id: int,
+    error_category: str,
+) -> Row:
+    result = get_client().rpc(
+        "record_quiz_post_unknown",
+        {
+            "p_quiz_id": quiz_id,
+            "p_worker_id": worker_id,
+            "p_telegram_message_id": telegram_message_id,
+            "p_acknowledged_at": acknowledged_at.isoformat(),
+            "p_telegram_chat_id": telegram_chat_id,
+            "p_telegram_thread_id": telegram_thread_id,
+            "p_error_category": error_category,
+        },
+    ).execute()
+    return as_row(result.data, "record_quiz_post_unknown")

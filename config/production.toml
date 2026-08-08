@@ -1,0 +1,33 @@
+[meta]
+version = "2026-08-08.1"
+
+[gemini]
+primary_model = "gemini-3.1-flash-lite"
+fallback_model = "gemini-2.5-flash"
+failover_enabled = true
+
+[quiz]
+source_backed_rotation_enabled = true
+verification_min_confidence = 0.85
+question_report_threshold = 3
+question_count = 10
+incorrect_penalty = 0.25
+
+[current_affairs]
+max_source_age_days = 45
+
+[scheduler]
+timezone = "Asia/Kolkata"
+claim_timeout_minutes = 20
+min_reuse_gap_days = 21
+max_reuse_gap_days = 180
+due_grace_minutes = 30
+
+[static_fallback]
+recovery_export_enabled = true
+web_runtime_write_enabled = false
+answer_free = true
+
+[database]
+contract_version = "2.2.0"
+post_finalization_migration_version = "20260808063007"

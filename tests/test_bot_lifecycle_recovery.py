@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import sys
 from datetime import date, datetime
 from zoneinfo import ZoneInfo
 
@@ -10,9 +11,15 @@ import bot
 from config.subjects import QUIZ_SUBJECTS
 from services.gemini_provider_pool import GeminiGenerationError
 from services.question_verification import CHECK_FIELDS
+from services.quiz_lifecycle import DailyHealthReport, RunOutcome
 from services.source_grounding import GroundingBundle, SourceDocument
 from telegram.routing import ForumRouter
 from utils.quiz_ids import build_quiz_id
+
+
+@pytest.fixture(autouse=True)
+def no_persisted_daily_runs(monkeypatch):
+    monkeypatch.setattr(bot.quiz_runs_repo, "list_for_date", lambda _quiz_date: [])
 
 
 def pack_from_questions(questions, subject_key="history", chapter="আধুনিক ভারত"):
@@ -109,11 +116,24 @@ def setup_run(monkeypatch, valid_questions, existing_run=None):
         "load_grounding_bundle",
         lambda *args, **kwargs: grounding_bundle(),
     )
-    monkeypatch.setattr(bot.chapter_history_repo, "record", lambda *args: events.append(("chapter", args)))
     monkeypatch.setattr(bot, "generate_mcqs", lambda *args, **kwargs: (valid_questions, {"provider": "primary", "model": "model", "attempts": 1}))
     monkeypatch.setattr(bot.quiz_pack_service, "record_quiz_pack", lambda *args, **kwargs: events.append(("save_pack", kwargs)) or generated_pack)
     monkeypatch.setattr(bot, "export_static_quiz_json", lambda pack: events.append(("export", None)))
-    monkeypatch.setattr(bot.quiz_pack_service, "mark_pack_posted", lambda pack: events.append(("mark_used", None)))
+    monkeypatch.setattr(
+        bot.quiz_runs_repo,
+        "record_post_intent",
+        lambda **kwargs: events.append(("post_intent", kwargs)) or kwargs,
+    )
+    monkeypatch.setattr(
+        bot.quiz_runs_repo,
+        "record_post_unknown",
+        lambda **kwargs: events.append(("post_unknown", kwargs)) or kwargs,
+    )
+    monkeypatch.setattr(
+        bot.quiz_pack_service,
+        "finalize_quiz_post",
+        lambda **kwargs: events.append(("finalize_post", kwargs)) or kwargs,
+    )
     monkeypatch.setattr(bot, "telegram_api", lambda method, payload: events.append(("telegram", payload)) or {"ok": True, "result": {"message_id": 55, "message_thread_id": payload["message_thread_id"], "chat": {"id": -100}}})
     return events, generated_pack
 
@@ -123,7 +143,9 @@ def test_save_export_and_ready_state_precede_telegram(monkeypatch, valid_questio
     result = bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
     labels = [event[0] if event[0] != "status" else event[1] for event in events]
     assert result == "generated_and_posted"
-    assert labels.index("save_pack") < labels.index("ready") < labels.index("export") < labels.index("telegram") < labels.index("posted")
+    assert labels.index("save_pack") < labels.index("ready") < labels.index("export")
+    assert labels.index("export") < labels.index("post_intent") < labels.index("telegram")
+    assert labels.index("telegram") < labels.index("finalize_post")
     telegram_payload = next(event[1] for event in events if event[0] == "telegram")
     assert isinstance(telegram_payload["message_thread_id"], int)
     assert telegram_payload["message_thread_id"] == router().for_subject("history")
@@ -188,7 +210,7 @@ def test_valid_saved_pack_accepts_only_certified_generation_failure(
 ):
     saved = pack_from_questions(valid_questions)
     monkeypatch.setattr(bot.quiz_pack_service, "get_quiz_pack", lambda quiz_id: saved)
-    monkeypatch.setattr(bot, "checksum_for_pack", lambda pack: "checksum")
+    monkeypatch.setattr(bot.quiz_pack_service, "checksum_for_pack", lambda pack: "checksum")
     certified = {
         "status": "generation_failed",
         "question_count": 10,
@@ -212,24 +234,39 @@ def test_valid_saved_pack_accepts_only_certified_generation_failure(
         assert bot.valid_saved_pack("20260710-history", invalid) is None
 
 
-def test_chapter_history_failure_never_blocks_certified_quiz_post(
+def test_finalization_failure_records_acknowledged_unknown_and_never_retries_send(
     monkeypatch,
     valid_questions,
-    caplog,
 ):
     events, _ = setup_run(monkeypatch, valid_questions)
     monkeypatch.setattr(
-        bot.chapter_history_repo,
-        "record",
-        lambda *args: (_ for _ in ()).throw(RuntimeError("history unavailable")),
+        bot.quiz_pack_service,
+        "finalize_quiz_post",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("database unavailable")),
     )
 
-    result = bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
 
-    assert result == "generated_and_posted"
-    assert ("status", "generation_failed") not in events
-    assert any(event[0] == "telegram" for event in events)
-    assert "CHAPTER_HISTORY_UPDATE_FAILED" in caplog.text
+    assert [event[0] for event in events].count("telegram") == 1
+    unknown = next(event[1] for event in events if event[0] == "post_unknown")
+    assert unknown["telegram_message_id"] == 55
+    assert unknown["error_category"] == "post_finalization_failed"
+
+
+def test_post_intent_failure_releases_claim_without_sending(monkeypatch, valid_questions):
+    events, _ = setup_run(monkeypatch, valid_questions)
+    monkeypatch.setattr(
+        bot.quiz_runs_repo,
+        "record_post_intent",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("database unavailable")),
+    )
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
+
+    assert not any(event[0] == "telegram" for event in events)
+    assert ("status", "posting_failed") in events
 
 
 def test_force_regenerate_uses_explicit_replacement_path(monkeypatch, valid_questions):
@@ -275,12 +312,16 @@ def test_both_providers_failing_never_posts_quiz(monkeypatch, valid_questions):
     events, _ = setup_run(monkeypatch, valid_questions)
     error = GeminiGenerationError("transient", [{"provider": "primary"}, {"provider": "secondary"}], retryable=True)
     monkeypatch.setattr(bot, "generate_mcqs", lambda *args, **kwargs: (_ for _ in ()).throw(error))
-    monkeypatch.setattr(bot, "send_failure_alert", lambda *args: events.append(("alert", None)))
+    monkeypatch.setattr(
+        bot,
+        "send_failure_alert",
+        lambda *args, **kwargs: events.append(("alert", kwargs.get("category"))),
+    )
     with pytest.raises(GeminiGenerationError):
         bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
     assert not any(event[0] == "telegram" for event in events)
     assert ("status", "generation_failed") in events
-    assert ("alert", None) in events
+    assert ("alert", "transient") in events
 
 
 def test_missing_source_stops_before_run_creation_gemini_or_alert(
@@ -336,7 +377,11 @@ def test_checksum_failure_status_is_preserved_and_never_posted(monkeypatch, vali
             "integrity_diagnostic_code": "saved_pack_checksum_mismatch",
         },
     )
-    monkeypatch.setattr(bot, "send_failure_alert", lambda *args: events.append(("alert", None)))
+    monkeypatch.setattr(
+        bot,
+        "send_failure_alert",
+        lambda *args, **kwargs: events.append(("alert", kwargs.get("category"))),
+    )
     with pytest.raises(RuntimeError, match="checksum mismatch"):
         bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
     assert ("status", "generation_failed") not in events
@@ -586,6 +631,179 @@ def test_recovery_reports_source_not_ready_as_unresolved(monkeypatch):
     assert unresolved
 
 
+def test_recovery_four_of_thirteen_is_failed_even_for_non_retryable_errors(
+    monkeypatch,
+):
+    now = datetime(2026, 8, 7, 20, 30, tzinfo=ZoneInfo("Asia/Kolkata"))
+    posted = {subject.key for subject in QUIZ_SUBJECTS[:4]}
+
+    def get_run(quiz_id):
+        subject = quiz_id.split("-", 1)[1]
+        return {"status": "posted"} if subject in posted else None
+
+    class NonRetryableFailure(RuntimeError):
+        category = "quiz_content_collision"
+        retryable = False
+
+    monkeypatch.setattr(bot.quiz_runs_repo, "get", get_run)
+    monkeypatch.setattr(bot, "valid_saved_pack", lambda *args: None)
+    monkeypatch.setattr(
+        bot,
+        "run_subject_quiz",
+        lambda *args, **kwargs: (_ for _ in ()).throw(NonRetryableFailure()),
+    )
+
+    summary, unresolved = bot.recover_missed_quizzes(now=now)
+    report = DailyHealthReport(now.date(), summary)
+
+    assert unresolved
+    assert not report.complete
+    assert report.counts["posted"] == 4
+    assert report.counts["blocked"] == 9
+    assert set(summary.values()) == {
+        "already_posted",
+        "blocked:quiz_content_collision",
+    }
+
+
+def test_daily_health_report_uses_date_rows_and_includes_operational_detail(
+    monkeypatch,
+):
+    logical_date = date(2026, 8, 7)
+    monkeypatch.setattr(
+        bot.quiz_runs_repo,
+        "list_for_date",
+        lambda _quiz_date: [
+            {
+                "subject_key": "computer",
+                "status": "posted",
+                "generation_attempt_count": 2,
+                "telegram_message_id": 2330,
+            },
+            {
+                "subject_key": "bengali",
+                "status": "generation_failed",
+                "retryable": False,
+                "generation_attempt_count": 3,
+                "last_error_category": "quiz_content_collision",
+                "last_error_at": "2026-08-07T03:15:00+00:00",
+            },
+            {
+                "subject_key": "reasoning",
+                "status": "posting_unknown",
+                "generation_attempt_count": 1,
+                "last_error_category": "telegram_delivery_unknown",
+            },
+        ],
+    )
+
+    report = bot.daily_health_report(logical_date, current_hhmm="09:30")
+
+    assert report.counts == {
+        "expected": 13,
+        "posted": 1,
+        "already_posted": 1,
+        "newly_posted": 0,
+        "retrying": 0,
+        "blocked": 1,
+        "unknown": 1,
+        "not_due": 10,
+        "missing": 0,
+    }
+    assert report.as_dict()["subjects"]["bengali"] == {
+        "state": "blocked",
+        "outcome": "blocked:quiz_content_collision",
+        "stage": "generation_failed",
+        "category": "quiz_content_collision",
+        "retryCount": 3,
+        "lastErrorAt": "2026-08-07T03:15:00+00:00",
+        "telegramMessageId": None,
+    }
+    assert "computer: posted / posted / none / attempts=2" in report.as_text()
+
+
+@pytest.mark.parametrize(
+    "outcome",
+    [
+        RunOutcome.SOURCE_NOT_READY,
+        RunOutcome.ALREADY_CLAIMED,
+        RunOutcome.POSTING_OUTCOME_UNKNOWN,
+    ],
+)
+def test_subject_cli_exits_nonzero_for_every_unposted_outcome(
+    monkeypatch,
+    outcome,
+):
+    monkeypatch.setattr(bot, "run_subject_quiz", lambda *args, **kwargs: outcome)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        ["bot.py", "--mode", "subject-quiz", "--subject", "history"],
+    )
+
+    with pytest.raises(SystemExit) as caught:
+        bot.main()
+
+    assert caught.value.code == 1
+
+
+def test_valid_saved_pack_accepts_realistic_diversified_source_contract(
+    monkeypatch,
+    tmp_path,
+    valid_questions,
+):
+    topic_ids = [
+        "11111111-1111-4111-8111-111111111111",
+        "33333333-3333-4333-8333-333333333333",
+        "55555555-5555-4555-8555-555555555555",
+        "77777777-7777-4777-8777-777777777777",
+    ]
+    source_ids = [
+        "22222222-2222-4222-8222-222222222222",
+        "44444444-4444-4444-8444-444444444444",
+        "66666666-6666-4666-8666-666666666666",
+        "88888888-8888-4888-8888-888888888888",
+    ]
+    distribution = [0, 1, 2, 3, 0, 1, 2, 3, 0, 1]
+    diversified = []
+    for row, group in zip(valid_questions, distribution, strict=True):
+        diversified.append({
+            **row,
+            "micro_topic_id": topic_ids[group],
+            "micro_topic_key": f"history:modern-india:topic-{group}",
+            "source_document_id": source_ids[group],
+            "source_url": f"https://ncert.nic.in/history/source-{group}",
+        })
+    saved = pack_from_questions(diversified)
+    run = {
+        "status": "generation_failed",
+        "question_count": 10,
+        "ready_at": "2026-08-07T10:00:00+00:00",
+        "integrity_verified": True,
+        "checksum_contract_version": 2,
+        "generated_checksum": "checksum",
+        "persisted_checksum": "checksum",
+    }
+    monkeypatch.setattr(bot.quiz_pack_service, "get_quiz_pack", lambda quiz_id: saved)
+    monkeypatch.setattr(bot.quiz_pack_service, "checksum_for_pack", lambda pack: "checksum")
+    monkeypatch.setattr(bot.quiz_runs_repo, "get", lambda quiz_id: run)
+
+    recovered = bot.valid_saved_pack("20260710-history", run)
+
+    assert recovered is saved
+    assert bot.quiz_pack_service.get_ready_quiz_pack("20260710-history") is saved
+    public = bot.quiz_pack_service.public_quiz_payload(recovered)
+    assert len(public["qs"]) == 10
+    assert all("correct" not in row for row in public["qs"])
+    monkeypatch.setattr(bot, "WRITE_STATIC_QUIZ_JSON", True)
+    monkeypatch.setattr(bot, "ROOT", tmp_path)
+    static_path = bot.export_static_quiz_json(recovered)
+    assert static_path is not None
+    static_payload = json.loads(static_path.read_text(encoding="utf-8"))
+    assert len(static_payload["qs"]) == 10
+    assert all(set(row) == {"q", "o"} for row in static_payload["qs"])
+
+
 def test_generation_prompt_treats_dynamic_source_text_as_untrusted_data():
     prompt = bot.build_mcq_prompt(
         "history",
@@ -598,6 +816,18 @@ def test_generation_prompt_treats_dynamic_source_text_as_untrusted_data():
 
 
 def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_post_finalization_contract",
+        lambda: {
+            "ready": True,
+            "post_finalization_migration_version": (
+                bot.POST_FINALIZATION_MIGRATION_VERSION
+            ),
+            "post_finalization_migration_applied": True,
+            "function_permission_failures": [],
+        },
+    )
     monkeypatch.setattr(
         bot.schema_contract_repo,
         "get_contract",
@@ -631,6 +861,18 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
 
 
 def test_database_preflight_fails_closed_on_old_or_misgranted_contract(monkeypatch):
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_post_finalization_contract",
+        lambda: {
+            "ready": True,
+            "post_finalization_migration_version": (
+                bot.POST_FINALIZATION_MIGRATION_VERSION
+            ),
+            "post_finalization_migration_applied": True,
+            "function_permission_failures": [],
+        },
+    )
     monkeypatch.setattr(
         bot.schema_contract_repo,
         "get_contract",

@@ -16,6 +16,11 @@ def get_leaderboard_privacy_contract() -> Row:
     return as_row(result.data, "leaderboard privacy contract")
 
 
+def get_post_finalization_contract() -> Row:
+    result = get_client().rpc("get_post_finalization_contract", {}).execute()
+    return as_row(result.data, "post finalization contract")
+
+
 def active_quiz_probe() -> Row | None:
     result = (
         get_client()

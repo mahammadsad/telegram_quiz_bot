@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import html
 import json
 import logging
@@ -19,6 +20,8 @@ from config.settings import (
     APP_TIMEZONE,
     EXPECTED_SUPABASE_PROJECT_REF,
     MINIAPP_SHORT_NAME,
+    PRODUCTION_CONFIG_HASH,
+    PRODUCTION_CONFIG_VERSION,
     SOURCE_BACKED_ROTATION_ENABLED,
     SUPABASE_SERVICE_KEY,
     SUPABASE_URL,
@@ -36,6 +39,7 @@ from database.contract import (
     DATABASE_CONTRACT_KEY,
     DATABASE_CONTRACT_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
+    POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
@@ -46,11 +50,16 @@ from services.gemini_provider_pool import GeminiProviderPool
 from services.question_validation import (
     QUESTION_COUNT,
     QuizValidationError,
-    checksum_for_pack,
     randomize_balanced_answer_positions,
     validate_questions,
 )
-from storage import chapter_history_repo, quiz_runs_repo, schema_contract_repo
+from services.quiz_lifecycle import (
+    DailyHealthReport,
+    RunOutcome,
+    SubjectHealth,
+    is_successful_outcome,
+)
+from storage import quiz_runs_repo, schema_contract_repo
 from telegram.routing import ForumRouter
 from utils.local_time import local_today
 from utils.quiz_ids import build_quiz_id
@@ -392,70 +401,7 @@ def generate_mcqs(
 
 
 def valid_saved_pack(quiz_id: str, run: dict | None = None) -> dict | None:
-    status = run.get("status") if run else None
-    recoverable_certified_failure = bool(
-        run
-        and status == "generation_failed"
-        and run.get("question_count") == QUESTION_COUNT
-        and run.get("ready_at")
-    )
-    if (
-        not run
-        or (
-            status not in {"ready", "posting", "posting_failed", "posted"}
-            and not recoverable_certified_failure
-        )
-        or run.get("integrity_verified") is not True
-        or int(run.get("checksum_contract_version") or 0) != 2
-        or not run.get("generated_checksum")
-        or run.get("generated_checksum") != run.get("persisted_checksum")
-    ):
-        return None
-    pack = quiz_pack_service.get_quiz_pack(quiz_id)
-    if not pack or len(pack.get("items") or []) != QUESTION_COUNT:
-        return None
-    meta = pack.get("meta") or {}
-    subject_key = str(meta.get("subject_key") or meta.get("subject") or "")
-    chapter = meta.get("chapter") or ""
-    raw = []
-    for item in pack["items"]:
-        question = item.get("question") or {}
-        raw.append({
-            "question": question.get("question_text"),
-            "options": [question.get("option_a"), question.get("option_b"), question.get("option_c"), question.get("option_d")],
-            "correct_index": "ABCD".find(str(question.get("correct_option") or "")),
-            "explanation": question.get("explanation"),
-            "detailed_explanation": question.get("detailed_explanation"),
-            "subject_key": subject_key,
-            "chapter": chapter,
-            "micro_topic_id": question.get("micro_topic_id"),
-            "micro_topic_key": question.get("micro_topic_key"),
-            "source_document_id": question.get("source_document_id"),
-            "source_url": question.get("source_url"),
-            "source_title": question.get("source_title"),
-            "source_domain": question.get("source_domain"),
-            "source_kind": question.get("source_kind"),
-            "source_published_at": question.get("source_published_at"),
-            "source_accessed_at": question.get("source_accessed_at"),
-            "evidence_summary": question.get("evidence_summary"),
-            "fact_version": question.get("fact_version"),
-            "difficulty": question.get("difficulty"),
-            "language": question.get("language"),
-            "verification_status": question.get("verification_status"),
-            "verification_score": question.get("verification_score"),
-            "verification_notes": question.get("verification_notes"),
-            "verification_checks": question.get("verification_checks"),
-            "verified_at": question.get("verified_at"),
-            "verification_model": question.get("verification_model"),
-        })
-    try:
-        validate_questions(raw, subject_key, chapter, enforce_composition=False)
-    except (QuizValidationError, ValueError):
-        return None
-    checksum = checksum_for_pack(pack)
-    if run["generated_checksum"] != checksum or run["persisted_checksum"] != checksum:
-        return None
-    return pack
+    return quiz_pack_service.get_recoverable_quiz_pack(quiz_id, run)
 
 
 def export_static_quiz_json(pack: dict) -> Path | None:
@@ -531,7 +477,7 @@ def run_subject_quiz(
     force_post: bool = False,
     force_regenerate: bool = False,
     pool: GeminiProviderPool | None = None,
-) -> str:
+) -> RunOutcome:
     subject = get_subject(subject_key, require_quiz_enabled=True)
     router = validate_runtime_config(require_gemini=False)
     thread_id = router.for_subject(subject_key)  # validated before spending Gemini quota
@@ -539,12 +485,12 @@ def run_subject_quiz(
     quiz_id = build_quiz_id(target_date, subject_key)
     worker_id = _worker_id()
     run = quiz_runs_repo.get(quiz_id)
-    if run and run.get("status") == "posted" and not force_post and not force_regenerate:
+    if run and run.get("status") == "posted" and not force_regenerate:
         LOG.info("QUIZ_ALREADY_POSTED subject=%s quiz_id=%s", subject_key, quiz_id)
-        return "already_posted"
+        return RunOutcome.ALREADY_POSTED
     if run and run.get("status") in {"posting", "posting_unknown"} and not force_post and not force_regenerate:
         LOG.warning("QUIZ_POST_OUTCOME_REQUIRES_REVIEW subject=%s quiz_id=%s", subject_key, quiz_id)
-        return "posting_outcome_unknown"
+        return RunOutcome.POSTING_OUTCOME_UNKNOWN
 
     pack = None if force_regenerate else valid_saved_pack(quiz_id, run)
     used_saved_pack = pack is not None
@@ -570,7 +516,7 @@ def run_subject_quiz(
                 quiz_id,
                 chapter,
             )
-            return "source_not_ready"
+            return RunOutcome.SOURCE_NOT_READY
         _require_gemini_provider()
         if not run:
             quiz_runs_repo.upsert({
@@ -590,7 +536,7 @@ def run_subject_quiz(
             allow_completed=force_regenerate,
         ):
             LOG.info("QUIZ_RUN_ALREADY_CLAIMED subject=%s quiz_id=%s", subject_key, quiz_id)
-            return "already_claimed"
+            return RunOutcome.ALREADY_CLAIMED
         if force_regenerate and run:
             quiz_runs_repo.update_status(
                 quiz_id,
@@ -678,7 +624,7 @@ def run_subject_quiz(
                     )
             except Exception:
                 LOG.warning("QUIZ_FAILURE_STATUS_UPDATE_SKIPPED subject=%s quiz_id=%s", subject_key, quiz_id)
-            send_failure_alert(subject_key, quiz_id, router)
+            send_failure_alert(subject_key, quiz_id, router, category=str(category))
             raise
 
     if used_saved_pack and run and run.get("status") == "generation_failed":
@@ -694,10 +640,6 @@ def run_subject_quiz(
 
     chapter = (pack.get("meta") or {}).get("chapter") or (run or {}).get("chapter") or ""
     try:
-        chapter_history_repo.record(subject_key, chapter, target_date.isoformat(), quiz_id)
-    except Exception:
-        LOG.warning("CHAPTER_HISTORY_UPDATE_FAILED subject=%s quiz_id=%s", subject_key, quiz_id)
-    try:
         export_static_quiz_json(pack)
     except Exception:
         LOG.warning("STATIC_QUIZ_EXPORT_FAILED subject=%s quiz_id=%s", subject_key, quiz_id)
@@ -708,52 +650,149 @@ def run_subject_quiz(
         allow_completed=force_post or force_regenerate,
     ):
         LOG.info("QUIZ_POST_ALREADY_CLAIMED subject=%s quiz_id=%s", subject_key, quiz_id)
-        return "already_claimed"
+        return RunOutcome.ALREADY_CLAIMED
+    post_text = _quiz_post_text(subject.telegram_display_name, chapter)
+    post_url = build_miniapp_url(quiz_id)
     telegram_acknowledged = False
+    posting_intent_persisted = False
     try:
+        intended_at = datetime.now(timezone.utc)
+        quiz_runs_repo.record_post_intent(
+            quiz_id=quiz_id,
+            worker_id=worker_id,
+            fingerprint=_posting_fingerprint(
+                quiz_id=quiz_id,
+                thread_id=thread_id,
+                text=post_text,
+                url=post_url,
+            ),
+            intended_at=intended_at.isoformat(),
+        )
+        posting_intent_persisted = True
         response = telegram_api("sendMessage", {
             "chat_id": TELEGRAM_CHAT_ID,
             "message_thread_id": thread_id,
-            "text": _quiz_post_text(subject.telegram_display_name, chapter),
+            "text": post_text,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
-            "reply_markup": {"inline_keyboard": [[{"text": "কুইজ শুরু করুন", "url": build_miniapp_url(quiz_id)}]]},
+            "reply_markup": {"inline_keyboard": [[{"text": "কুইজ শুরু করুন", "url": post_url}]]},
         })
         message = response.get("result") or {}
         telegram_acknowledged = True
-        quiz_runs_repo.update_status(
-            quiz_id,
-            "posted",
-            claimed_by=worker_id,
-            release_claim=True,
-            posted_at=datetime.now(timezone.utc).isoformat(),
-            telegram_chat_id=(message.get("chat") or {}).get("id", _chat_id_as_int(TELEGRAM_CHAT_ID)),
+        acknowledged_at = datetime.now(timezone.utc)
+        message_id = message.get("message_id")
+        if isinstance(message_id, bool) or not isinstance(message_id, int):
+            raise RuntimeError("Telegram acknowledgement did not contain a numeric message ID.")
+        quiz_pack_service.finalize_quiz_post(
+            quiz_id=quiz_id,
+            worker_id=worker_id,
+            telegram_message_id=message_id,
+            acknowledged_at=acknowledged_at,
+            telegram_chat_id=(message.get("chat") or {}).get(
+                "id", _chat_id_as_int(TELEGRAM_CHAT_ID)
+            ),
             telegram_thread_id=message.get("message_thread_id", thread_id),
-            telegram_message_id=message.get("message_id"),
-            last_error_category=None,
         )
-        try:
-            quiz_pack_service.mark_pack_posted(pack)
-        except Exception:
-            # Delivery is already confirmed and persisted. Question-usage
-            # metadata is secondary and must never turn this into a repost.
-            LOG.warning("QUESTION_USAGE_UPDATE_FAILED subject=%s quiz_id=%s", subject_key, quiz_id)
         LOG.info("TELEGRAM_QUIZ_POSTED subject=%s quiz_id=%s thread_id_configured=true message_id=%s", subject_key, quiz_id, message.get("message_id"))
-        return "posted_from_saved_quiz" if used_saved_pack else "generated_and_posted"
+        return (
+            RunOutcome.POSTED_FROM_SAVED_QUIZ
+            if used_saved_pack
+            else RunOutcome.GENERATED_AND_POSTED
+        )
     except Exception as exc:
         delivery_uncertain = telegram_acknowledged or bool(getattr(exc, "delivery_uncertain", False))
         try:
-            quiz_runs_repo.update_status(
-                quiz_id,
-                "posting_unknown" if delivery_uncertain else "posting_failed",
-                claimed_by=worker_id,
-                release_claim=True,
-                last_error_category="telegram_delivery_unknown" if delivery_uncertain else "telegram_posting_failed",
-                last_error_at=datetime.now(timezone.utc).isoformat(),
-            )
+            if telegram_acknowledged:
+                acknowledged_message_id = message.get("message_id")
+                if isinstance(acknowledged_message_id, bool) or not isinstance(
+                    acknowledged_message_id, int
+                ):
+                    raise RuntimeError("Acknowledged Telegram message ID is unavailable.")
+                quiz_runs_repo.record_post_unknown(
+                    quiz_id=quiz_id,
+                    worker_id=worker_id,
+                    telegram_message_id=acknowledged_message_id,
+                    acknowledged_at=datetime.now(timezone.utc),
+                    telegram_chat_id=(message.get("chat") or {}).get(
+                        "id", _chat_id_as_int(TELEGRAM_CHAT_ID)
+                    ),
+                    telegram_thread_id=message.get("message_thread_id", thread_id),
+                    error_category="post_finalization_failed",
+                )
+            else:
+                failure_category = (
+                    "post_intent_failed"
+                    if not posting_intent_persisted
+                    else (
+                        "telegram_delivery_unknown"
+                        if delivery_uncertain
+                        else "telegram_posting_failed"
+                    )
+                )
+                quiz_runs_repo.update_status(
+                    quiz_id,
+                    "posting_unknown" if delivery_uncertain else "posting_failed",
+                    claimed_by=worker_id,
+                    release_claim=True,
+                    last_error_category=failure_category,
+                    last_error_at=datetime.now(timezone.utc).isoformat(),
+                )
         except Exception:
             LOG.warning("TELEGRAM_FAILURE_STATUS_UPDATE_SKIPPED subject=%s quiz_id=%s", subject_key, quiz_id)
         raise
+
+
+def _run_health_outcome(run: dict | None) -> str:
+    if not run:
+        return "missing"
+    status = str(run.get("status") or "unknown")
+    if status == "posted":
+        return str(RunOutcome.ALREADY_POSTED)
+    if status == "posting_unknown":
+        return str(RunOutcome.POSTING_OUTCOME_UNKNOWN)
+    if status in {"pending", "generating", "generated", "ready", "posting"}:
+        return f"retrying:{status}"
+    if status in {"generation_failed", "posting_failed", "integrity_failed"}:
+        category = str(run.get("last_error_category") or status)
+        prefix = "retrying" if run.get("retryable") is True else "blocked"
+        return f"{prefix}:{category}"
+    return f"blocked:{status}"
+
+
+def daily_health_report(
+    logical_date: date,
+    *,
+    current_hhmm: str,
+    outcomes: dict[str, str] | None = None,
+) -> DailyHealthReport:
+    """Build the interim report from the authoritative run rows for a date."""
+    run_by_subject = {
+        str(run.get("subject_key")): run
+        for run in quiz_runs_repo.list_for_date(logical_date.isoformat())
+    }
+    subject_outcomes: dict[str, str] = {}
+    details: dict[str, SubjectHealth] = {}
+    for subject in QUIZ_SUBJECTS:
+        due = bool(
+            subject.scheduled_time_ist and subject.scheduled_time_ist <= current_hhmm
+        )
+        run = run_by_subject.get(subject.key)
+        outcome = (
+            "not_due"
+            if not due
+            else (outcomes or {}).get(subject.key, _run_health_outcome(run))
+        )
+        subject_outcomes[subject.key] = outcome
+        details[subject.key] = SubjectHealth(
+            stage=str((run or {}).get("status") or ("not_due" if not due else "missing")),
+            category=(run or {}).get("last_error_category") or (
+                outcome.split(":", 1)[1] if ":" in outcome else None
+            ),
+            retry_count=int((run or {}).get("generation_attempt_count") or 0),
+            last_error_at=(run or {}).get("last_error_at"),
+            telegram_message_id=(run or {}).get("telegram_message_id"),
+        )
+    return DailyHealthReport(logical_date, subject_outcomes, details)
 
 
 def recover_missed_quizzes(*, now: datetime | None = None, pool: GeminiProviderPool | None = None) -> tuple[dict[str, str], bool]:
@@ -763,7 +802,6 @@ def recover_missed_quizzes(*, now: datetime | None = None, pool: GeminiProviderP
     today = current.astimezone(ZoneInfo(APP_TIMEZONE)).date()
     current_hhmm = current.astimezone(ZoneInfo(APP_TIMEZONE)).strftime("%H:%M")
     summary: dict[str, str] = {}
-    unresolved = False
     for subject in QUIZ_SUBJECTS:
         if not subject.scheduled_time_ist or subject.scheduled_time_ist > current_hhmm:
             summary[subject.key] = "not_due"
@@ -773,19 +811,22 @@ def recover_missed_quizzes(*, now: datetime | None = None, pool: GeminiProviderP
         if run and run.get("status") == "posted":
             summary[subject.key] = "already_posted"
             continue
-        had_saved = bool(valid_saved_pack(quiz_id, run))
         try:
             result = run_subject_quiz(subject.key, target_date=today, pool=pool)
-            if result in {"already_claimed", "posting_outcome_unknown", "source_not_ready"}:
-                summary[subject.key] = result
-                unresolved = True
-            else:
-                summary[subject.key] = "posted_from_saved_quiz" if had_saved else result
+            summary[subject.key] = str(result)
         except Exception as exc:
-            summary[subject.key] = "generation_failed_retryable" if getattr(exc, "retryable", True) else "failed_non_retryable"
-            unresolved = unresolved or getattr(exc, "retryable", True)
+            category = str(getattr(exc, "category", type(exc).__name__)).strip() or "unknown_error"
+            prefix = "retrying" if bool(getattr(exc, "retryable", True)) else "blocked"
+            summary[subject.key] = f"{prefix}:{category}"
+    report = daily_health_report(
+        today,
+        current_hhmm=current_hhmm,
+        outcomes=summary,
+    )
     LOG.info("RECOVERY_SUMMARY %s", " ".join(f"{key}={value}" for key, value in summary.items()))
-    return summary, unresolved
+    LOG.info("DAILY_HEALTH_REPORT %s", json.dumps(report.as_dict(), sort_keys=True))
+    LOG.info("DAILY_HEALTH_REPORT_TEXT\n%s", report.as_text())
+    return summary, not report.complete
 
 
 def telegram_api(method: str, payload: dict) -> dict:
@@ -809,12 +850,18 @@ def telegram_api(method: str, payload: dict) -> dict:
     return result
 
 
-def send_failure_alert(subject_key: str, quiz_id: str, router: ForumRouter | None = None) -> None:
+def send_failure_alert(
+    subject_key: str,
+    quiz_id: str,
+    router: ForumRouter | None = None,
+    *,
+    category: str = "generation_error",
+) -> None:
     subject = get_subject(subject_key, require_quiz_enabled=True)
     text = (
         "⚠️ Mock Test তৈরি করা যায়নি\n\n"
         f"বিষয়: {subject.telegram_display_name}\nQuiz ID: {quiz_id}\n\n"
-        "Primary ও Secondary Gemini provider সাময়িকভাবে ব্যর্থ হয়েছে।\n"
+        f"ব্যর্থতার ধরণ: {html.escape(category)}\n"
         "অসম্পূর্ণ Quiz পোস্ট করা হয়নি।\nRecovery process পরে আবার চেষ্টা করবে।"
     )
     payload: dict = {"chat_id": TELEGRAM_ADMIN_CHAT_ID or TELEGRAM_CHAT_ID, "text": text}
@@ -860,15 +907,20 @@ def preflight() -> dict[str, bool]:
     }
     for key, value in values.items():
         print(f"{key}={str(value).lower()}")
+    print(f"production_config_version={PRODUCTION_CONFIG_VERSION}")
+    print(f"production_config_hash={PRODUCTION_CONFIG_HASH}")
     return values
 
 
 def validate_database_schema() -> None:
     """Verify the authoritative versioned schema, signatures, grants, and RLS."""
     contract = schema_contract_repo.get_contract()
+    post_contract = schema_contract_repo.get_post_finalization_contract()
     permission_failures = (
         contract.get("function_permission_failures") or []
-    ) + (contract.get("table_permission_failures") or [])
+    ) + (contract.get("table_permission_failures") or []) + (
+        post_contract.get("function_permission_failures") or []
+    )
     valid = bool(
         contract.get("ready")
         and contract.get("contract_key") == DATABASE_CONTRACT_KEY
@@ -878,6 +930,10 @@ def validate_database_schema() -> None:
         == PERSONAL_LEARNING_MIGRATION_VERSION
         and contract.get("personal_learning_migration_applied") is True
         and contract.get("personal_learning_projection_ready") is True
+        and post_contract.get("ready") is True
+        and post_contract.get("post_finalization_migration_version")
+        == POST_FINALIZATION_MIGRATION_VERSION
+        and post_contract.get("post_finalization_migration_applied") is True
         and (
             not SOURCE_BACKED_ROTATION_ENABLED
             or (
@@ -927,6 +983,22 @@ def _worker_id() -> str:
     return f"{run_id}:{run_attempt}:{uuid.uuid4().hex[:12]}"
 
 
+def _posting_fingerprint(*, quiz_id: str, thread_id: int, text: str, url: str) -> str:
+    payload = json.dumps(
+        {
+            "quiz_id": quiz_id,
+            "chat_id": str(TELEGRAM_CHAT_ID),
+            "thread_id": thread_id,
+            "text": text,
+            "url": url,
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Subject-scoped Telegram quiz bot")
     parser.add_argument(
@@ -952,11 +1024,17 @@ def main() -> None:
         if args.mode == "subject-quiz":
             if not args.subject:
                 parser.error("--subject is required for subject-quiz mode.")
-            run_subject_quiz(args.subject, force_post=args.force_post, force_regenerate=args.force_regenerate)
+            outcome = run_subject_quiz(
+                args.subject,
+                force_post=args.force_post,
+                force_regenerate=args.force_regenerate,
+            )
+            if not is_successful_outcome(outcome):
+                raise RuntimeError(f"Subject quiz remains unresolved: {outcome}.")
         elif args.mode == "recover-missed-quizzes":
             _, unresolved = recover_missed_quizzes()
             if unresolved:
-                raise RuntimeError("Recovery finished with unresolved retryable failures.")
+                raise RuntimeError("Recovery finished with due quizzes unresolved.")
         elif args.mode == "announce":
             send_schedule_announcement()
         elif args.mode == "export-static-fallbacks":

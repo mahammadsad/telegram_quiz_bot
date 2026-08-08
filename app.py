@@ -306,6 +306,8 @@ def health_live() -> dict:
         "status": "live",
         "applicationVersion": app.version,
         "timezone": APP_TIMEZONE,
+        "productionConfigVersion": readiness_service.PRODUCTION_CONFIG_VERSION,
+        "productionConfigHash": readiness_service.PRODUCTION_CONFIG_HASH,
     }
 
 

@@ -18,6 +18,7 @@ from database.contract import (
     DATABASE_CONTRACT_VERSION,
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
+    POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
@@ -53,7 +54,9 @@ def connect(database_url: str) -> psycopg.Connection:
 
 @pytest.fixture(scope="module")
 def catalogue(database_url: str) -> Catalogue:
-    with connect(database_url) as connection:
+    with psycopg.connect(
+        database_url, row_factory=dict_row, autocommit=True
+    ) as connection:
         chapter = connection.execute(
             """
             select c.id, mt.id as micro_topic_id, mt.key
@@ -211,6 +214,228 @@ def save_quiz(
         assert result["generated_checksum"] == checksum
         assert result["persisted_checksum"] == checksum
         return result
+
+
+def post_ready_quiz(
+    connection: psycopg.Connection,
+    *,
+    quiz_id: str,
+    worker_id: str,
+    message_id: int,
+) -> dict:
+    claimed = connection.execute(
+        "select * from public.claim_quiz_run(%s, %s, 'posting', 20, false)",
+        (quiz_id, worker_id),
+    ).fetchone()
+    assert claimed and claimed["status"] == "posting"
+    intent = connection.execute(
+        "select public.record_quiz_post_intent(%s, %s, %s, now()) as result",
+        (quiz_id, worker_id, "a" * 64),
+    ).fetchone()["result"]
+    assert intent["status"] == "posting"
+    return connection.execute(
+        """
+        select public.finalize_quiz_post(
+            %s, %s, %s, now(), -100, 17, 21, 180
+        ) as result
+        """,
+        (quiz_id, worker_id, message_id),
+    ).fetchone()["result"]
+
+
+def test_post_finalization_contract_and_atomic_idempotent_usage(
+    database_url: str,
+    catalogue: Catalogue,
+) -> None:
+    quiz_id = "20261010-history"
+    worker_id = "post-finalize-worker"
+    raw = deepcopy(raw_questions(catalogue))
+    for index, question in enumerate(raw):
+        question["question"] = f"পোস্ট চূড়ান্তকরণ পরীক্ষা {index} কী?"
+    save_quiz(database_url, quiz_id, "2026-10-10", raw, worker_id=worker_id)
+
+    with psycopg.connect(
+        database_url, row_factory=dict_row, autocommit=True
+    ) as connection:
+        contract = connection.execute(
+            "select public.get_post_finalization_contract() as result"
+        ).fetchone()["result"]
+        assert contract["ready"] is True
+        assert contract["post_finalization_migration_version"] == (
+            POST_FINALIZATION_MIGRATION_VERSION
+        )
+        question_before = connection.execute(
+            """
+            select q.id, q.usage_count
+            from public.quiz_questions qq
+            join public.questions q on q.id = qq.question_id
+            where qq.quiz_id = %s order by qq.question_order
+            """,
+            (quiz_id,),
+        ).fetchall()
+        topic_before = connection.execute(
+            "select usage_count from public.quiz_micro_topics where id = %s",
+            (catalogue.micro_topic_id,),
+        ).fetchone()["usage_count"]
+        source_before = connection.execute(
+            "select usage_count from public.source_documents where id = %s",
+            (SOURCE_ID,),
+        ).fetchone()["usage_count"]
+        chapter_before = connection.execute(
+            """
+            select usage_count from public.quiz_chapters
+            where subject_key = 'history' and name = 'আধুনিক ভারত'
+            """
+        ).fetchone()["usage_count"]
+
+        finalized = post_ready_quiz(
+            connection,
+            quiz_id=quiz_id,
+            worker_id=worker_id,
+            message_id=501,
+        )
+        assert finalized["status"] == "posted"
+        assert finalized["idempotent_replay"] is False
+
+        replay = connection.execute(
+            """
+            select public.finalize_quiz_post(
+                %s, %s, 501, now(), -100, 17, 21, 180
+            ) as result
+            """,
+            (quiz_id, worker_id),
+        ).fetchone()["result"]
+        assert replay["idempotent_replay"] is True
+
+        question_after = connection.execute(
+            """
+            select q.id, q.usage_count
+            from public.quiz_questions qq
+            join public.questions q on q.id = qq.question_id
+            where qq.quiz_id = %s order by qq.question_order
+            """,
+            (quiz_id,),
+        ).fetchall()
+        assert [row["usage_count"] for row in question_after] == [
+            row["usage_count"] + 1 for row in question_before
+        ]
+        assert connection.execute(
+            "select usage_count from public.quiz_micro_topics where id = %s",
+            (catalogue.micro_topic_id,),
+        ).fetchone()["usage_count"] == topic_before + 10
+        assert connection.execute(
+            "select usage_count from public.source_documents where id = %s",
+            (SOURCE_ID,),
+        ).fetchone()["usage_count"] == source_before + 10
+        assert connection.execute(
+            """
+            select usage_count from public.quiz_chapters
+            where subject_key = 'history' and name = 'আধুনিক ভারত'
+            """
+        ).fetchone()["usage_count"] == chapter_before + 1
+        history = connection.execute(
+            """
+            select quiz_id from public.chapter_history
+            where subject_key = 'history' and selected_for = '2026-10-10'
+            """
+        ).fetchone()
+        assert history["quiz_id"] == quiz_id
+
+        with pytest.raises(
+            psycopg.errors.RaiseException,
+            match="different Telegram message",
+        ):
+            connection.execute(
+                """
+                select public.finalize_quiz_post(
+                    %s, %s, 502, now(), -100, 17, 21, 180
+                )
+                """,
+                (quiz_id, worker_id),
+            )
+
+
+def test_post_finalization_rolls_back_every_usage_write_on_failure(
+    database_url: str,
+    catalogue: Catalogue,
+) -> None:
+    quiz_id = "20261011-history"
+    worker_id = "post-rollback-worker"
+    raw = deepcopy(raw_questions(catalogue))
+    for index, question in enumerate(raw):
+        question["question"] = f"পোস্ট রোলব্যাক পরীক্ষা {index} কী?"
+    save_quiz(database_url, quiz_id, "2026-10-11", raw, worker_id=worker_id)
+
+    with psycopg.connect(
+        database_url, row_factory=dict_row, autocommit=True
+    ) as connection:
+        connection.execute(
+            "select * from public.claim_quiz_run(%s, %s, 'posting', 20, false)",
+            (quiz_id, worker_id),
+        )
+        connection.execute(
+            "select public.record_quiz_post_intent(%s, %s, %s, now())",
+            (quiz_id, worker_id, "b" * 64),
+        )
+        before = connection.execute(
+            """
+            select q.id, q.usage_count
+            from public.quiz_questions qq
+            join public.questions q on q.id = qq.question_id
+            where qq.quiz_id = %s order by qq.question_order
+            """,
+            (quiz_id,),
+        ).fetchall()
+        connection.execute(
+            """
+            create or replace function public.reject_test_source_usage()
+            returns trigger language plpgsql as $$
+            begin
+                raise exception 'forced source usage failure';
+            end;
+            $$
+            """
+        )
+        connection.execute(
+            """
+            create trigger reject_test_source_usage
+            before update on public.source_documents
+            for each row execute function public.reject_test_source_usage()
+            """
+        )
+        try:
+            with pytest.raises(
+                psycopg.errors.RaiseException,
+                match="forced source usage failure",
+            ):
+                connection.execute(
+                    """
+                    select public.finalize_quiz_post(
+                        %s, %s, 601, now(), -100, 17, 21, 180
+                    )
+                    """,
+                    (quiz_id, worker_id),
+                )
+            after = connection.execute(
+                """
+                select q.id, q.usage_count
+                from public.quiz_questions qq
+                join public.questions q on q.id = qq.question_id
+                where qq.quiz_id = %s order by qq.question_order
+                """,
+                (quiz_id,),
+            ).fetchall()
+            assert after == before
+            run = connection.execute(
+                "select status, telegram_message_id from public.quiz_runs where quiz_id = %s",
+                (quiz_id,),
+            ).fetchone()
+            assert run == {"status": "posting", "telegram_message_id": None}
+        finally:
+            connection.execute(
+                "drop trigger if exists reject_test_source_usage on public.source_documents"
+            )
+            connection.execute("drop function if exists public.reject_test_source_usage()")
 
 
 @pytest.fixture(scope="module")
