@@ -164,6 +164,8 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert "body.get(\"leaderboardPrivacyMigrationVersion\")" in source
     assert "body.get(\"postFinalizationMigrationVersion\")" in source
     assert 'body.get("checks", {}).get("postFinalization") is not True' in source
+    assert "body.get(\"quizJobsMigrationVersion\")" in source
+    assert 'body.get("checks", {}).get("durableQuizJobs") is not True' in source
     assert '"7.1.0"' not in source
 
 

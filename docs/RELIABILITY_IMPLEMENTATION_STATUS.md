@@ -9,9 +9,9 @@ Baseline commit: `e390751782f6c0acf066b54273da1ceb8c65e5e1`
 ## Current phase
 
 Phase A is published in draft PR #26 and both GitHub Actions jobs are green.
-Phase B durable scheduling is implemented locally. Its unit/static gates are
-green, but it is not approved for deployment until the new migration and
-concurrency suite pass against disposable PostgreSQL and staging.
+Phase B durable scheduling is published in draft PR #27. Its complete GitHub
+gate and hosted staging database gate are green; application deployment and a
+private staging lifecycle still gate production.
 
 ## Implemented
 
@@ -47,8 +47,13 @@ concurrency suite pass against disposable PostgreSQL and staging.
   compile, and static source validation (110 rows/29 chapters) passed.
 - The new migration also parsed successfully as 22 PostgreSQL statements.
 - Phase A remote CI: quality/tests and mobile-browser jobs both passed.
-- Phase B checkpoint: 320 non-database tests passed; Ruff, mypy (64 production
-  files), compile checks, and migration parsing (44 statements) passed.
+- Phase B GitHub checkpoint: the disposable PostgreSQL migration build, 344
+  tests including concurrent exclusive claims, static-source validation,
+  security contract, and mobile-browser suite passed.
+- Hosted staging: both new migrations are recorded, both feature contracts
+  report `ready=true` with no permission failures, a rollback-only 13-job
+  ensure/claim/event simulation passed, and the Security Advisor has zero
+  errors (the one warning is the pre-existing `public.pg_trgm` extension).
 
 ## Deployment prerequisites
 
