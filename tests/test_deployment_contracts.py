@@ -281,6 +281,7 @@ def test_versioned_production_manifest_matches_deployment_intent() -> None:
         "deterministic_proof_version": 1,
         "require_new_candidate_proof": True,
     }
+    assert PRODUCTION_CONFIG["scheduler"]["dispatcher_max_retries"] == 8
     assert PRODUCTION_CONFIG["database"]["post_finalization_migration_version"] == (POST_FINALIZATION_MIGRATION_VERSION)
     assert PRODUCTION_CONFIG["database"]["quiz_jobs_migration_version"] == (QUIZ_JOBS_MIGRATION_VERSION)
     assert (
