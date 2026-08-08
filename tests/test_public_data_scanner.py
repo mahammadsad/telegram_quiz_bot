@@ -7,7 +7,13 @@ from scripts import check_public_data
 
 
 def _minimum_frontend(root: Path) -> None:
-    for filename in ("index.html", "dashboard.html", "practice.html", "settings.html"):
+    for filename in (
+        "index.html",
+        "dashboard.html",
+        "practice.html",
+        "settings.html",
+        "mock.html",
+    ):
         (root / filename).write_text("<!doctype html><title>safe</title>", encoding="utf-8")
 
 

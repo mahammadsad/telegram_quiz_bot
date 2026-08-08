@@ -1,5 +1,5 @@
 [meta]
-version = "2026-08-08.9"
+version = "2026-08-08.10"
 
 [gemini]
 primary_model = "gemini-3.1-flash-lite"

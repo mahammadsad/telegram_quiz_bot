@@ -4,8 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="quiz-api-base" content="" />
+<meta name="theme-color" content="#0f766e" />
 <title>পছন্দ ও গোপনীয়তা</title>
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="icon" href="/pwa-icon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/miniapp-shell.css" />
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="/miniapp-shell.js" defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -42,7 +47,7 @@
       <p class="section-note">আপনার লক্ষ্য ও কুইজের ধরন ঠিক করুন।</p>
       <div class="form-grid">
         <label class="field-label">দৈনিক প্রশ্ন লক্ষ্য<input class="field" id="daily-target" type="number" min="1" max="130" required /></label>
-        <label class="field-label">পছন্দের ভাষা<select class="field" id="language"><option value="bn">বাংলা</option><option value="hi">হিন্দি</option><option value="en">English</option></select></label>
+        <label class="field-label">ইন্টারফেস ভাষা<select class="field" id="language" aria-describedby="language-support"><option value="bn">বাংলা</option></select><small id="language-support">সম্পূর্ণ অনুবাদ ও পরীক্ষা শেষ না হওয়া পর্যন্ত শুধু বাংলা ইন্টারফেস সমর্থিত।</small></label>
         <label class="field-label">কুইজ মোড<select class="field" id="quiz-mode"><option value="timed">সময়বদ্ধ</option><option value="practice">অনুশীলন</option></select></label>
         <label class="field-label">কঠিনতার পছন্দ<select class="field" id="difficulty"><option value="adaptive">স্বয়ংক্রিয়</option><option value="easy">সহজ</option><option value="medium">মাঝারি</option><option value="hard">কঠিন</option></select></label>
         <div class="wide"><b class="group-title">টার্গেট পরীক্ষা</b><div class="checks" id="exam-checks"></div></div>
@@ -150,7 +155,7 @@
   }
 
   function fillPreferences(prefs){
-    el("daily-target").value=prefs.dailyQuestionTarget||30;el("language").value=prefs.preferredLanguage||"bn";el("quiz-mode").value=prefs.quizMode||"timed";el("difficulty").value=prefs.difficultyPreference||"adaptive";el("display-name").value=prefs.publicDisplayName||"";
+    el("daily-target").value=prefs.dailyQuestionTarget||30;el("language").value="bn";el("quiz-mode").value=prefs.quizMode||"timed";el("difficulty").value=prefs.difficultyPreference||"adaptive";el("display-name").value=prefs.publicDisplayName||"";
     el("leaderboard-visible").checked=prefs.leaderboardVisible!==false;el("username-visible").checked=!!prefs.usernameVisible;el("reminder").checked=false;el("revision-sound").checked=prefs.revisionSoundEnabled!==false;el("revision-vibration").checked=prefs.revisionVibrationEnabled===true;
     localPreference("revisionSoundEnabled",el("revision-sound").checked);localPreference("revisionVibrationEnabled",el("revision-vibration").checked);checkValues("exam-checks",prefs.targetExams||[]);checkValues("subject-checks",prefs.preferredSubjects||[]);
   }

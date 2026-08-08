@@ -6,6 +6,9 @@ INDEX = (ROOT / "index.html").read_text(encoding="utf-8")
 PRACTICE = (ROOT / "practice.html").read_text(encoding="utf-8")
 DASHBOARD = (ROOT / "dashboard.html").read_text(encoding="utf-8")
 SETTINGS = (ROOT / "settings.html").read_text(encoding="utf-8")
+MOCK = (ROOT / "mock.html").read_text(encoding="utf-8")
+SHELL = (ROOT / "miniapp-shell.js").read_text(encoding="utf-8")
+WORKER = (ROOT / "service-worker.js").read_text(encoding="utf-8")
 
 
 def test_quiz_ui_autosaves_resumes_navigates_and_confirms_submission():
@@ -104,6 +107,53 @@ def test_preferences_and_privacy_have_a_dedicated_settings_page():
     reminder = re.search(r'<input id="reminder"[^>]+>', SETTINGS)
     assert reminder and "disabled" in reminder.group(0)
     assert "dailyReminderEnabled:false" in SETTINGS
+
+
+def test_only_a_complete_locale_is_advertised() -> None:
+    language = re.search(r'<select class="field" id="language"[^>]*>(.*?)</select>', SETTINGS)
+    assert language
+    assert language.group(1).count("<option") == 1
+    assert 'value="bn"' in language.group(1)
+    assert 'value="hi"' not in language.group(1)
+    assert 'value="en"' not in language.group(1)
+    assert 'supportedLocales = Object.freeze(["bn"])' in SHELL
+
+
+def test_pwa_cache_is_fail_closed_for_answer_material() -> None:
+    for source in (INDEX, DASHBOARD, PRACTICE, SETTINGS, MOCK):
+        assert 'rel="manifest" href="/manifest.webmanifest"' in source
+        assert 'src="/miniapp-shell.js" defer' in source
+    assert 'X-Answer-Free-Payload' in WORKER
+    assert 'response.headers.get("X-Answer-Free-Payload") === "1"' in WORKER
+    assert 'url.pathname.startsWith("/api/")' in WORKER
+    for sensitive in ("attempt", "submit", "leaderboard", "correctIndex", "explanation"):
+        assert sensitive not in WORKER.split("const SHELL_URLS", 1)[1].split("];", 1)[0]
+    assert 'fetch(request, {cache: "no-store"})' in WORKER
+
+
+def test_timed_mock_ui_has_durable_progress_sections_and_results() -> None:
+    for contract in (
+        "telegram-mock-draft:",
+        '"/attempts/start"',
+        '"/progress"',
+        '"/sections/advance"',
+        '"/submit"',
+        'id="section-strip"',
+        'id="timer"',
+        'id="palette"',
+        'id="mark-review"',
+        'id="submit-modal"',
+        'id="section-analysis"',
+        'id="topic-analysis"',
+        "autoSubmitPending",
+        "markedForReview",
+        "responseTimeSeconds",
+    ):
+        assert contract in MOCK
+    draft = MOCK.split("function saveDraft", 1)[1].split("function discardDraft", 1)[0]
+    assert "initData" not in draft
+    assert "correctIndex" not in draft
+    assert "explanation" not in draft
 
 
 def test_revision_feedback_is_explicitly_server_mode_only_and_idempotent():
@@ -224,6 +274,7 @@ def test_every_static_button_and_link_has_a_real_navigation_or_handler_contract(
         ("dashboard.html", DASHBOARD),
         ("practice.html", PRACTICE),
         ("settings.html", SETTINGS),
+        ("mock.html", MOCK),
     ):
         for tag in re.findall(r"<button\b[^>]*>", source):
             match = re.search(r'\bid="([^"]+)"', tag)

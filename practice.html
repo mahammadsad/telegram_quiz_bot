@@ -4,8 +4,13 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="quiz-api-base" content="" />
+<meta name="theme-color" content="#0f766e" />
 <title>ব্যক্তিগত অনুশীলন</title>
+<link rel="manifest" href="/manifest.webmanifest" />
+<link rel="icon" href="/pwa-icon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="/miniapp-shell.css" />
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="/miniapp-shell.js" defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -249,7 +254,7 @@
   function appendReportControl(box,questionId,reportAttemptId){
     var details=document.createElement("details"),summary=document.createElement("summary"),fields=document.createElement("div"),reason=document.createElement("select"),notes=document.createElement("textarea"),button=document.createElement("button"),message=document.createElement("p");
     details.className="report";summary.textContent="প্রশ্নটি রিপোর্ট করুন";fields.className="report-fields";reason.className="field";reason.setAttribute("aria-label","রিপোর্টের কারণ");
-    [["wrong_answer","সঠিক উত্তর ভুল"],["multiple_correct","একাধিক উত্তর সঠিক"],["ambiguous","প্রশ্ন অস্পষ্ট"],["incorrect_explanation","ব্যাখ্যা ভুল"],["language_spelling","ভাষা বা বানান"],["outdated","তথ্য পুরোনো"],["broken_source","উৎস খোলা যাচ্ছে না"],["other","অন্যান্য"]].forEach(function(item){var option=document.createElement("option");option.value=item[0];option.textContent=item[1];reason.appendChild(option)});
+    [["wrong_answer","সঠিক উত্তর ভুল"],["multiple_correct","একাধিক উত্তর সঠিক"],["ambiguous","প্রশ্ন অস্পষ্ট"],["incorrect_explanation","ব্যাখ্যা ভুল"],["language_spelling","ভাষা বা বানান"],["outdated","তথ্য পুরোনো"],["outside_syllabus","সিলেবাসের বাইরে"],["broken_source","উৎস খোলা যাচ্ছে না"],["duplicate_question","একই প্রশ্ন পুনরাবৃত্তি"],["translation_error","অনুবাদ ভুল"],["other","অন্যান্য"]].forEach(function(item){var option=document.createElement("option");option.value=item[0];option.textContent=item[1];reason.appendChild(option)});
     notes.className="field";notes.maxLength=1000;notes.placeholder="প্রয়োজনে সংক্ষিপ্ত বিবরণ লিখুন";button.type="button";button.className="btn";button.textContent="রিপোর্ট পাঠান";message.className="report-message";message.setAttribute("aria-live","polite");
     button.addEventListener("click",function(){submitPracticeReport(questionId,reportAttemptId,reason,notes,button,message)});fields.append(reason,notes,button,message);details.append(summary,fields);box.appendChild(details);
   }

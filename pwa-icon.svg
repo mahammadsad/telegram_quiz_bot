@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+  <title id="title">পরীক্ষা প্রস্তুতি</title>
+  <rect width="512" height="512" rx="112" fill="#0f766e"/>
+  <path fill="#fff" d="M132 96h248a36 36 0 0 1 36 36v248a36 36 0 0 1-36 36H132a36 36 0 0 1-36-36V132a36 36 0 0 1 36-36Z"/>
+  <path fill="none" stroke="#0f766e" stroke-linecap="round" stroke-linejoin="round" stroke-width="28" d="m158 206 38 38 70-82M158 330h196M288 218h66"/>
+</svg>

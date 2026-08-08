@@ -37,6 +37,8 @@ an administrator approves it.
 | `index.html` | Telegram-theme-aware quiz UI with a clearly read-only static fallback |
 | `dashboard.html` | Private learner analytics, preferences, and privacy-safe leaderboard families |
 | `practice.html` | Authenticated wrong/due/bookmark/weak-topic practice with post-answer review |
+| `mock.html` | Durable timed multi-section attempts, palette navigation, and post-submit analysis |
+| `service-worker.js` | Low-data shell plus explicitly answer-free pre-submission projection caching |
 | `.github/workflows/` | Production recovery, guarded source refresh/import, staging smoke, PostgreSQL/Playwright CI, and resource maintenance |
 
 The browser never receives a Supabase service-role key. It talks only to

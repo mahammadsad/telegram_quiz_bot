@@ -8,7 +8,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Request
+from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel, Field, field_validator
@@ -68,6 +68,7 @@ async def security_and_privacy_headers(request: Request, call_next):
         "font-src 'self' data: https://fonts.gstatic.com; "
         "img-src 'self' data: https:; "
         "connect-src 'self'; "
+        "manifest-src 'self'; worker-src 'self'; "
         "object-src 'none'; base-uri 'self'; form-action 'self'; "
         "frame-ancestors https://web.telegram.org https://*.telegram.org"
     )
@@ -104,6 +105,12 @@ def _merge_vary_header(headers: Any, value: str) -> None:
     if value.casefold() not in {part.casefold() for part in values}:
         values.append(value)
     headers["Vary"] = ", ".join(values)
+
+
+def _mark_answer_free(response: Response) -> None:
+    """Permit private offline storage only for projections with no answer material."""
+    response.headers["X-Answer-Free-Payload"] = "1"
+    response.headers["Cache-Control"] = "private, no-cache, max-age=0"
 
 
 class SubmitQuizRequest(BaseModel):
@@ -362,6 +369,48 @@ def settings() -> FileResponse:
     return FileResponse(ROOT / "settings.html")
 
 
+@app.get("/mock")
+@app.get("/mock.html")
+def mock_test() -> FileResponse:
+    return FileResponse(ROOT / "mock.html")
+
+
+@app.get("/miniapp-shell.js")
+def miniapp_shell() -> FileResponse:
+    return FileResponse(
+        ROOT / "miniapp-shell.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@app.get("/service-worker.js")
+def service_worker() -> FileResponse:
+    return FileResponse(
+        ROOT / "service-worker.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "no-cache, max-age=0", "Service-Worker-Allowed": "/"},
+    )
+
+
+@app.get("/manifest.webmanifest")
+def web_manifest() -> FileResponse:
+    return FileResponse(
+        ROOT / "manifest.webmanifest",
+        media_type="application/manifest+json",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
+@app.get("/pwa-icon.svg")
+def pwa_icon() -> FileResponse:
+    return FileResponse(
+        ROOT / "pwa-icon.svg",
+        media_type="image/svg+xml",
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
 @app.get("/quizzes/{quiz_file}")
 def legacy_quiz_file(quiz_file: str) -> JSONResponse:
     if not quiz_file.endswith(".json"):
@@ -448,7 +497,8 @@ def test_definition_catalog(
 
 
 @app.get("/api/tests/instances/{test_instance_id}")
-def public_test_instance(test_instance_id: uuid.UUID) -> dict:
+def public_test_instance(test_instance_id: uuid.UUID, response: Response) -> dict:
+    _mark_answer_free(response)
     try:
         payload = exam_config_service.public_test_instance(test_instance_id)
         if payload is None:
@@ -595,7 +645,8 @@ def get_test_attempt(
 
 
 @app.get("/api/quiz/{quiz_id}")
-def get_quiz(quiz_id: str) -> dict:
+def get_quiz(quiz_id: str, response: Response) -> dict:
+    _mark_answer_free(response)
     clean_quiz_id = _clean_quiz_id(quiz_id)
     try:
         pack = quiz_pack_service.get_ready_quiz_pack(clean_quiz_id)
