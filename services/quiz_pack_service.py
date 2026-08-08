@@ -507,7 +507,17 @@ def _build_question(quiz_id: str, item: dict, meta: dict) -> Question:
         fact_version=_str(item.get("fact_version")) or None,
         expires_at=_str(item.get("expires_at")) or None,
         review_required=False,
+        knowledge_point_id=_str(item.get("knowledge_point_id")) or None,
+        variant_fingerprint=_str(item.get("variant_fingerprint")) or None,
+        question_form=_str(item.get("question_form")) or "mcq",
+        inventory_status=_str(item.get("inventory_status")) or "legacy",
+        eligible_at=_str(item.get("eligible_at")) or None,
     )
+
+
+def question_row_from_validated_candidate(item: dict, meta: dict) -> dict:
+    """Project an independently validated candidate into database columns."""
+    return _build_question("verified-inventory", item, meta).to_insert_dict()
 
 
 def _question_row_for_atomic_save(quiz_id: str, item: dict, meta: dict) -> dict:

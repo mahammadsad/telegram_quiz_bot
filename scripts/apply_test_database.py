@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from database.contract import (  # noqa: E402
-    LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
+    PHASE_C_CANDIDATE_MIGRATION_VERSION,
 )
 
 BOOTSTRAP = ROOT / "database" / "schema.sql"
@@ -109,11 +109,10 @@ def rebuild(database_url: str) -> dict:
     identity = _migration_identity(latest_supabase)
     if (
         not identity
-        or identity[0] != LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
+        or identity[0] != PHASE_C_CANDIDATE_MIGRATION_VERSION
     ):
         raise RuntimeError(
-            "The leaderboard privacy RPC fix does not match the latest "
-            "migration file."
+            "The Phase C inventory contract does not match the latest migration file."
         )
 
     with psycopg.connect(database_url, autocommit=True) as connection:
@@ -155,8 +154,26 @@ def rebuild(database_url: str) -> dict:
             raise RuntimeError(
                 "Disposable durable quiz-jobs contract is not ready after migrations."
             )
+        phase_c_content_contract = connection.execute(
+            "select public.get_phase_c_content_contract()"
+        ).fetchone()[0]
+        if not phase_c_content_contract.get("ready"):
+            raise RuntimeError("Disposable Phase C content contract is not ready.")
+        phase_c_inventory_contract = connection.execute(
+            "select public.get_phase_c_inventory_contract()"
+        ).fetchone()[0]
+        if not phase_c_inventory_contract.get("ready"):
+            raise RuntimeError("Disposable Phase C inventory contract is not ready.")
+        phase_c_candidate_contract = connection.execute(
+            "select public.get_phase_c_candidate_contract()"
+        ).fetchone()[0]
+        if not phase_c_candidate_contract.get("ready"):
+            raise RuntimeError("Disposable Phase C candidate contract is not ready.")
         contract.update(privacy_contract)
         contract.update(quiz_job_contract)
+        contract.update(phase_c_content_contract)
+        contract.update(phase_c_inventory_contract)
+        contract.update(phase_c_candidate_contract)
         return contract
 
 
@@ -181,6 +198,7 @@ def main() -> int:
         "leaderboard_privacy="
         f"{contract['leaderboard_privacy_migration_version']} "
         f"quiz_jobs={contract['quiz_job_migration_version']}"
+        f" phase_c_inventory={contract['phase_c_inventory_migration_version']}"
     )
     return 0
 

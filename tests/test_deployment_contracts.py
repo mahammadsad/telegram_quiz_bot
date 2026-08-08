@@ -19,6 +19,9 @@ from database.contract import (
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
     LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
+    PHASE_C_CANDIDATE_MIGRATION_VERSION,
+    PHASE_C_IDENTITY_MIGRATION_VERSION,
+    PHASE_C_INVENTORY_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
@@ -237,8 +240,10 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
 def test_authoritative_migration_version_is_latest_filename() -> None:
     migrations = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
     assert migrations
-    assert migrations[-1].name.startswith(
-        f"{LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION}_"
+    assert migrations[-1].name.startswith(f"{PHASE_C_CANDIDATE_MIGRATION_VERSION}_")
+    assert any(
+        path.name.startswith(f"{PHASE_C_IDENTITY_MIGRATION_VERSION}_")
+        for path in migrations
     )
     assert any(
         path.name.startswith(f"{POST_FINALIZATION_MIGRATION_VERSION}_")
@@ -265,7 +270,7 @@ def test_authoritative_migration_version_is_latest_filename() -> None:
 def test_versioned_production_manifest_matches_deployment_intent() -> None:
     manifest_path = ROOT / "config" / "production.toml"
     assert manifest_path.is_file()
-    assert PRODUCTION_CONFIG_VERSION == "2026-08-08.1"
+    assert PRODUCTION_CONFIG_VERSION == "2026-08-08.2"
     assert re.fullmatch(r"[0-9a-f]{64}", PRODUCTION_CONFIG_HASH)
     assert PRODUCTION_CONFIG["quiz"]["source_backed_rotation_enabled"] is True
     assert PRODUCTION_CONFIG["gemini"] == {
@@ -282,6 +287,15 @@ def test_versioned_production_manifest_matches_deployment_intent() -> None:
     assert PRODUCTION_CONFIG["database"][
         "leaderboard_privacy_rpc_fix_migration_version"
     ] == LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
+    assert PRODUCTION_CONFIG["database"]["phase_c_identity_migration_version"] == (
+        PHASE_C_IDENTITY_MIGRATION_VERSION
+    )
+    assert PRODUCTION_CONFIG["database"]["phase_c_inventory_migration_version"] == (
+        PHASE_C_INVENTORY_MIGRATION_VERSION
+    )
+    assert PRODUCTION_CONFIG["database"]["phase_c_candidate_migration_version"] == (
+        PHASE_C_CANDIDATE_MIGRATION_VERSION
+    )
 
     render = _load_yaml(ROOT / "render.yaml")
     render_env = {
@@ -304,7 +318,7 @@ def test_python_and_browser_packages_share_the_release_version() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
 
-    assert APPLICATION_VERSION == "7.2.4"
+    assert APPLICATION_VERSION == "7.3.0"
     assert package["version"] == APPLICATION_VERSION
     assert lock["version"] == APPLICATION_VERSION
     assert lock["packages"][""]["version"] == APPLICATION_VERSION

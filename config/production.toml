@@ -1,5 +1,5 @@
 [meta]
-version = "2026-08-08.1"
+version = "2026-08-08.2"
 
 [gemini]
 primary_model = "gemini-3.1-flash-lite"
@@ -37,3 +37,19 @@ contract_version = "2.2.0"
 post_finalization_migration_version = "20260808063007"
 quiz_jobs_migration_version = "20260808071500"
 leaderboard_privacy_rpc_fix_migration_version = "20260808084950"
+phase_c_identity_migration_version = "20260808093610"
+phase_c_inventory_migration_version = "20260808093621"
+phase_c_candidate_migration_version = "20260808094602"
+
+[content_inventory]
+target_days = 15
+generation_batch_size = 5
+chapter_cooldown_days = 7
+topic_cooldown_days = 14
+micro_topic_cooldown_days = 14
+source_cooldown_days = 7
+knowledge_point_cooldown_days = 30
+exact_variant_cooldown_days = 180
+semantic_near_cooldown_days = 90
+quiz_overlap_window_days = 14
+max_quiz_overlap_ratio = 0.20

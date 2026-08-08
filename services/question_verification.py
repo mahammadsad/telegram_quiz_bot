@@ -43,6 +43,7 @@ def verify_questions(
     pool: GeminiProviderPool,
     *,
     quiz_id: str | None = None,
+    allow_partial: bool = False,
 ) -> tuple[list[dict], dict]:
     prompt = _verification_prompt(questions, bundle)
     raw_text, metadata = pool.generate_subject_quiz(
@@ -118,13 +119,31 @@ def verify_questions(
             quiz_id, questions, bundle, raw, raw_text, "rejected",
             rejection_reasons, metadata,
         )
-        raise QuizValidationError(
-            "Independent verification rejected the quiz: " + "; ".join(rejection_reasons)
-        )
+        if not allow_partial:
+            raise QuizValidationError(
+                "Independent verification rejected the quiz: " + "; ".join(rejection_reasons)
+            )
+        partial_metadata = {
+            **metadata,
+            "candidate_count": len(questions),
+            "accepted_count": len(clean),
+            "rejected_count": len(rejection_reasons),
+            "rejection_reasons": rejection_reasons,
+        }
+        return clean, partial_metadata
     _record_audit(
         quiz_id, questions, bundle, raw, raw_text, "verified", [], metadata,
     )
     return clean, metadata
+
+
+def verify_question_candidates(
+    questions: list[dict],
+    bundle: GroundingBundle,
+    pool: GeminiProviderPool,
+) -> tuple[list[dict], dict]:
+    """Verify an async candidate batch while preserving accepted items."""
+    return verify_questions(questions, bundle, pool, allow_partial=True)
 
 
 def _verification_prompt(questions: list[dict], bundle: GroundingBundle) -> str:

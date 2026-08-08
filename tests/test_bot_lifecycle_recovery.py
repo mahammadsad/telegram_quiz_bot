@@ -10,6 +10,7 @@ import pytest
 import bot
 from config.subjects import QUIZ_SUBJECTS
 from services.gemini_provider_pool import GeminiGenerationError
+from services.inventory_quiz_service import InventoryQuiz
 from services.question_verification import CHECK_FIELDS
 from services.quiz_lifecycle import DailyHealthReport, RunOutcome
 from services.source_grounding import GroundingBundle, SourceDocument
@@ -105,6 +106,11 @@ def setup_run(monkeypatch, valid_questions, existing_run=None):
     generated_pack = pack_from_questions(valid_questions)
     monkeypatch.setattr(bot, "validate_runtime_config", lambda **kwargs: router())
     monkeypatch.setattr(bot, "_require_gemini_provider", lambda: None)
+    monkeypatch.setattr(
+        bot.inventory_quiz_service,
+        "load_verified_inventory_quiz",
+        lambda *args, **kwargs: None,
+    )
     monkeypatch.setattr(bot.quiz_runs_repo, "get", lambda quiz_id: existing_run)
     monkeypatch.setattr(bot.quiz_runs_repo, "claim", lambda *args, **kwargs: {"worker_id": "test"})
     monkeypatch.setattr(bot, "valid_saved_pack", lambda quiz_id, run: None)
@@ -136,6 +142,41 @@ def setup_run(monkeypatch, valid_questions, existing_run=None):
     )
     monkeypatch.setattr(bot, "telegram_api", lambda method, payload: events.append(("telegram", payload)) or {"ok": True, "result": {"message_id": 55, "message_thread_id": payload["message_thread_id"], "chat": {"id": -100}}})
     return events, generated_pack
+
+
+def test_verified_inventory_posts_when_gemini_is_unavailable(monkeypatch, valid_questions):
+    events, _ = setup_run(monkeypatch, valid_questions)
+    source_id = valid_questions[0]["source_document_id"]
+    topic = (
+        valid_questions[0]["micro_topic_id"],
+        valid_questions[0]["micro_topic_key"],
+    )
+    monkeypatch.setattr(
+        bot.inventory_quiz_service,
+        "load_verified_inventory_quiz",
+        lambda *args, **kwargs: InventoryQuiz(
+            questions=valid_questions,
+            relaxed_constraints=("chapter",),
+            source_ids={source_id},
+            source_topics={source_id: topic},
+        ),
+    )
+    monkeypatch.setattr(
+        bot,
+        "_require_gemini_provider",
+        lambda: pytest.fail("Gemini configuration must not be required"),
+    )
+    monkeypatch.setattr(
+        bot,
+        "generate_mcqs",
+        lambda *args, **kwargs: pytest.fail("Gemini generation must not run"),
+    )
+
+    assert bot.run_subject_quiz(
+        "history", target_date=date(2026, 7, 10)
+    ) == "generated_and_posted"
+    ready = next(event for event in events if event[:2] == ("status", "ready"))
+    assert ready[1] == "ready"
 
 
 def test_save_export_and_ready_state_precede_telegram(monkeypatch, valid_questions):
@@ -818,6 +859,35 @@ def test_generation_prompt_treats_dynamic_source_text_as_untrusted_data():
 def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
     monkeypatch.setattr(
         bot.schema_contract_repo,
+        "get_phase_c_content_contract",
+        lambda: {
+            "ready": True,
+            "knowledge_points": True,
+            "atomic_source_facts": True,
+            "question_variants": True,
+        },
+    )
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_phase_c_inventory_contract",
+        lambda: {
+            "ready": True,
+            "phase_c_inventory_migration_version": bot.PHASE_C_INVENTORY_MIGRATION_VERSION,
+            "function_permission_failures": [],
+        },
+    )
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_phase_c_candidate_contract",
+        lambda: {
+            "ready": True,
+            "stable_identity_parity": True,
+            "phase_c_candidate_migration_version": bot.PHASE_C_CANDIDATE_MIGRATION_VERSION,
+            "function_permission_failures": [],
+        },
+    )
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
         "get_quiz_job_contract",
         lambda: {
             "ready": True,
@@ -871,6 +941,21 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
 
 
 def test_database_preflight_fails_closed_on_old_or_misgranted_contract(monkeypatch):
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_phase_c_content_contract",
+        lambda: {"ready": True, "knowledge_points": True, "atomic_source_facts": True, "question_variants": True},
+    )
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_phase_c_inventory_contract",
+        lambda: {"ready": True, "phase_c_inventory_migration_version": bot.PHASE_C_INVENTORY_MIGRATION_VERSION, "function_permission_failures": []},
+    )
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_phase_c_candidate_contract",
+        lambda: {"ready": True, "stable_identity_parity": True, "phase_c_candidate_migration_version": bot.PHASE_C_CANDIDATE_MIGRATION_VERSION, "function_permission_failures": []},
+    )
     monkeypatch.setattr(
         bot.schema_contract_repo,
         "get_quiz_job_contract",

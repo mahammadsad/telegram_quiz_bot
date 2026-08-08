@@ -2,7 +2,7 @@
 
 Updated: 2026-08-08
 
-Branch: `codex/phase-b-durable-jobs`
+Branch: `codex/phase-c-question-bank`
 
 Baseline commit: `e390751782f6c0acf066b54273da1ceb8c65e5e1`
 
@@ -12,6 +12,9 @@ Phase A is published in draft PR #26 and both GitHub Actions jobs are green.
 Phase B durable scheduling is published in draft PR #27. Its complete GitHub
 gate, hosted staging database gate, Render deployment, and fail-closed staging
 preflight are green. Production remains unchanged.
+Phase C is in progress on a stacked branch. Its additive identity, evidence,
+candidate persistence, durable replenishment, and inventory-first due-time path
+are compiled and contract-verified on hosted staging; production is unchanged.
 
 ## Implemented
 
@@ -41,6 +44,14 @@ preflight are green. Production remains unchanged.
   removes an internal migration-table dependency from the invoker-safe privacy
   readiness RPC, preserving service-role-only execution without granting access
   to Supabase's internal migration schema.
+- Phase C migrations `20260808093610`, `20260808093621`, and `20260808094602`
+  add stable knowledge-point/source-fact/variant identity, append-only
+  verification and usage, durable 3–5 item replenishment batches, inventory-day
+  reporting, soft rotation with recorded degradation, and server-only accepted
+  candidate persistence.
+- Due-time assembly now tries verified inventory first and uses Gemini only when
+  a safe ten-question pack cannot be assembled. Correctness, source freshness,
+  review-required state, and quarantine are never relaxed.
 
 ## Local evidence
 
@@ -60,6 +71,11 @@ preflight are green. Production remains unchanged.
 - Render staging is live on application `7.2.4`. Staging preflight run
   `31249805580` passed with HTTP 200 readiness, no failure categories, and all
   checks true, including privacy, post finalization, and durable jobs.
+- Phase C local checkpoint: 347 non-database tests pass; Ruff and mypy (69
+  production files) pass. Staging compiled all three Phase C migrations;
+  identity hashes match Python and PostgreSQL exactly, all Phase C contracts
+  report ready with no permission failures, historical 69 question mappings
+  remain readable, and rollback-only candidate/job/bundle gates passed.
 
 ## Deployment prerequisites
 

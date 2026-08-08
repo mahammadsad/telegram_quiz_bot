@@ -90,6 +90,41 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "function_permission_failures": [],
         },
     )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_phase_c_content_contract",
+        lambda: {
+            "ready": True,
+            "knowledge_points": True,
+            "atomic_source_facts": True,
+            "question_variants": True,
+            "append_only_verification": True,
+            "append_only_usage": True,
+        },
+    )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_phase_c_inventory_contract",
+        lambda: {
+            "ready": True,
+            "phase_c_inventory_migration_version": (
+                readiness_service.PHASE_C_INVENTORY_MIGRATION_VERSION
+            ),
+            "function_permission_failures": [],
+        },
+    )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_phase_c_candidate_contract",
+        lambda: {
+            "ready": True,
+            "stable_identity_parity": True,
+            "phase_c_candidate_migration_version": (
+                readiness_service.PHASE_C_CANDIDATE_MIGRATION_VERSION
+            ),
+            "function_permission_failures": [],
+        },
+    )
     readiness_service._CACHE = None
 
 

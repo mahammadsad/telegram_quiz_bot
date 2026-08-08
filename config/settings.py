@@ -145,6 +145,37 @@ SOURCE_BACKED_ROTATION_ENABLED = _locked_value(
     "SOURCE_BACKED_ROTATION_ENABLED",
     PRODUCTION_CONFIG["quiz"]["source_backed_rotation_enabled"],
 ).lower() == "true"
+CONTENT_INVENTORY_TARGET_DAYS = int(PRODUCTION_CONFIG["content_inventory"]["target_days"])
+CONTENT_INVENTORY_BATCH_SIZE = int(
+    PRODUCTION_CONFIG["content_inventory"]["generation_batch_size"]
+)
+CONTENT_CHAPTER_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["chapter_cooldown_days"]
+)
+CONTENT_TOPIC_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["topic_cooldown_days"]
+)
+CONTENT_MICRO_TOPIC_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["micro_topic_cooldown_days"]
+)
+CONTENT_SOURCE_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["source_cooldown_days"]
+)
+CONTENT_KNOWLEDGE_POINT_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["knowledge_point_cooldown_days"]
+)
+CONTENT_EXACT_VARIANT_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["exact_variant_cooldown_days"]
+)
+CONTENT_SEMANTIC_NEAR_COOLDOWN_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["semantic_near_cooldown_days"]
+)
+CONTENT_QUIZ_OVERLAP_WINDOW_DAYS = int(
+    PRODUCTION_CONFIG["content_inventory"]["quiz_overlap_window_days"]
+)
+CONTENT_MAX_QUIZ_OVERLAP_RATIO = float(
+    PRODUCTION_CONFIG["content_inventory"]["max_quiz_overlap_ratio"]
+)
 QUESTION_REPORT_THRESHOLD = max(
     2,
     int(_locked_value(

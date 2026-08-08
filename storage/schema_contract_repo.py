@@ -26,6 +26,21 @@ def get_quiz_job_contract() -> Row:
     return as_row(result.data, "quiz job contract")
 
 
+def get_phase_c_content_contract() -> Row:
+    result = get_client().rpc("get_phase_c_content_contract", {}).execute()
+    return as_row(result.data, "Phase C content contract")
+
+
+def get_phase_c_inventory_contract() -> Row:
+    result = get_client().rpc("get_phase_c_inventory_contract", {}).execute()
+    return as_row(result.data, "Phase C inventory contract")
+
+
+def get_phase_c_candidate_contract() -> Row:
+    result = get_client().rpc("get_phase_c_candidate_contract", {}).execute()
+    return as_row(result.data, "Phase C candidate contract")
+
+
 def active_quiz_probe() -> Row | None:
     result = (
         get_client()

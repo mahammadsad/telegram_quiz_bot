@@ -184,6 +184,39 @@ def test_independent_verifier_rejects_any_failed_check(valid_questions):
         question_verification.verify_questions(generated, bundle(), Pool())
 
 
+def test_candidate_verifier_preserves_nine_when_one_fails(valid_questions):
+    results = []
+    for index in range(1, 11):
+        accepted = index != 4
+        results.append({
+            "question_number": index,
+            "verdict": "verified" if accepted else "rejected",
+            "confidence": 0.95 if accepted else 0.4,
+            **{
+                name: accepted
+                for name in question_verification.CHECK_FIELDS
+            },
+            "notes": "Supported." if accepted else "Unsupported answer.",
+        })
+
+    class Pool:
+        def generate_subject_quiz(self, **kwargs):
+            return json.dumps(results), {
+                "provider": "primary",
+                "model": "verifier",
+                "attempts": 1,
+            }
+
+    accepted, metadata = question_verification.verify_question_candidates(
+        valid_questions,
+        bundle(),
+        Pool(),
+    )
+    assert len(accepted) == 9
+    assert metadata["accepted_count"] == 9
+    assert metadata["rejected_count"] == 1
+
+
 def test_rejected_verifier_output_is_persisted_for_audit(monkeypatch, valid_questions):
     results = [{
         "question_number": index,

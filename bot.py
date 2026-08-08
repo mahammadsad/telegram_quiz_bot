@@ -39,6 +39,8 @@ from database.contract import (
     DATABASE_CONTRACT_KEY,
     DATABASE_CONTRACT_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
+    PHASE_C_CANDIDATE_MIGRATION_VERSION,
+    PHASE_C_INVENTORY_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
@@ -46,7 +48,14 @@ from database.contract import (
     SOURCE_ROLLOUT_MIGRATION_VERSION,
 )
 from errors import TelegramPostingError
-from services import chapter_selector, question_verification, quiz_dispatcher, quiz_pack_service, source_grounding
+from services import (
+    chapter_selector,
+    inventory_quiz_service,
+    question_verification,
+    quiz_dispatcher,
+    quiz_pack_service,
+    source_grounding,
+)
 from services.gemini_provider_pool import GeminiProviderPool
 from services.question_validation import (
     QUESTION_COUNT,
@@ -522,7 +531,17 @@ def run_subject_quiz(
                 chapter,
             )
             return RunOutcome.SOURCE_NOT_READY
-        _require_gemini_provider()
+        inventory_quiz = (
+            None
+            if force_regenerate
+            else inventory_quiz_service.load_verified_inventory_quiz(
+                subject_key,
+                chapter,
+                now=datetime.now(timezone.utc),
+            )
+        )
+        if inventory_quiz is None:
+            _require_gemini_provider()
         if not run:
             quiz_runs_repo.upsert({
                 "quiz_id": quiz_id,
@@ -551,14 +570,37 @@ def run_subject_quiz(
                 question_count=0,
             )
         try:
-            questions, generation = generate_mcqs(
-                subject_key,
-                chapter,
-                pool=pool,
-                target_date=target_date,
-                grounding_bundle=grounding_bundle,
-                quiz_id=quiz_id,
-            )
+            if inventory_quiz is not None:
+                questions = inventory_quiz.questions
+                generation = {
+                    "provider": "verified_inventory",
+                    "model": "stored_verified_content",
+                    "attempts": 0,
+                    "providers_attempted": ["verified_inventory"],
+                }
+                allowed_source_ids = inventory_quiz.source_ids
+                allowed_source_topics = inventory_quiz.source_topics
+                required_source_diversity = 1
+                required_topic_diversity = 1
+                LOG.info(
+                    "VERIFIED_INVENTORY_SELECTED subject=%s quiz_id=%s relaxed=%s",
+                    subject_key,
+                    quiz_id,
+                    ",".join(inventory_quiz.relaxed_constraints) or "none",
+                )
+            else:
+                questions, generation = generate_mcqs(
+                    subject_key,
+                    chapter,
+                    pool=pool,
+                    target_date=target_date,
+                    grounding_bundle=grounding_bundle,
+                    quiz_id=quiz_id,
+                )
+                allowed_source_ids = grounding_bundle.source_ids
+                allowed_source_topics = grounding_bundle.source_topics
+                required_source_diversity = grounding_bundle.required_source_diversity
+                required_topic_diversity = grounding_bundle.required_topic_diversity
             if not quiz_runs_repo.claim(
                 quiz_id,
                 worker_id,
@@ -581,10 +623,10 @@ def run_subject_quiz(
                 chat_id=_chat_id_as_int(TELEGRAM_CHAT_ID),
                 worker_id=worker_id,
                 replace=force_regenerate,
-                allowed_source_ids=grounding_bundle.source_ids,
-                allowed_source_topics=grounding_bundle.source_topics,
-                required_source_diversity=grounding_bundle.required_source_diversity,
-                required_topic_diversity=grounding_bundle.required_topic_diversity,
+                allowed_source_ids=allowed_source_ids,
+                allowed_source_topics=allowed_source_topics,
+                required_source_diversity=required_source_diversity,
+                required_topic_diversity=required_topic_diversity,
             )
             quiz_runs_repo.update_status(
                 quiz_id,
@@ -600,7 +642,7 @@ def run_subject_quiz(
                 last_error_category=None,
             )
             LOG.info(
-                "GEMINI_GENERATION_SUCCESS subject=%s quiz_id=%s provider=%s model=%s attempts=%s question_count=10",
+                "QUIZ_CONTENT_READY subject=%s quiz_id=%s provider=%s model=%s attempts=%s question_count=10",
                 subject_key, quiz_id, generation["provider"], generation["model"], generation["attempts"],
             )
         except Exception as exc:
@@ -1003,12 +1045,19 @@ def validate_database_schema() -> None:
     contract = schema_contract_repo.get_contract()
     post_contract = schema_contract_repo.get_post_finalization_contract()
     job_contract = schema_contract_repo.get_quiz_job_contract()
+    phase_c_content = schema_contract_repo.get_phase_c_content_contract()
+    phase_c_inventory = schema_contract_repo.get_phase_c_inventory_contract()
+    phase_c_candidate = schema_contract_repo.get_phase_c_candidate_contract()
     permission_failures = (
         contract.get("function_permission_failures") or []
     ) + (contract.get("table_permission_failures") or []) + (
         post_contract.get("function_permission_failures") or []
     ) + (
         job_contract.get("function_permission_failures") or []
+    ) + (
+        phase_c_inventory.get("function_permission_failures") or []
+    ) + (
+        phase_c_candidate.get("function_permission_failures") or []
     )
     valid = bool(
         contract.get("ready")
@@ -1027,6 +1076,17 @@ def validate_database_schema() -> None:
         and job_contract.get("quiz_job_migration_version")
         == QUIZ_JOBS_MIGRATION_VERSION
         and job_contract.get("quiz_job_migration_applied") is True
+        and phase_c_content.get("ready") is True
+        and phase_c_content.get("knowledge_points") is True
+        and phase_c_content.get("atomic_source_facts") is True
+        and phase_c_content.get("question_variants") is True
+        and phase_c_inventory.get("ready") is True
+        and phase_c_inventory.get("phase_c_inventory_migration_version")
+        == PHASE_C_INVENTORY_MIGRATION_VERSION
+        and phase_c_candidate.get("ready") is True
+        and phase_c_candidate.get("stable_identity_parity") is True
+        and phase_c_candidate.get("phase_c_candidate_migration_version")
+        == PHASE_C_CANDIDATE_MIGRATION_VERSION
         and (
             not SOURCE_BACKED_ROTATION_ENABLED
             or (

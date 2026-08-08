@@ -31,6 +31,8 @@ from database.contract import (
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
     LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
+    PHASE_C_CANDIDATE_MIGRATION_VERSION,
+    PHASE_C_INVENTORY_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
@@ -75,6 +77,8 @@ class Readiness:
             "databaseContractVersion": DATABASE_CONTRACT_VERSION,
             "postFinalizationMigrationVersion": POST_FINALIZATION_MIGRATION_VERSION,
             "quizJobsMigrationVersion": QUIZ_JOBS_MIGRATION_VERSION,
+            "phaseCInventoryMigrationVersion": PHASE_C_INVENTORY_MIGRATION_VERSION,
+            "phaseCCandidateMigrationVersion": PHASE_C_CANDIDATE_MIGRATION_VERSION,
             "productionConfigVersion": PRODUCTION_CONFIG_VERSION,
             "productionConfigHash": PRODUCTION_CONFIG_HASH,
         }
@@ -97,6 +101,8 @@ def assess(*, use_cache: bool = True) -> Readiness:
         "leaderboardPrivacy": False,
         "postFinalization": False,
         "durableQuizJobs": False,
+        "contentIdentity": False,
+        "verifiedInventory": False,
         "activeQuizRetrieval": False,
     }
     failures: list[str] = []
@@ -176,6 +182,18 @@ def assess(*, use_cache: bool = True) -> Readiness:
                     "READINESS_QUIZ_JOBS_FAILURE category=%s",
                     type(exc).__name__,
                 )
+            try:
+                phase_c_content = schema_contract_repo.get_phase_c_content_contract()
+                phase_c_inventory = schema_contract_repo.get_phase_c_inventory_contract()
+                phase_c_candidate = schema_contract_repo.get_phase_c_candidate_contract()
+            except Exception as exc:
+                phase_c_content = {}
+                phase_c_inventory = {}
+                phase_c_candidate = {}
+                LOG.warning(
+                    "READINESS_PHASE_C_FAILURE category=%s",
+                    type(exc).__name__,
+                )
             permission_failures = (
                 contract.get("function_permission_failures") or []
             ) + (contract.get("table_permission_failures") or []) + (
@@ -184,6 +202,10 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 post_contract.get("function_permission_failures") or []
             ) + (
                 job_contract.get("function_permission_failures") or []
+            ) + (
+                phase_c_inventory.get("function_permission_failures") or []
+            ) + (
+                phase_c_candidate.get("function_permission_failures") or []
             )
             checks["databasePermissions"] = not permission_failures
             checks["leaderboardPrivacy"] = bool(
@@ -221,6 +243,23 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and job_contract.get("quiz_job_migration_applied") is True
                 and not job_contract.get("function_permission_failures")
             )
+            checks["contentIdentity"] = bool(
+                phase_c_content.get("ready") is True
+                and phase_c_content.get("knowledge_points") is True
+                and phase_c_content.get("atomic_source_facts") is True
+                and phase_c_content.get("question_variants") is True
+                and phase_c_content.get("append_only_verification") is True
+                and phase_c_content.get("append_only_usage") is True
+            )
+            checks["verifiedInventory"] = bool(
+                phase_c_inventory.get("ready") is True
+                and phase_c_inventory.get("phase_c_inventory_migration_version")
+                == PHASE_C_INVENTORY_MIGRATION_VERSION
+                and phase_c_candidate.get("ready") is True
+                and phase_c_candidate.get("stable_identity_parity") is True
+                and phase_c_candidate.get("phase_c_candidate_migration_version")
+                == PHASE_C_CANDIDATE_MIGRATION_VERSION
+            )
             source_rollout_ready = bool(
                 contract.get("source_rollout_migration_version")
                 == SOURCE_ROLLOUT_MIGRATION_VERSION
@@ -254,6 +293,8 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and personal_learning_ready
                 and checks["postFinalization"]
                 and checks["durableQuizJobs"]
+                and checks["contentIdentity"]
+                and checks["verifiedInventory"]
                 and float(contract.get("verification_threshold") or 0)
                 == QUESTION_VERIFICATION_MIN_CONFIDENCE
             )
@@ -281,6 +322,10 @@ def assess(*, use_cache: bool = True) -> Readiness:
         failures.append("post_finalization")
     if not checks["durableQuizJobs"]:
         failures.append("durable_quiz_jobs")
+    if not checks["contentIdentity"]:
+        failures.append("content_identity")
+    if not checks["verifiedInventory"]:
+        failures.append("verified_inventory")
     if not checks["databasePermissions"]:
         failures.append("database_permissions")
     if not checks["activeQuizRetrieval"]:
