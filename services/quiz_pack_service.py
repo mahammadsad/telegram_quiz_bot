@@ -19,7 +19,7 @@ from config.settings import (
     SIMILARITY_THRESHOLD,
 )
 from config.subjects import SUBJECTS
-from errors import DatabaseIntegrityError
+from errors import DatabaseIntegrityError, QuizContentCollisionError
 from models.question import Question
 from models.user import User
 from services.question_validation import (
@@ -443,10 +443,12 @@ def _question_row_for_atomic_save(quiz_id: str, item: dict, meta: dict) -> dict:
         bot_type=BOT_TYPE,
         threshold=SIMILARITY_THRESHOLD,
         limit=1,
+        subject=question.subject,
+        topic=question.topic,
     )
     if not similar:
         return row
-    raise DatabaseIntegrityError(
+    raise QuizContentCollisionError(
         f"Near-duplicate question detected in {quiz_id}; regenerate instead of substituting content."
     )
 

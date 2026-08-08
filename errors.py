@@ -18,6 +18,13 @@ class QuizGenerationError(ApplicationError):
     category = "quiz_generation_error"
 
 
+class QuizContentCollisionError(ApplicationError):
+    """A generated pack collided with recently used, semantically similar content."""
+
+    category = "quiz_content_collision"
+    retryable = True
+
+
 class DatabaseIntegrityError(ApplicationError):
     category = "database_integrity_error"
 

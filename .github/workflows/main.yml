@@ -166,7 +166,27 @@ jobs:
           if [ -n "${{ needs.resolve_job.outputs.subject }}" ]; then args+=(--subject "${{ needs.resolve_job.outputs.subject }}"); fi
           if [ "${{ needs.resolve_job.outputs.force_post }}" = "true" ]; then args+=(--force-post); fi
           if [ "${{ needs.resolve_job.outputs.force_regenerate }}" = "true" ]; then args+=(--force-regenerate); fi
-          python bot.py "${args[@]}" || status=$?
+
+          log_file="$(mktemp)"
+          for attempt in 1 2 3; do
+            : > "$log_file"
+            set +e
+            python bot.py "${args[@]}" 2>&1 | tee "$log_file"
+            status=${PIPESTATUS[0]}
+            set -e
+
+            if [ "$status" -eq 0 ]; then
+              break
+            fi
+            if ! grep -q "RUN_FAILED category=quiz_content_collision" "$log_file"; then
+              break
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              echo "Retrying quiz generation after a scoped near-duplicate collision (attempt $((attempt + 1))/3)."
+            fi
+          done
+          rm -f "$log_file"
+
           if [ "${{ needs.resolve_job.outputs.commit_fallbacks }}" = "true" ] && [ "${{ needs.resolve_job.outputs.mode }}" != "export-static-fallbacks" ]; then
             python bot.py --mode export-static-fallbacks || status=$?
           fi

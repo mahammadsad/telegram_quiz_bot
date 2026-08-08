@@ -85,28 +85,57 @@ def get_latest_by_stem(stem_hash: str) -> Row | None:
     return first_row(res.data, "questions.latest_by_stem")
 
 
-def find_similar(normalized_text: str, bot_type: str = BOT_TYPE,
-                  threshold: float = SIMILARITY_THRESHOLD, limit: int = 5) -> list[Row]:
-    """Layer 3 of duplicate detection: fuzzy match via the Postgres
-    find_similar_questions() function (pg_trgm, see database/schema.sql).
-    Returns rows already sorted by similarity descending."""
+def find_similar(
+    normalized_text: str,
+    bot_type: str = BOT_TYPE,
+    threshold: float = SIMILARITY_THRESHOLD,
+    limit: int = 5,
+    *,
+    subject: str | None = None,
+    topic: str | None = None,
+) -> list[Row]:
+    """Layer 3 of duplicate detection using pg_trgm.
+
+    The database RPC is intentionally shared and therefore searches all rows
+    for a bot type. When a caller supplies a subject/topic classification, we
+    hydrate the highest-scoring candidates and filter them here before
+    declaring a semantic collision. This prevents generic Bengali question
+    phrasing in an unrelated subject/chapter from blocking a valid quiz.
+    """
     client = get_client()
+    candidate_limit = max(limit, 10) if subject is not None or topic is not None else limit
     res = client.rpc(
         "find_similar_questions",
         {
             "query_normalized": normalized_text,
             "query_bot_type": bot_type,
             "sim_threshold": threshold,
-            "match_count": limit,
+            "match_count": candidate_limit,
         },
     ).execute()
     rows = as_rows(res.data, "similar questions")
-    return [
-        row
-        for row in rows
-        if isinstance(row.get("similarity"), (int, float))
-        and float(row["similarity"]) >= threshold
-    ]
+    matches: list[Row] = []
+    for row in rows:
+        similarity = row.get("similarity")
+        if not isinstance(similarity, (int, float)) or float(similarity) < threshold:
+            continue
+        if subject is None and topic is None:
+            matches.append(row)
+        else:
+            question_id = str(row.get("id") or "").strip()
+            if not question_id:
+                continue
+            full = get_by_id(question_id)
+            if not full:
+                continue
+            if subject is not None and full.get("subject") != subject:
+                continue
+            if topic is not None and full.get("topic") != topic:
+                continue
+            matches.append({**full, "similarity": float(similarity)})
+        if len(matches) >= limit:
+            break
+    return matches
 
 
 def insert_question(question: Question) -> Row:
