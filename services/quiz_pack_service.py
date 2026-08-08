@@ -131,8 +131,12 @@ def get_recoverable_quiz_pack(quiz_id: str, run: dict | None) -> dict | None:
         return None
     try:
         _validate_saved_pack_contract(pack)
-    except (ValueError, TypeError):
-        LOG.warning("QUIZ_READ_BLOCKED invalid_saved_pack_contract quiz_id=%s", quiz_id)
+    except (ValueError, TypeError) as exc:
+        LOG.warning(
+            "QUIZ_READ_BLOCKED invalid_saved_pack_contract quiz_id=%s reason=%s",
+            quiz_id,
+            exc,
+        )
         return None
     if checksum_for_pack(pack) != run["persisted_checksum"]:
         LOG.error("QUIZ_READ_BLOCKED checksum_mismatch quiz_id=%s", quiz_id)
@@ -218,6 +222,10 @@ def _validate_saved_source_contract(pack: dict) -> None:
         # can be valid for a 4-source minimum) and can reject a valid pack.
         required_source_diversity=1,
         required_topic_diversity=1,
+        # These generation-time heuristics evolve over time. The checksum-
+        # certified atomic save proves they passed when the immutable pack was
+        # created, so re-running a newer heuristic can only create false 404s.
+        run_deterministic_checks=False,
     )
 
 
@@ -299,6 +307,7 @@ def _validate_saved_model_contract(pack: dict) -> None:
         allowed_micro_topics=allowed_micro_topics,
         required_source_diversity=1,
         required_topic_diversity=1,
+        run_deterministic_checks=False,
     )
 
 

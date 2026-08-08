@@ -274,6 +274,12 @@ def test_recovery_does_not_infer_a_stricter_diversity_contract(monkeypatch, vali
         row["micro_topic_id"] = f"11111111-1111-4111-8111-{group + 1:012d}"
         row["micro_topic_key"] = f"history:modern-india:topic-{group}"
         row["correct_index"] = index % 4
+    # This pack passed the save-time validator. A later option-quality
+    # heuristic rejects short unit-bearing options, but must not make the
+    # immutable checksum-certified pack disappear on read.
+    rows[4]["question"] = "একজন মন্ত্রী কতদিন পর্যন্ত পদে বহাল থাকতে পারেন?"
+    rows[4]["options"] = ["৩ মাস", "৬ মাস", "১ বছর", "২ বছর"]
+    rows[4]["correct_index"] = 1
     saved = persisted_pack(rows)
     monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: saved)
     monkeypatch.setattr(service, "checksum_for_pack", lambda value: "checksum")
