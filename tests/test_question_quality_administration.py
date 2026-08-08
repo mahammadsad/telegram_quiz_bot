@@ -54,6 +54,7 @@ def test_phase_e4_migration_has_complete_quality_contract() -> None:
     ):
         assert f"function public.{function}" in sql
     assert "question moderation events are append-only" in sql
+    assert "idx_question_moderation_events_superseding" in sql
     assert "correction must use an explicit superseding question version" in sql
     assert "a superseded question cannot be reinstated" in sql
     assert "preserve_historical" in sql

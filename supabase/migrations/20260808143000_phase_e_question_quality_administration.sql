@@ -136,6 +136,9 @@ create index if not exists idx_question_moderation_events_question
 create index if not exists idx_question_moderation_events_report
     on public.question_moderation_events (report_id)
     where report_id is not null;
+create index if not exists idx_question_moderation_events_superseding
+    on public.question_moderation_events (superseding_question_id)
+    where superseding_question_id is not null;
 
 create or replace function public.protect_question_moderation_events_append_only()
 returns trigger
