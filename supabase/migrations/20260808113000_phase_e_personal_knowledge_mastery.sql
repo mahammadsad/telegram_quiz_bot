@@ -41,6 +41,11 @@ create index if not exists idx_personal_knowledge_mastery_weak
     on public.personal_knowledge_mastery (
         user_id, mastery_score, last_attempted_at desc
     );
+create index if not exists idx_personal_knowledge_mastery_kp
+    on public.personal_knowledge_mastery (knowledge_point_id);
+create index if not exists idx_personal_knowledge_mastery_last_question
+    on public.personal_knowledge_mastery (last_question_id)
+    where last_question_id is not null;
 
 create table if not exists public.personal_knowledge_variant_history (
     id uuid primary key default extensions.gen_random_uuid(),
@@ -69,6 +74,10 @@ create index if not exists idx_personal_knowledge_variant_history_user_kp
     on public.personal_knowledge_variant_history (
         user_id, knowledge_point_id, attempted_at desc
     );
+create index if not exists idx_personal_knowledge_variant_history_kp
+    on public.personal_knowledge_variant_history (knowledge_point_id);
+create index if not exists idx_personal_knowledge_variant_history_question
+    on public.personal_knowledge_variant_history (question_id);
 
 create table if not exists public.learner_daily_rollups (
     user_id uuid not null references public.users(id) on delete cascade,

@@ -176,6 +176,13 @@ def test_phase_e_learning_is_knowledge_keyed_private_and_answer_free():
         assert f"alter table public.{table} enable row level security" in sql
     assert "primary key (user_id, knowledge_point_id)" in sql
     assert "unique (source_event_kind, source_event_id)" in sql
+    for index in (
+        "idx_personal_knowledge_mastery_kp",
+        "idx_personal_knowledge_mastery_last_question",
+        "idx_personal_knowledge_variant_history_kp",
+        "idx_personal_knowledge_variant_history_question",
+    ):
+        assert f"create index if not exists {index}" in sql
     assert "after insert on public.quiz_attempt_answers" in sql
     assert "after insert on public.personal_practice_answers" in sql
     assert "when p_was_skipped or p_is_correct is false then 1" in sql
