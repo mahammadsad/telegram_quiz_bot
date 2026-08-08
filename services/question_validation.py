@@ -17,6 +17,8 @@ from config.settings import (
 from services.content_identity import knowledge_key, variant_fingerprint
 from services.deterministic_verification import (
     DeterministicVerificationError,
+)
+from services.deterministic_verification import (
     verify_candidate as verify_candidate_deterministically,
 )
 from utils.hashing import (
