@@ -13,6 +13,7 @@ TEST_TYPES = {
     "subject",
     "mixed",
     "previous_year",
+    "previous_year_style",
     "sectional_mock",
     "full_mock",
 }

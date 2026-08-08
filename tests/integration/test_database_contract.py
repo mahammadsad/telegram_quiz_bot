@@ -23,6 +23,7 @@ from database.contract import (
     PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
     PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION,
     PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
+    PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
@@ -879,6 +880,71 @@ def test_phase_e_exam_tables_and_rpcs_are_service_role_only(
                 with pytest.raises(psycopg.errors.InsufficientPrivilege):
                     connection.execute(
                         "select public.get_test_definition_catalog(current_date, null, 20, 0)"
+                    )
+            finally:
+                connection.execute("reset role")
+
+
+def test_phase_e_previous_year_mock_contract_and_legacy_mirror(
+    database_url: str,
+    versioned_quizzes: dict,
+) -> None:
+    del versioned_quizzes
+    with connect(database_url) as connection:
+        contract = connection.execute(
+            "select public.get_phase_e_previous_year_mock_contract() as contract"
+        ).fetchone()["contract"]
+        counts = connection.execute(
+            """
+            select
+                (select count(*) from public.quiz_attempts) as legacy_attempts,
+                (select count(*) from public.test_attempts
+                 where legacy_quiz_attempt_id is not null) as mirrored_attempts,
+                (select count(*) from public.quiz_attempt_answers) as legacy_answers,
+                (select count(*) from public.test_attempt_responses
+                 where legacy_quiz_answer_id is not null) as mirrored_answers
+            """
+        ).fetchone()
+
+    assert contract["ready"] is True
+    assert contract["phase_e_previous_year_mock_migration_version"] == (
+        PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION
+    )
+    for key in (
+        "real_pyq_provenance",
+        "correction_audit",
+        "generated_style_separation",
+        "timed_sections",
+        "section_transitions",
+        "mark_for_review",
+        "idempotent_attempts",
+        "section_specific_marking",
+        "auto_submit",
+        "rank_cohort",
+        "topic_and_knowledge_analysis",
+        "legacy_attempts_mirrored",
+    ):
+        assert contract[key] is True
+    assert counts["legacy_attempts"] == counts["mirrored_attempts"]
+    assert counts["legacy_answers"] == counts["mirrored_answers"]
+
+
+def test_phase_e_previous_year_and_attempt_tables_are_service_role_only(
+    database_url: str,
+) -> None:
+    for role in ("anon", "authenticated"):
+        with psycopg.connect(database_url, autocommit=True) as connection:
+            connection.execute(f"set role {role}")
+            try:
+                with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                    connection.execute(
+                        "select count(*) from public.previous_year_question_provenance"
+                    )
+                with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                    connection.execute("select count(*) from public.test_attempts")
+                with pytest.raises(psycopg.errors.InsufficientPrivilege):
+                    connection.execute(
+                        "select public.get_test_attempt_for_user(null, null)"
                     )
             finally:
                 connection.execute("reset role")

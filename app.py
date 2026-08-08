@@ -34,6 +34,7 @@ from services import (
     rate_limit,
     readiness_service,
     resource_quality_service,
+    test_attempts_service,
 )
 from storage import stats_repo, users_repo
 from telegram.auth import TelegramAuthError, verify_init_data
@@ -261,6 +262,59 @@ class ResourceReviewRequest(BaseModel):
     model_config = {"populate_by_name": True}
 
 
+class StartTestAttemptRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    client_attempt_id: uuid.UUID = Field(alias="clientAttemptId")
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
+class TestResponseInput(BaseModel):
+    question_id: uuid.UUID = Field(alias="questionId")
+    selected_index: int | None = Field(default=None, alias="selectedIndex", ge=0, le=3)
+    response_time_seconds: float | None = Field(
+        default=None,
+        alias="responseTimeSeconds",
+        ge=0,
+        le=86400,
+    )
+    marked_for_review: bool = Field(default=False, alias="markedForReview")
+
+    model_config = {"populate_by_name": True}
+
+    @field_validator("selected_index", mode="before")
+    @classmethod
+    def reject_boolean_answer(cls, value: Any):
+        if isinstance(value, bool):
+            raise ValueError("selectedIndex must be between 0 and 3 or null")
+        return value
+
+
+class SaveTestProgressRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    responses: list[TestResponseInput] = Field(max_length=500)
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
+class AdvanceTestSectionRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    next_section_instance_id: uuid.UUID = Field(alias="nextSectionInstanceId")
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
+class SubmitTestAttemptRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    auto_submit: bool = Field(default=False, alias="autoSubmit")
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
 def _value_error_status(exc: ValueError) -> int:
     return 429 if "rate limit" in str(exc).casefold() else 400
 
@@ -388,6 +442,137 @@ def public_test_instance(test_instance_id: uuid.UUID) -> dict:
             status_code=503,
             detail="Test instance is temporarily unavailable.",
         ) from exc
+
+
+@app.get("/api/previous-year")
+def previous_year_catalog(
+    exam: str | None = None,
+    year: int | None = None,
+    language: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    try:
+        return test_attempts_service.previous_year_catalog(
+            exam_key=exam,
+            exam_year=year,
+            language=language,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="Previous-year questions are temporarily unavailable.",
+        ) from exc
+
+
+@app.post("/api/tests/instances/{test_instance_id}/attempts/start")
+def start_test_attempt(
+    test_instance_id: uuid.UUID,
+    payload: StartTestAttemptRequest,
+) -> dict:
+    try:
+        return test_attempts_service.start(
+            _write_user_from_payload(payload, "test-attempt-start", str(test_instance_id)),
+            test_instance_id=test_instance_id,
+            client_attempt_id=payload.client_attempt_id,
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Test attempt could not be started.") from exc
+
+
+@app.put("/api/tests/attempts/{attempt_id}/progress")
+def save_test_attempt_progress(
+    attempt_id: uuid.UUID,
+    payload: SaveTestProgressRequest,
+) -> dict:
+    try:
+        responses = [item.model_dump() for item in payload.responses]
+        return test_attempts_service.save_progress(
+            _write_user_from_payload(payload, "test-attempt-progress", str(attempt_id)),
+            attempt_id=attempt_id,
+            responses=responses,
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Test progress could not be saved.") from exc
+
+
+@app.post("/api/tests/attempts/{attempt_id}/sections/advance")
+def advance_test_attempt_section(
+    attempt_id: uuid.UUID,
+    payload: AdvanceTestSectionRequest,
+) -> dict:
+    try:
+        return test_attempts_service.advance_section(
+            _write_user_from_payload(payload, "test-attempt-section", str(attempt_id)),
+            attempt_id=attempt_id,
+            next_section_instance_id=payload.next_section_instance_id,
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Test section could not be advanced.") from exc
+
+
+@app.post("/api/tests/attempts/{attempt_id}/submit")
+def submit_test_attempt(
+    attempt_id: uuid.UUID,
+    payload: SubmitTestAttemptRequest,
+) -> dict:
+    try:
+        return test_attempts_service.submit(
+            _write_user_from_payload(payload, "test-attempt-submit", str(attempt_id)),
+            attempt_id=attempt_id,
+            auto_submit=payload.auto_submit,
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Test attempt could not be submitted.") from exc
+
+
+@app.get("/api/tests/attempts/{attempt_id}")
+def get_test_attempt(
+    attempt_id: uuid.UUID,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        payload = test_attempts_service.get(
+            _telegram_user_from_init_data(init_data),
+            attempt_id=attempt_id,
+        )
+        if payload is None:
+            raise HTTPException(status_code=404, detail="Test attempt not found.")
+        return payload
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Test attempt is temporarily unavailable.") from exc
 
 
 @app.get("/api/quiz/{quiz_id}")
@@ -939,6 +1124,10 @@ def _write_user_from_payload(
         | PracticeQuestionReportRequest
         | ResourceFeedbackRequest
         | ResourceReviewRequest
+        | StartTestAttemptRequest
+        | SaveTestProgressRequest
+        | AdvanceTestSectionRequest
+        | SubmitTestAttemptRequest
     ),
     scope: str,
     suffix: str = "",
@@ -957,6 +1146,10 @@ def _write_user_from_payload(
         "preferences": (20, 3600),
         "resource-feedback": (20, 3600),
         "resource-review": (60, 3600),
+        "test-attempt-start": (30, 3600),
+        "test-attempt-progress": (600, 3600),
+        "test-attempt-section": (100, 3600),
+        "test-attempt-submit": (30, 3600),
     }
     limit, window = limits.get(scope, (30, 3600))
     try:

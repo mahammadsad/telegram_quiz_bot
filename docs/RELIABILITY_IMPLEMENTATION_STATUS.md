@@ -2,7 +2,7 @@
 
 Updated: 2026-08-08
 
-Branch: `codex/phase-e-exam-platform`
+Branch: `codex/phase-e-pyq-mocks`
 
 Baseline commit: `e390751782f6c0acf066b54273da1ceb8c65e5e1`
 
@@ -20,7 +20,9 @@ Phase D current-affairs event/claim migration and public staging gate are green.
 The expanded mathematics, reasoning, English, and Bengali validators are green
 in staging. Phase E1 personal learning is green on PR #30, including CI,
 Supabase staging, Render staging, and non-posting smoke #24. Phase E2 exam
-configuration is the active checkpoint.
+configuration is green on PR #31, including CI, Supabase staging, Render
+staging, and non-posting smoke #25. Phase E3 previous-year provenance and
+generalized timed mocks are the active checkpoint.
 Production is unchanged.
 
 ## Implemented
@@ -88,6 +90,13 @@ Production is unchanged.
   quizzes, and attempt/answer links to test and section instances. Public
   catalogue/test RPCs omit answer keys; unreviewed exam/mock templates remain
   drafts rather than inventing official rules.
+- Phase E3 separates verified actual PYQs from generated previous-year-style
+  practice; records official source/checksum/licence/reviewer metadata; applies
+  answer corrections only through an append-only superseding-version audit;
+  and adds idempotent timed attempts, section state/transitions, autosave,
+  mark-for-review, section marking, deadline autosubmit, first-attempt rank
+  cohorts, and subject/topic/knowledge-point analysis. Existing daily quiz
+  attempts and answers are mirrored with their identifiers preserved.
 
 ## Local evidence
 
@@ -139,6 +148,22 @@ Production is unchanged.
 - Phase E2 local checkpoint: 400 tests pass with 29 hosted database tests
   skipped locally; Ruff and mypy (73 production files) pass. Disposable
   PostgreSQL and browser CI remain required before the staging migration.
+- Phase E2 final gate: CI run `31256975753`, Render deployment
+  `dep-d9rhv6f10e5c7384kslg`, and non-posting smoke run `31257177980` are green
+  on commit `fd34190`. The exam configuration contract is ready in staging,
+  every historical attempt/answer link is exact, and the advisor check found
+  no Phase E foreign-key index gaps.
+- Phase E3 local checkpoint: 408 tests pass with 29 hosted database tests
+  skipped locally; Ruff and mypy (74 production files) pass. Staging compiled
+  the migration, mirrored 12/12 attempts and 120/120 answers, returned an
+  answer-free two-question verified PYQ catalogue, preserved one UUID attempt
+  across retry, enforced two section transitions and section-specific marks,
+  produced the declared first-attempt rank cohort and topic analysis, and
+  autosubmitted an expired attempt at the exact 300-second cutoff. A rollback-
+  only correction chain accepted an explicit superseding question and blocked
+  direct verified-answer tampering. All synthetic rows were removed and the
+  Phase E3 contract remains ready with no permission failures or unindexed new
+  foreign keys.
 
 ## Deployment prerequisites
 

@@ -179,6 +179,30 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "table_permission_failures": [],
         },
     )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_phase_e_previous_year_mock_contract",
+        lambda: {
+            "ready": True,
+            "real_pyq_provenance": True,
+            "correction_audit": True,
+            "generated_style_separation": True,
+            "timed_sections": True,
+            "section_transitions": True,
+            "mark_for_review": True,
+            "idempotent_attempts": True,
+            "section_specific_marking": True,
+            "auto_submit": True,
+            "rank_cohort": True,
+            "topic_and_knowledge_analysis": True,
+            "legacy_attempts_mirrored": True,
+            "phase_e_previous_year_mock_migration_version": (
+                readiness_service.PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION
+            ),
+            "function_permission_failures": [],
+            "table_permission_failures": [],
+        },
+    )
     readiness_service._CACHE = None
 
 

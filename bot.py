@@ -44,6 +44,7 @@ from database.contract import (
     PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
     PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION,
     PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
+    PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
@@ -1060,6 +1061,9 @@ def validate_database_schema() -> None:
     phase_e_exam_configuration = (
         schema_contract_repo.get_phase_e_exam_configuration_contract()
     )
+    phase_e_previous_year_mock = (
+        schema_contract_repo.get_phase_e_previous_year_mock_contract()
+    )
     permission_failures = (
         contract.get("function_permission_failures") or []
     ) + (contract.get("table_permission_failures") or []) + (
@@ -1082,6 +1086,10 @@ def validate_database_schema() -> None:
         phase_e_exam_configuration.get("function_permission_failures") or []
     ) + (
         phase_e_exam_configuration.get("table_permission_failures") or []
+    ) + (
+        phase_e_previous_year_mock.get("function_permission_failures") or []
+    ) + (
+        phase_e_previous_year_mock.get("table_permission_failures") or []
     )
     valid = bool(
         contract.get("ready")
@@ -1139,6 +1147,23 @@ def validate_database_schema() -> None:
             "phase_e_exam_configuration_migration_version"
         )
         == PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION
+        and phase_e_previous_year_mock.get("ready") is True
+        and phase_e_previous_year_mock.get("real_pyq_provenance") is True
+        and phase_e_previous_year_mock.get("correction_audit") is True
+        and phase_e_previous_year_mock.get("generated_style_separation") is True
+        and phase_e_previous_year_mock.get("timed_sections") is True
+        and phase_e_previous_year_mock.get("section_transitions") is True
+        and phase_e_previous_year_mock.get("mark_for_review") is True
+        and phase_e_previous_year_mock.get("idempotent_attempts") is True
+        and phase_e_previous_year_mock.get("section_specific_marking") is True
+        and phase_e_previous_year_mock.get("auto_submit") is True
+        and phase_e_previous_year_mock.get("rank_cohort") is True
+        and phase_e_previous_year_mock.get("topic_and_knowledge_analysis") is True
+        and phase_e_previous_year_mock.get("legacy_attempts_mirrored") is True
+        and phase_e_previous_year_mock.get(
+            "phase_e_previous_year_mock_migration_version"
+        )
+        == PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION
         and (
             not SOURCE_BACKED_ROTATION_ENABLED
             or (

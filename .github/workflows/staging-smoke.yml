@@ -204,6 +204,7 @@ jobs:
               PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
               PHASE_E_EXAM_CONFIGURATION_MIGRATION_VERSION,
               PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
+              PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION,
               POST_FINALIZATION_MIGRATION_VERSION,
               QUIZ_JOBS_MIGRATION_VERSION,
               REQUIRED_MIGRATION_VERSION,
@@ -261,6 +262,9 @@ jobs:
                   ),
                   "phaseEExamConfigurationMigrationVersion": body.get(
                       "phaseEExamConfigurationMigrationVersion"
+                  ),
+                  "phaseEPreviousYearMockMigrationVersion": body.get(
+                      "phaseEPreviousYearMockMigrationVersion"
                   ),
                   "sourceBackedRotationEnabled": body.get(
                       "sourceBackedRotationEnabled"
@@ -353,6 +357,13 @@ jobs:
               if body.get("checks", {}).get("examConfiguration") is not True:
                   raise SystemExit("Staging exam configuration is not ready.")
               if (
+                  body.get("phaseEPreviousYearMockMigrationVersion")
+                  != PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION
+              ):
+                  raise SystemExit("Staging Phase E previous-year/mock migration mismatch.")
+              if body.get("checks", {}).get("previousYearMocks") is not True:
+                  raise SystemExit("Staging previous-year/mock engine is not ready.")
+              if (
                   body.get("sourceRolloutMigrationVersion")
                   != SOURCE_ROLLOUT_MIGRATION_VERSION
               ):
@@ -383,6 +394,7 @@ jobs:
                       "currentAffairsEvents",
                       "personalKnowledgeMastery",
                       "examConfiguration",
+                      "previousYearMocks",
                       "activeQuizRetrieval",
                   }
                   if (
