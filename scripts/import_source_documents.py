@@ -111,11 +111,28 @@ def import_source_bundle(
         if dry_run:
             imported.append({**payload, "micro_topic_key": micro_topic["key"]})
             continue
-        result = client.table("source_documents").upsert(
-            payload,
-            on_conflict="micro_topic_id,source_url,fact_version",
-        ).execute()
-        source = result.data[0]
+        existing = (
+            client.table("source_documents")
+            .select("*")
+            .eq("micro_topic_id", micro_topic["id"])
+            .eq("source_url", clean["source_url"])
+            .eq("fact_version", clean["fact_version"])
+            .limit(1)
+            .execute()
+            .data
+            or []
+        )
+        if existing and existing[0].get("verification_status") == "verified":
+            # Verified provenance is immutable. A scheduled refresh is allowed
+            # to rediscover the same version and backfill its event/claim graph,
+            # but must never issue an UPDATE merely to change access timestamps.
+            source = existing[0]
+        else:
+            result = client.table("source_documents").upsert(
+                payload,
+                on_conflict="micro_topic_id,source_url,fact_version",
+            ).execute()
+            source = result.data[0]
         imported.append(source)
         if clean["subject_key"] == "current-affairs":
             client.rpc(

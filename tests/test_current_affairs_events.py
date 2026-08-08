@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from datetime import date, datetime, timezone
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
-from scripts.import_source_documents import validate_source_bundle
+from scripts.import_source_documents import import_source_bundle, validate_source_bundle
 from services.current_affairs_pipeline import (
     EVENT_POLICY_VERSION,
     authoritative_source_domain,
@@ -141,6 +142,57 @@ def test_current_affairs_source_bundle_requires_event_level_evidence() -> None:
     assert validate_source_bundle([row])[0]["current_affairs_event"][
         "verification_policy"
     ] == EVENT_POLICY_VERSION
+
+
+def test_refresh_reuses_immutable_verified_source_and_backfills_event_graph() -> None:
+    row = {
+        "subject_key": "current-affairs",
+        "chapter": "জাতীয় সাম্প্রতিক ঘটনা",
+        "micro_topic_name": "জাতীয় নীতি ও গুরুত্বপূর্ণ ঘটনা",
+        "micro_topic_key": "current-affairs:national:t01",
+        "source_url": "https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=2290999",
+        "source_title": "Official national programme release",
+        "source_domain": "pib.gov.in",
+        "source_kind": "official",
+        "source_published_at": "2026-08-06T12:00:00+00:00",
+        "source_accessed_at": "2026-08-06T13:00:00+00:00",
+        "fact_summary": _body("the official national programme"),
+        "fact_version": "pib-2290999-2026-08-06-test",
+        "expires_at": "2026-09-20T23:59:59+00:00",
+        "current_affairs_event": _event("Official national programme release"),
+    }
+    clean = validate_source_bundle([row])
+    chapter_query = MagicMock()
+    chapter_query.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {"id": "chapter-1", "subject_key": "current-affairs", "name": row["chapter"]}
+    ]
+    topic_query = MagicMock()
+    topic_query.select.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {"id": "topic-1", "key": row["micro_topic_key"], "name": row["micro_topic_name"]}
+    ]
+    source_query = MagicMock()
+    source_query.select.return_value.eq.return_value.eq.return_value.eq.return_value.limit.return_value.execute.return_value.data = [
+        {"id": "source-1", "verification_status": "verified"}
+    ]
+    rpc_query = MagicMock()
+    rpc_query.execute.return_value.data = []
+    client = MagicMock()
+    client.table.side_effect = lambda name: {
+        "quiz_chapters": chapter_query,
+        "quiz_micro_topics": topic_query,
+        "source_documents": source_query,
+    }[name]
+    client.rpc.return_value = rpc_query
+
+    imported = import_source_bundle(clean, approve=True, client=client)
+
+    assert imported == [{"id": "source-1", "verification_status": "verified"}]
+    source_query.upsert.assert_not_called()
+    assert client.rpc.call_args_list[0].args[0] == "upsert_current_affairs_event_bundle"
+    assert client.rpc.call_args_list[-1].args == (
+        "cache_verified_source_resources",
+        {"p_subject_key": "current-affairs"},
+    )
 
 
 def test_phase_d_migration_has_server_only_event_claim_and_pool_contracts() -> None:
