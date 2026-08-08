@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from database.contract import (  # noqa: E402
-    PHASE_C_CANDIDATE_MIGRATION_VERSION,
+    PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION,
 )
 
 BOOTSTRAP = ROOT / "database" / "schema.sql"
@@ -109,10 +109,10 @@ def rebuild(database_url: str) -> dict:
     identity = _migration_identity(latest_supabase)
     if (
         not identity
-        or identity[0] != PHASE_C_CANDIDATE_MIGRATION_VERSION
+        or identity[0] != PHASE_D_CURRENT_AFFAIRS_MIGRATION_VERSION
     ):
         raise RuntimeError(
-            "The Phase C inventory contract does not match the latest migration file."
+            "The Phase D contract does not match the latest migration file."
         )
 
     with psycopg.connect(database_url, autocommit=True) as connection:
