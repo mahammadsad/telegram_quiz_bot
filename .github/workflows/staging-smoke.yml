@@ -197,6 +197,7 @@ jobs:
               DATABASE_CONTRACT_VERSION,
               LEADERBOARD_PRIVACY_MIGRATION_VERSION,
               PERSONAL_LEARNING_MIGRATION_VERSION,
+              POST_FINALIZATION_MIGRATION_VERSION,
               REQUIRED_MIGRATION_VERSION,
               SOURCE_ROLLOUT_MIGRATION_VERSION,
           )
@@ -225,6 +226,9 @@ jobs:
                   ),
                   "leaderboardPrivacyMigrationVersion": body.get(
                       "leaderboardPrivacyMigrationVersion"
+                  ),
+                  "postFinalizationMigrationVersion": body.get(
+                      "postFinalizationMigrationVersion"
                   ),
                   "sourceBackedRotationEnabled": body.get(
                       "sourceBackedRotationEnabled"
@@ -258,6 +262,13 @@ jobs:
                   raise SystemExit("Staging leaderboard-privacy migration mismatch.")
               if body.get("checks", {}).get("leaderboardPrivacy") is not True:
                   raise SystemExit("Staging leaderboard privacy is not ready.")
+              if (
+                  body.get("postFinalizationMigrationVersion")
+                  != POST_FINALIZATION_MIGRATION_VERSION
+              ):
+                  raise SystemExit("Staging post-finalization migration mismatch.")
+              if body.get("checks", {}).get("postFinalization") is not True:
+                  raise SystemExit("Staging atomic post finalization is not ready.")
               if (
                   body.get("sourceRolloutMigrationVersion")
                   != SOURCE_ROLLOUT_MIGRATION_VERSION

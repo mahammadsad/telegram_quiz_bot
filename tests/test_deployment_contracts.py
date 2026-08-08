@@ -9,10 +9,16 @@ from pathlib import Path
 import yaml
 
 from config.schedule import RECOVERY_CRON, SUBJECT_CRONS
+from config.settings import (
+    PRODUCTION_CONFIG,
+    PRODUCTION_CONFIG_HASH,
+    PRODUCTION_CONFIG_VERSION,
+)
 from database.contract import (
     APPLICATION_VERSION,
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
+    POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
 )
@@ -45,7 +51,8 @@ def test_render_blueprint_is_fail_closed_and_uses_readiness() -> None:
 
     env = {item["key"]: item for item in service["envVars"]}
     assert env["EXPECTED_SUPABASE_PROJECT_REF"]["value"] == PRODUCTION_PROJECT_REF
-    assert env["SOURCE_BACKED_ROTATION_ENABLED"]["value"] == "false"
+    assert env["SOURCE_BACKED_ROTATION_ENABLED"]["value"] == "true"
+    assert env["CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS"]["value"] == "45"
     for secret_name in (
         "SUPABASE_URL",
         "SUPABASE_SERVICE_KEY",
@@ -99,10 +106,7 @@ def test_workflows_have_minimum_permissions_timeouts_and_environment_guards() ->
     )
     assert bot_preflight["env"]["SUPABASE_URL"] == PRODUCTION_SUPABASE_URL
     main_source = (WORKFLOW_DIR / "main.yml").read_text(encoding="utf-8")
-    assert (
-        "SOURCE_BACKED_ROTATION_ENABLED: "
-        "${{ vars.SOURCE_BACKED_ROTATION_ENABLED || 'false' }}"
-    ) in main_source
+    assert 'SOURCE_BACKED_ROTATION_ENABLED: "true"' in main_source
 
     assert resources["permissions"] == {"contents": "read"}
     maintenance = resources["jobs"]["maintain-resources"]
@@ -157,6 +161,8 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert "body.get(\"databaseContractVersion\") != DATABASE_CONTRACT_VERSION" in source
     assert "body.get(\"personalLearningMigrationVersion\")" in source
     assert "body.get(\"leaderboardPrivacyMigrationVersion\")" in source
+    assert "body.get(\"postFinalizationMigrationVersion\")" in source
+    assert 'body.get("checks", {}).get("postFinalization") is not True' in source
     assert '"7.1.0"' not in source
 
 
@@ -207,17 +213,17 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
         assert "secrets.SUPABASE_URL" not in source
         assert "TELEGRAM_" not in source
         assert "GEMINI_" not in source
-        assert "get_application_schema_contract" in source
+        assert "validate_database_schema" in source
         assert "SUPABASE_SERVICE_KEY" in source
 
     static_source = static_path.read_text(encoding="utf-8")
-    assert static_source.index("get_application_schema_contract") < (
+    assert static_source.index("validate_database_schema") < (
         static_source.index("scripts/import_source_rollout.py --approve")
     )
     assert "IMPORT REVIEWED SOURCES TO" in static_source
 
     current_source = current_path.read_text(encoding="utf-8")
-    assert current_source.index("get_application_schema_contract") < (
+    assert current_source.index("validate_database_schema") < (
         current_source.index("--max-items 200 --minimum-per-chapter 4 --approve")
     )
     assert "REFRESH PIB SOURCES IN" in current_source
@@ -226,8 +232,10 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
 def test_authoritative_migration_version_is_latest_filename() -> None:
     migrations = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
     assert migrations
-    assert migrations[-1].name.startswith(
-        f"{LEADERBOARD_PRIVACY_MIGRATION_VERSION}_"
+    assert migrations[-1].name.startswith(f"{POST_FINALIZATION_MIGRATION_VERSION}_")
+    assert any(
+        path.name.startswith(f"{LEADERBOARD_PRIVACY_MIGRATION_VERSION}_")
+        for path in migrations
     )
     assert any(
         path.name.startswith(f"{PERSONAL_LEARNING_MIGRATION_VERSION}_")
@@ -240,6 +248,38 @@ def test_authoritative_migration_version_is_latest_filename() -> None:
     assert any(
         path.name.startswith(f"{REQUIRED_MIGRATION_VERSION}_")
         for path in migrations
+    )
+
+
+def test_versioned_production_manifest_matches_deployment_intent() -> None:
+    manifest_path = ROOT / "config" / "production.toml"
+    assert manifest_path.is_file()
+    assert PRODUCTION_CONFIG_VERSION == "2026-08-08.1"
+    assert re.fullmatch(r"[0-9a-f]{64}", PRODUCTION_CONFIG_HASH)
+    assert PRODUCTION_CONFIG["quiz"]["source_backed_rotation_enabled"] is True
+    assert PRODUCTION_CONFIG["gemini"] == {
+        "primary_model": "gemini-3.1-flash-lite",
+        "fallback_model": "gemini-2.5-flash",
+        "failover_enabled": True,
+    }
+    assert PRODUCTION_CONFIG["database"]["post_finalization_migration_version"] == (
+        POST_FINALIZATION_MIGRATION_VERSION
+    )
+
+    render = _load_yaml(ROOT / "render.yaml")
+    render_env = {
+        row["key"]: row.get("value")
+        for row in render["services"][0]["envVars"]
+        if "value" in row
+    }
+    assert render_env["GEMINI_MODEL_PRIMARY"] == PRODUCTION_CONFIG["gemini"][
+        "primary_model"
+    ]
+    assert render_env["GEMINI_MODEL_FALLBACK"] == PRODUCTION_CONFIG["gemini"][
+        "fallback_model"
+    ]
+    assert render_env["QUESTION_VERIFICATION_MIN_CONFIDENCE"] == str(
+        PRODUCTION_CONFIG["quiz"]["verification_min_confidence"]
     )
 
 
