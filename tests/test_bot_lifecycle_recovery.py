@@ -633,7 +633,21 @@ def test_semantically_invalid_json_twice_fails_closed(valid_questions):
 
     assert pool.calls == 2
     assert len(caught.value.attempts) == 2
-    assert caught.value.retryable is False
+    assert caught.value.retryable is True
+
+
+def test_deterministic_reason_code_gets_targeted_repair_hint():
+    error = bot.QuizValidationError(
+        "Question 1 failed deterministic verification.",
+        reason_code="option_pattern_leakage",
+    )
+
+    reason = bot._validation_reason_code(error)
+    repaired = bot._repair_generation_prompt("base prompt", reason)
+
+    assert reason == "option_pattern_leakage"
+    assert "same visible answer type and script pattern" in repaired
+    assert "only numeric, Latin, Bengali, or mixed-script" in repaired
 
 
 def test_recovery_only_processes_due_and_skips_posted(monkeypatch):
