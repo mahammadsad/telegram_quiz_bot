@@ -144,6 +144,7 @@ SCIENCE_GENERAL_TERMS = (
 LAW_TERMS = (
     "supreme court", "high court", "judicial", "judiciary", "legislation",
     "bill ", " act ", "rules ", "regulation", "parliament", "ordinance", "legal",
+    "tribunal", "court", "justice",
 )
 ADMIN_TERMS = (
     "commission", "authority", "board", "council", "administration", "governance",
@@ -577,14 +578,20 @@ def classify_release(release: Release) -> tuple[str, str, str]:
         return CLASSIFICATIONS["science:t02"]
     if _contains_any(text, SCIENCE_DIGITAL_TERMS):
         return CLASSIFICATIONS["science:t03"]
-    if _contains_any(text, SCIENCE_GENERAL_TERMS):
-        return CLASSIFICATIONS["science:t04"]
     if _contains_any(text, LAW_TERMS):
         return CLASSIFICATIONS["national:t03"]
     if _contains_any(text, DEVELOPMENT_TERMS):
         return CLASSIFICATIONS["national:t04"]
     if _contains_any(headline, ADMIN_TERMS):
         return CLASSIFICATIONS["national:t02"]
+    general_science_matches = {
+        term for term in SCIENCE_GENERAL_TERMS if term in text
+    }
+    if (
+        _contains_any(headline, SCIENCE_GENERAL_TERMS)
+        or len(general_science_matches) >= 2
+    ):
+        return CLASSIFICATIONS["science:t04"]
     return CLASSIFICATIONS["national:t01"]
 
 
