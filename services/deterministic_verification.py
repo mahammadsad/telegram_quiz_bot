@@ -11,8 +11,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from fractions import Fraction
+from itertools import permutations
 from typing import Any, Mapping, Sequence
 
 from config.settings import DETERMINISTIC_PROOF_VERSION
@@ -37,6 +38,7 @@ class DeterministicResult:
     family: str
     expected_answer: str | None
     checks: dict[str, bool]
+    language_form: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -44,7 +46,15 @@ class DeterministicResult:
             "family": self.family,
             "expected_answer": self.expected_answer,
             "checks": dict(self.checks),
+            "language_form": self.language_form,
         }
+
+
+@dataclass(frozen=True, slots=True)
+class _SolvedValue:
+    value: Any
+    explanation_values: tuple[Any, ...]
+    unit: str | None = None
 
 
 def verify_candidate(
@@ -69,13 +79,18 @@ def verify_candidate(
     _verify_option_quality(options, correct_index)
     _verify_language(candidate, subject)
     _verify_source_dates(candidate, now=now)
+    language_form = _verify_subject_language_contract(
+        candidate,
+        subject,
+        required=require_subject_proof,
+    )
 
     proof = candidate.get("deterministic_proof")
     if proof is None:
-        if require_subject_proof and subject in {"mathematics", "reasoning"}:
+        if require_subject_proof:
             raise DeterministicVerificationError(
                 "proof_missing",
-                f"{subject} candidates require a machine-checkable proof payload.",
+                f"{subject or 'new inventory'} candidates require a machine-checkable proof payload.",
             )
         return DeterministicResult(
             version=PROOF_VERSION,
@@ -86,8 +101,9 @@ def verify_candidate(
                 "option_pattern_safe": True,
                 "language_valid": True,
                 "source_dates_valid": True,
-                "unique_answer_proved": subject not in {"mathematics", "reasoning"},
+                "unique_answer_proved": False,
             },
+            language_form=language_form,
         )
     if not isinstance(proof, Mapping) or proof.get("version") != PROOF_VERSION:
         raise DeterministicVerificationError(
@@ -95,13 +111,13 @@ def verify_candidate(
         )
 
     family = str(proof.get("family") or "").strip()
-    expected: Any
+    solved: _SolvedValue
     if subject == "mathematics":
-        expected = _solve_mathematics(family, proof.get("parameters"))
+        solved = _solve_mathematics(family, proof.get("parameters"))
     elif subject == "reasoning":
-        expected = _solve_reasoning(family, proof.get("parameters"))
+        solved = _solve_reasoning(family, proof.get("parameters"))
     elif family == "evidence_single_answer":
-        expected = _solve_evidence(candidate, proof)
+        solved = _SolvedValue(_solve_evidence(candidate, proof), ())
     else:
         raise DeterministicVerificationError(
             "proof_family_unsupported",
@@ -113,7 +129,11 @@ def verify_candidate(
         raise DeterministicVerificationError(
             "proof_invalid", "The proof must provide four machine-readable option values."
         )
-    matches = [index for index, value in enumerate(option_values) if _values_equal(value, expected)]
+    matches = [
+        index
+        for index, value in enumerate(option_values)
+        if _values_equal(value, solved.value)
+    ]
     if len(matches) != 1:
         raise DeterministicVerificationError(
             "answer_not_unique",
@@ -124,6 +144,11 @@ def verify_candidate(
             "declared_answer_wrong",
             "The declared answer disagrees with the deterministic solver.",
         )
+
+    if subject in {"mathematics", "reasoning"}:
+        _verify_explanation_values(proof, solved.explanation_values)
+    if solved.unit is not None:
+        _verify_option_units(proof, solved.unit)
 
     expected_text = str(options[correct_index]).strip()
     conclusion = str(proof.get("explanation_conclusion") or "").strip()
@@ -144,8 +169,11 @@ def verify_candidate(
             "solver_supported": True,
             "unique_answer_proved": True,
             "declared_answer_matches": True,
+            "explanation_steps_match": True,
+            "units_match": True,
             "explanation_matches": True,
         },
+        language_form=language_form,
     )
 
 
@@ -223,6 +251,95 @@ def _verify_language(candidate: Mapping[str, Any], subject: str) -> None:
                 )
 
 
+def _verify_subject_language_contract(
+    candidate: Mapping[str, Any],
+    subject: str,
+    *,
+    required: bool,
+) -> str | None:
+    if subject not in {"english", "bengali"}:
+        return None
+    form = str(candidate.get("language_question_form") or "").strip()
+    if not required and not form:
+        return None
+    allowed = {
+        "english": {"grammar_rule", "vocabulary", "comprehension", "error_detection"},
+        "bengali": {
+            "grammar_rule", "vocabulary", "comprehension", "literature",
+            "linguistics", "translation",
+        },
+    }
+    if form not in allowed[subject]:
+        raise DeterministicVerificationError(
+            "language_form_invalid",
+            f"{subject} candidates require a supported typed language question form.",
+        )
+    verification = candidate.get("language_verification")
+    if not isinstance(verification, Mapping) or verification.get("version") != 1:
+        raise DeterministicVerificationError(
+            "language_evidence_missing",
+            "Language questions require a versioned authoritative rule artifact.",
+        )
+    authority = str(verification.get("authority_type") or "")
+    rule_id = str(verification.get("rule_id") or "").strip()
+    source_span = str(verification.get("source_span") or "").strip()
+    evidence = normalize_text(str(candidate.get("evidence_summary") or ""))
+    if (
+        authority not in {"official", "primary", "reviewed_reference"}
+        or not rule_id
+        or not source_span
+        or normalize_text(source_span) not in evidence
+    ):
+        raise DeterministicVerificationError(
+            "language_evidence_invalid",
+            "The language rule is not anchored to the supplied authoritative source span.",
+        )
+    review_status = str(verification.get("review_status") or "")
+    uncertain = verification.get("uncertain") is True
+    if review_status not in {"source_proved", "human_reviewed"}:
+        raise DeterministicVerificationError(
+            "language_review_invalid", "Language review status is missing or unsupported."
+        )
+    human_reviewed = review_status == "human_reviewed" and _has_human_review_attestation(
+        candidate
+    )
+    if review_status == "human_reviewed" and not human_reviewed:
+        raise DeterministicVerificationError(
+            "language_review_required",
+            "A model-declared human review is not an operator attestation.",
+        )
+    if subject == "bengali" and uncertain and not human_reviewed:
+        raise DeterministicVerificationError(
+            "language_review_required",
+            "Uncertain Bengali language content must enter human review.",
+        )
+    language = str(candidate.get("language") or "").lower()
+    if (form == "translation" or language == "bn-en") and (
+        verification.get("translation_status") != "human_reviewed" or not human_reviewed
+    ):
+        raise DeterministicVerificationError(
+            "translation_review_required",
+            "Translation correctness requires a separate human-reviewed decision.",
+        )
+    return form
+
+
+def _has_human_review_attestation(candidate: Mapping[str, Any]) -> bool:
+    attestation = candidate.get("language_human_review")
+    if not isinstance(attestation, Mapping):
+        return False
+    reviewer_id = str(attestation.get("reviewer_id") or "").strip()
+    reviewed_at = str(attestation.get("reviewed_at") or "").strip()
+    decision = str(attestation.get("decision") or "")
+    if not reviewer_id or not reviewed_at or decision != "approved":
+        return False
+    try:
+        datetime.fromisoformat(reviewed_at.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return True
+
+
 def _verify_source_dates(candidate: Mapping[str, Any], *, now: datetime | None) -> None:
     current = _utc(now or datetime.now(timezone.utc))
     published = _parse_datetime(candidate.get("source_published_at"), "source publication")
@@ -246,8 +363,9 @@ def _verify_source_dates(candidate: Mapping[str, Any], *, now: datetime | None) 
         )
 
 
-def _solve_mathematics(family: str, raw: Any) -> Fraction:
+def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
     params = _mapping(raw)
+    result: Any
     try:
         if family == "arithmetic_expression":
             values = [_fraction(value) for value in _sequence(params.get("values"))]
@@ -266,14 +384,17 @@ def _solve_mathematics(family: str, raw: Any) -> Fraction:
                     result /= value
                 else:
                     raise ValueError
-            return result
+            return _SolvedValue(result, (result,))
         if family == "percentage_of":
-            return _fraction(params["base"]) * _fraction(params["percent"]) / 100
+            result = _fraction(params["base"]) * _fraction(params["percent"]) / 100
+            return _SolvedValue(result, (result,))
         if family == "average":
             values = [_fraction(value) for value in _sequence(params.get("values"))]
             if not values:
                 raise ValueError
-            return sum(values, Fraction()) / len(values)
+            total = sum(values, Fraction())
+            result = total / len(values)
+            return _SolvedValue(result, (total, result))
         if family == "ratio_share":
             left = _fraction(params["left_ratio"])
             right = _fraction(params["right_ratio"])
@@ -281,14 +402,94 @@ def _solve_mathematics(family: str, raw: Any) -> Fraction:
             requested = str(params.get("requested") or "")
             if left <= 0 or right <= 0 or requested not in {"left", "right"}:
                 raise ValueError
-            return total * (left if requested == "left" else right) / (left + right)
+            result = total * (left if requested == "left" else right) / (left + right)
+            return _SolvedValue(result, (left + right, result))
         if family == "simple_interest":
-            return (
+            result = (
                 _fraction(params["principal"])
                 * _fraction(params["rate_percent"])
                 * _fraction(params["years"])
                 / 100
             )
+            return _SolvedValue(result, (result,))
+        if family == "algebra_linear":
+            coefficient = _fraction(params["coefficient"])
+            constant = _fraction(params["constant"])
+            right_hand_side = _fraction(params["right_hand_side"])
+            if not coefficient:
+                raise ValueError
+            remainder = right_hand_side - constant
+            result = remainder / coefficient
+            return _SolvedValue(result, (remainder, result))
+        if family == "time_work":
+            worker_times = [
+                _fraction(value) for value in _sequence(params.get("worker_times"))
+            ]
+            if len(worker_times) not in range(2, 7) or any(value <= 0 for value in worker_times):
+                raise ValueError
+            combined_rate = sum((Fraction(1, 1) / value for value in worker_times), Fraction())
+            result = Fraction(1, 1) / combined_rate
+            unit = _required_unit(params.get("time_unit"), {"second", "minute", "hour", "day"})
+            return _SolvedValue(result, (combined_rate, result), unit)
+        if family == "speed_distance":
+            requested = str(params.get("requested") or "")
+            distance_unit = _required_unit(
+                params.get("distance_unit"), {"metre", "kilometre"}
+            )
+            time_unit = _required_unit(
+                params.get("time_unit"), {"second", "minute", "hour"}
+            )
+            if requested == "distance":
+                speed = _fraction(params["speed"])
+                duration = _fraction(params["time"])
+                if speed <= 0 or duration <= 0:
+                    raise ValueError
+                result = speed * duration
+                return _SolvedValue(result, (result,), distance_unit)
+            if requested == "time":
+                distance = _fraction(params["distance"])
+                speed = _fraction(params["speed"])
+                if distance <= 0 or speed <= 0:
+                    raise ValueError
+                result = distance / speed
+                return _SolvedValue(result, (result,), time_unit)
+            if requested == "speed":
+                distance = _fraction(params["distance"])
+                duration = _fraction(params["time"])
+                if distance <= 0 or duration <= 0:
+                    raise ValueError
+                result = distance / duration
+                return _SolvedValue(result, (result,), f"{distance_unit}/{time_unit}")
+            raise ValueError
+        if family == "profit_loss":
+            cost = _fraction(params["cost_price"])
+            selling = _fraction(params["selling_price"])
+            requested = str(params.get("requested") or "")
+            if cost <= 0 or selling < 0:
+                raise ValueError
+            difference = selling - cost
+            if requested == "profit_amount" and difference >= 0:
+                return _SolvedValue(difference, (difference,), "currency")
+            if requested == "loss_amount" and difference <= 0:
+                return _SolvedValue(-difference, (-difference,), "currency")
+            if requested == "profit_percent" and difference >= 0:
+                result = difference * 100 / cost
+                return _SolvedValue(result, (difference, result), "percent")
+            if requested == "loss_percent" and difference <= 0:
+                result = -difference * 100 / cost
+                return _SolvedValue(result, (-difference, result), "percent")
+            raise ValueError
+        if family == "rounded_division":
+            numerator = _decimal(params["numerator"])
+            denominator = _decimal(params["denominator"])
+            places = params.get("decimal_places")
+            if denominator == 0 or isinstance(places, bool) or not isinstance(places, int) or places not in range(0, 7):
+                raise ValueError
+            if str(params.get("rounding_mode") or "") != "half_up":
+                raise ValueError
+            quantum = Decimal(1).scaleb(-places)
+            result = (numerator / denominator).quantize(quantum, rounding=ROUND_HALF_UP)
+            return _SolvedValue(result, (result,))
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         raise DeterministicVerificationError(
             "math_proof_invalid", "The mathematics proof parameters are invalid."
@@ -298,8 +499,9 @@ def _solve_mathematics(family: str, raw: Any) -> Fraction:
     )
 
 
-def _solve_reasoning(family: str, raw: Any) -> Any:
+def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
     params = _mapping(raw)
+    result: Any
     try:
         if family == "arithmetic_series_next":
             values = [_fraction(value) for value in _sequence(params.get("sequence"))]
@@ -310,7 +512,8 @@ def _solve_reasoning(family: str, raw: Any) -> Any:
             ]
             if len(set(differences)) != 1:
                 raise ValueError
-            return values[-1] + differences[0]
+            result = values[-1] + differences[0]
+            return _SolvedValue(result, (differences[0], result))
         if family == "ordering_rank":
             values = list(_sequence(params.get("values")))
             target = params.get("target")
@@ -323,7 +526,8 @@ def _solve_reasoning(family: str, raw: Any) -> Any:
                 ordered = sorted(values, reverse=True)
             else:
                 raise ValueError
-            return ordered.index(target) + 1
+            result = ordered.index(target) + 1
+            return _SolvedValue(result, (result,))
         if family == "odd_one_out_tag":
             tags = [str(value) for value in _sequence(params.get("tags"))]
             if len(tags) != 4:
@@ -332,7 +536,95 @@ def _solve_reasoning(family: str, raw: Any) -> Any:
             unique = [index for index, tag in enumerate(tags) if counts[tag] == 1]
             if len(unique) != 1 or sorted(counts.values()) != [1, 3]:
                 raise ValueError
-            return unique[0]
+            return _SolvedValue(unique[0], (unique[0],))
+        if family == "coding_shift":
+            source = str(params.get("source") or "").upper()
+            shift = params.get("shift")
+            direction = str(params.get("direction") or "")
+            if not source or not source.isascii() or not source.isalpha():
+                raise ValueError
+            if isinstance(shift, bool) or not isinstance(shift, int) or shift not in range(1, 26):
+                raise ValueError
+            signed_shift = shift if direction == "encode" else -shift if direction == "decode" else 0
+            if not signed_shift:
+                raise ValueError
+            result = "".join(
+                chr((ord(character) - ord("A") + signed_shift) % 26 + ord("A"))
+                for character in source
+            )
+            return _SolvedValue(result, (result,))
+        if family == "direction_path":
+            moves = _sequence(params.get("moves"))
+            if not moves or len(moves) > 20:
+                raise ValueError
+            x = Fraction()
+            y = Fraction()
+            vectors = {
+                "N": (0, 1), "S": (0, -1), "E": (1, 0), "W": (-1, 0),
+            }
+            for move in moves:
+                if not isinstance(move, Mapping):
+                    raise ValueError
+                direction = str(move.get("direction") or "")
+                distance = _fraction(move.get("distance"))
+                if direction not in vectors or distance <= 0:
+                    raise ValueError
+                dx, dy = vectors[direction]
+                x += dx * distance
+                y += dy * distance
+            if not x and not y:
+                raise ValueError
+            horizontal = "E" if x > 0 else "W" if x < 0 else ""
+            vertical = "N" if y > 0 else "S" if y < 0 else ""
+            result = vertical + horizontal
+            return _SolvedValue(result, (x, y, result))
+        if family == "ordering_constraints":
+            items = [str(value) for value in _sequence(params.get("items"))]
+            constraints = _sequence(params.get("constraints"))
+            target = str(params.get("target") or "")
+            if len(items) not in range(2, 8) or len(set(items)) != len(items) or target not in items:
+                raise ValueError
+            valid_orders: list[tuple[str, ...]] = []
+            for order in permutations(items):
+                positions = {item: index for index, item in enumerate(order)}
+                if all(_constraint_holds(rule, positions) for rule in constraints):
+                    valid_orders.append(order)
+            if not valid_orders:
+                raise ValueError
+            ranks = {order.index(target) + 1 for order in valid_orders}
+            if len(ranks) != 1:
+                raise ValueError
+            result = ranks.pop()
+            return _SolvedValue(result, (len(valid_orders), result))
+        if family == "syllogism_finite_sets":
+            raw_sets = _mapping(params.get("sets"))
+            sets = {
+                str(name): {str(value) for value in _sequence(members)}
+                for name, members in raw_sets.items()
+            }
+            left = str(params.get("left") or "")
+            right = str(params.get("right") or "")
+            relation = str(params.get("relation") or "")
+            if left not in sets or right not in sets or not sets[left]:
+                raise ValueError
+            if relation == "all":
+                result = sets[left] <= sets[right]
+            elif relation == "some":
+                result = bool(sets[left] & sets[right])
+            elif relation == "none":
+                result = sets[left].isdisjoint(sets[right])
+            else:
+                raise ValueError
+            return _SolvedValue(result, (result,))
+        if family == "analogy_mapping":
+            mapping = _mapping(params.get("mapping"))
+            query = str(params.get("query") or "")
+            if not mapping or query not in mapping:
+                raise ValueError
+            result = str(mapping[query])
+            if not result:
+                raise ValueError
+            return _SolvedValue(result, (result,))
     except (TypeError, ValueError) as exc:
         raise DeterministicVerificationError(
             "reasoning_proof_invalid", "The reasoning puzzle is inconsistent or under-constrained."
@@ -340,6 +632,56 @@ def _solve_reasoning(family: str, raw: Any) -> Any:
     raise DeterministicVerificationError(
         "reasoning_family_unsupported", f"Unsupported reasoning family: {family or 'blank'}."
     )
+
+
+def _constraint_holds(rule: Any, positions: Mapping[str, int]) -> bool:
+    if not isinstance(rule, Mapping):
+        raise ValueError
+    before = str(rule.get("before") or "")
+    after = str(rule.get("after") or "")
+    if before not in positions or after not in positions or before == after:
+        raise ValueError
+    return positions[before] < positions[after]
+
+
+def _verify_explanation_values(proof: Mapping[str, Any], expected: Sequence[Any]) -> None:
+    claimed = proof.get("explanation_values")
+    if not isinstance(claimed, Sequence) or isinstance(claimed, (str, bytes)):
+        raise DeterministicVerificationError(
+            "explanation_steps_missing",
+            "The proof must include machine-readable explanation values.",
+        )
+    if len(claimed) != len(expected) or any(
+        not _values_equal(left, right) for left, right in zip(claimed, expected, strict=True)
+    ):
+        raise DeterministicVerificationError(
+            "explanation_steps_invalid",
+            "The explanation steps disagree with the deterministic solution trace.",
+        )
+
+
+def _verify_option_units(proof: Mapping[str, Any], expected: str) -> None:
+    option_units = proof.get("option_units")
+    if (
+        not isinstance(option_units, Sequence)
+        or isinstance(option_units, (str, bytes))
+        or len(option_units) != 4
+    ):
+        raise DeterministicVerificationError(
+            "units_missing", "The proof must provide a unit for every option."
+        )
+    normalized = [normalize_text(str(value)) for value in option_units]
+    if any(value != normalize_text(expected) for value in normalized):
+        raise DeterministicVerificationError(
+            "units_inconsistent", "Every option must use the proved answer unit."
+        )
+
+
+def _required_unit(value: Any, allowed: set[str]) -> str:
+    unit = normalize_text(str(value or ""))
+    if unit not in allowed:
+        raise ValueError
+    return unit
 
 
 def _solve_evidence(candidate: Mapping[str, Any], proof: Mapping[str, Any]) -> str:
@@ -390,6 +732,18 @@ def _fraction(value: Any) -> Fraction:
         return Fraction(Decimal(text))
     except (InvalidOperation, ValueError, ZeroDivisionError) as exc:
         raise ValueError from exc
+
+
+def _decimal(value: Any) -> Decimal:
+    if isinstance(value, bool):
+        raise ValueError
+    try:
+        result = Decimal(str(value).strip().replace(",", ""))
+    except InvalidOperation as exc:
+        raise ValueError from exc
+    if not result.is_finite():
+        raise ValueError
+    return result
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:

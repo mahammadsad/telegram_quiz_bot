@@ -26,6 +26,7 @@ def mathematics_candidate() -> dict:
             "family": "percentage_of",
             "parameters": {"base": "100", "percent": "25"},
             "option_values": ["10", "20", "25", "30"],
+            "explanation_values": ["25"],
             "explanation_conclusion": "২৫",
         },
     }
@@ -45,6 +46,7 @@ def reasoning_candidate() -> dict:
             "family": "arithmetic_series_next",
             "parameters": {"sequence": [2, 5, 8, 11]},
             "option_values": [12, 13, 14, 15],
+            "explanation_values": [3, 14],
             "explanation_conclusion": "১৪",
         },
     }
@@ -199,6 +201,222 @@ def test_reasoning_solver_rejects_inconsistent_puzzle() -> None:
         verify_candidate(invalid)
 
     assert raised.value.code == "reasoning_proof_invalid"
+
+
+@pytest.mark.parametrize(
+    ("family", "parameters", "option_values", "explanation_values", "answer"),
+    [
+        ("algebra_linear", {"coefficient": 3, "constant": 6, "right_hand_side": 21}, [3, 4, 5, 6], [15, 5], "৫"),
+        ("profit_loss", {"cost_price": 100, "selling_price": 125, "requested": "profit_percent"}, [20, 25, 30, 35], [25, 25], "২৫"),
+        ("rounded_division", {"numerator": 2, "denominator": 3, "decimal_places": 2, "rounding_mode": "half_up"}, ["0.66", "0.67", "0.68", "0.69"], ["0.67"], "০.৬৭"),
+    ],
+)
+def test_extended_mathematics_families_are_solved(
+    family: str,
+    parameters: dict,
+    option_values: list,
+    explanation_values: list,
+    answer: str,
+) -> None:
+    candidate = mathematics_candidate()
+    candidate["options"] = ["৩", "৪", answer, "৬"] if family == "algebra_linear" else ["২০", answer, "৩০", "৩৫"]
+    if family == "rounded_division":
+        candidate["options"] = ["০.৬৬", "০.৬৭", "০.৬৮", "০.৬৯"]
+        candidate["correct_index"] = 1
+    else:
+        candidate["correct_index"] = 2 if family == "algebra_linear" else 1
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": option_values,
+        "explanation_values": explanation_values,
+        "explanation_conclusion": candidate["options"][candidate["correct_index"]],
+    }
+    if family == "profit_loss":
+        candidate["deterministic_proof"]["option_units"] = ["percent"] * 4
+
+    assert verify_candidate(candidate).family == family
+
+
+@pytest.mark.parametrize(
+    ("family", "parameters", "option_values", "explanation_values", "units", "correct"),
+    [
+        ("time_work", {"worker_times": [6, 3], "time_unit": "hour"}, [1, 2, 3, 4], ["1/2", 2], ["hour"] * 4, 1),
+        ("speed_distance", {"speed": 60, "time": 2, "requested": "distance", "distance_unit": "kilometre", "time_unit": "hour"}, [100, 110, 120, 130], [120], ["kilometre"] * 4, 2),
+    ],
+)
+def test_mathematics_units_are_proved_for_every_option(
+    family: str,
+    parameters: dict,
+    option_values: list,
+    explanation_values: list,
+    units: list[str],
+    correct: int,
+) -> None:
+    candidate = mathematics_candidate()
+    candidate["options"] = ["১০০", "১১০", "১২০", "১৩০"] if family == "speed_distance" else ["১", "২", "৩", "৪"]
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": option_values,
+        "option_units": units,
+        "explanation_values": explanation_values,
+        "explanation_conclusion": candidate["options"][correct],
+    }
+
+    assert verify_candidate(candidate).checks["units_match"] is True
+    candidate["deterministic_proof"]["option_units"][0] = "minute"
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+    assert raised.value.code == "units_inconsistent"
+
+
+def test_mathematics_explanation_trace_must_match_solver() -> None:
+    candidate = mathematics_candidate()
+    candidate["deterministic_proof"]["explanation_values"] = [30]
+
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+
+    assert raised.value.code == "explanation_steps_invalid"
+
+
+@pytest.mark.parametrize(
+    ("family", "parameters", "options", "option_values", "trace", "correct"),
+    [
+        ("coding_shift", {"source": "CAT", "shift": 1, "direction": "encode"}, ["DBT", "DBU", "DCU", "EBU"], ["DBT", "DBU", "DCU", "EBU"], ["DBU"], 1),
+        ("direction_path", {"moves": [{"direction": "N", "distance": 3}, {"direction": "E", "distance": 4}]}, ["উত্তর", "দক্ষিণ", "উত্তর-পূর্ব", "পশ্চিম"], ["N", "S", "NE", "W"], [4, 3, "NE"], 2),
+        ("ordering_constraints", {"items": ["A", "B", "C"], "constraints": [{"before": "A", "after": "B"}, {"before": "B", "after": "C"}], "target": "B"}, [1, 2, 3, 4], [1, 2, 3, 4], [1, 2], 1),
+        ("syllogism_finite_sets", {"sets": {"A": ["1", "2"], "B": ["1", "2", "3"]}, "left": "A", "right": "B", "relation": "all"}, ["মিথ্যা", "সত্য", "অনির্ণীত", "উভয়"], [False, True, "unknown", "both"], [True], 1),
+        ("analogy_mapping", {"mapping": {"bird": "nest", "bee": "hive"}, "query": "bee"}, ["den", "hive", "web", "stable"], ["den", "hive", "web", "stable"], ["hive"], 1),
+    ],
+)
+def test_typed_reasoning_families_are_machine_solved(
+    family: str,
+    parameters: dict,
+    options: list[str | int],
+    option_values: list,
+    trace: list,
+    correct: int,
+) -> None:
+    candidate = reasoning_candidate()
+    candidate["options"] = [str(value) for value in options]
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": option_values,
+        "explanation_values": trace,
+        "explanation_conclusion": candidate["options"][correct],
+    }
+
+    assert verify_candidate(candidate).family == family
+
+
+def test_underconstrained_ordering_is_rejected() -> None:
+    candidate = reasoning_candidate()
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": "ordering_constraints",
+        "parameters": {
+            "items": ["A", "B", "C"],
+            "constraints": [{"before": "A", "after": "B"}],
+            "target": "B",
+        },
+        "option_values": [1, 2, 3, 4],
+        "explanation_values": [3, 2],
+        "explanation_conclusion": "২",
+    }
+
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+
+    assert raised.value.code == "reasoning_proof_invalid"
+
+
+def language_candidate(subject: str) -> dict:
+    candidate = evidence_candidate()
+    candidate["subject_key"] = subject
+    candidate["language"] = "bn-en" if subject == "english" else "bn"
+    candidate["language_question_form"] = "grammar_rule"
+    candidate["language_verification"] = {
+        "version": 1,
+        "authority_type": "reviewed_reference",
+        "rule_id": "rule-001",
+        "source_span": "পশ্চিমবঙ্গের রাজধানী কলকাতা",
+        "review_status": "human_reviewed" if subject == "english" else "source_proved",
+        "uncertain": False,
+        "translation_status": "human_reviewed",
+    }
+    if subject == "english":
+        candidate["language_human_review"] = {
+            "reviewer_id": "operator-1",
+            "reviewed_at": "2026-08-08T10:00:00+00:00",
+            "decision": "approved",
+        }
+    return candidate
+
+
+def test_english_language_form_requires_versioned_source_rule() -> None:
+    candidate = language_candidate("english")
+
+    result = verify_candidate(candidate)
+
+    assert result.language_form == "grammar_rule"
+    assert result.as_dict()["language_form"] == "grammar_rule"
+
+
+def test_uncertain_bengali_routes_to_human_review() -> None:
+    candidate = language_candidate("bengali")
+    candidate["language_verification"]["uncertain"] = True
+
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+
+    assert raised.value.code == "language_review_required"
+    candidate["language_verification"]["review_status"] = "human_reviewed"
+    candidate["language_human_review"] = {
+        "reviewer_id": "operator-1",
+        "reviewed_at": "2026-08-08T10:00:00+00:00",
+        "decision": "approved",
+    }
+    assert verify_candidate(candidate).language_form == "grammar_rule"
+
+
+def test_translation_correctness_is_separate_from_factual_proof() -> None:
+    candidate = language_candidate("bengali")
+    candidate["language_question_form"] = "translation"
+    candidate["language_verification"]["translation_status"] = "source_proved"
+
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+
+    assert raised.value.code == "translation_review_required"
+
+
+def test_model_declared_human_review_is_not_an_attestation() -> None:
+    candidate = language_candidate("bengali")
+    candidate["language_verification"]["uncertain"] = True
+    candidate["language_verification"]["review_status"] = "human_reviewed"
+
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+
+    assert raised.value.code == "language_review_required"
+
+
+def test_language_rule_span_must_be_present_in_authoritative_evidence() -> None:
+    candidate = language_candidate("english")
+    candidate["language_verification"]["source_span"] = "উৎসে নেই"
+
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+
+    assert raised.value.code == "language_evidence_invalid"
 
 
 def test_duplicate_current_affairs_event_is_rejected_by_knowledge_point(

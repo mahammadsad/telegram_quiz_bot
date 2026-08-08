@@ -16,7 +16,9 @@ Phase C is green on draft PR #28. Its additive identity, evidence, candidate
 persistence, durable replenishment, inventory-first due-time path, GitHub CI,
 Render deployment, and fail-closed staging smoke are green. Phase D deterministic
 verification and its adversarial release gate are green on draft PR #29. The
-Phase D current-affairs event/claim migration is the active checkpoint.
+Phase D current-affairs event/claim migration and public staging gate are green.
+The expanded mathematics, reasoning, English, and Bengali validators are the
+active Phase D checkpoint.
 Production is unchanged.
 
 ## Implemented
@@ -66,6 +68,11 @@ Production is unchanged.
   configurable daily/weekly/monthly/six-month pools. Current-affairs grounding
   reads only the verified event/claim pool; legacy publication-age fallback is
   retained for rollback compatibility.
+- Phase D subject validation now covers ten typed mathematics families and
+  eight typed reasoning families. Solver-produced traces, option units, and
+  rounding policies are checked independently. Typed English/Bengali forms
+  require exact authoritative rule spans; uncertain Bengali and translation
+  correctness fail into explicit human-review reasons.
 
 ## Local evidence
 
@@ -99,11 +106,14 @@ Production is unchanged.
   quality/tests and real mobile browser jobs at commit `7665c44`; Render deploy
   `dep-d9rgb1qfngtc73dag1l0` is live and staging smoke run `31253037556`
   passed with application `7.4.0` and ready Phase C contracts.
-- Current current-affairs checkpoint: 371 tests pass with 26 hosted database
-  tests skipped locally; Ruff and mypy (71 production files) pass. Migration
-  `20260808103500` and application `7.5.0` still require disposable PostgreSQL,
-  hosted staging migration, Render, and smoke evidence before this checkpoint
-  is considered green.
+- Current-affairs staging checkpoint: CI run `31253796861`, Render deploy
+  `dep-d9rgocqfngtc73dbanm0`, and staging smoke run `31254084758` are green on
+  commit `8c76c49`. Application `7.5.0` reports ready with migration
+  `20260808103500`, `currentAffairsEvents=true`, and no failure categories.
+- Current subject-validator checkpoint: 389 tests pass with 26 hosted database
+  tests skipped locally; Ruff and mypy (71 production files) pass. Application
+  `7.6.0` still requires disposable PostgreSQL, mobile-browser CI, Render
+  staging, and public smoke evidence before this checkpoint is green.
 
 ## Deployment prerequisites
 

@@ -42,9 +42,13 @@ def generated_candidates(valid_questions):
         row["knowledge_relation"] = "has_value"
         row["knowledge_answer_value"] = answer
         row["knowledge_time_scope"] = "timeless"
+        row["language_question_form"] = "generic_fact"
+        row["language_verification_json"] = "{}"
         row["proof_family"] = "evidence_single_answer"
         row["proof_parameters_json"] = "{}"
         row["proof_option_values"] = list(row["options"])
+        row["proof_option_units"] = [""] * 4
+        row["proof_explanation_values"] = []
         row["proof_evidence_values"] = list(row["options"])
         row["proof_explanation_conclusion"] = answer
         for field in (
@@ -115,3 +119,22 @@ def test_replenishment_preserves_verified_candidates_and_logs_hash_only(
     assert len(result.generation_context["prompt_hash"]) == 64
     assert "prompt" not in result.generation_context
     assert "verification_failed" in result.generation_context["rejection_codes"]
+
+
+def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_questions) -> None:
+    required = set(content_replenishment_service.CANDIDATE_JSON_SCHEMA["items"]["required"])
+    assert {
+        "language_question_form",
+        "language_verification_json",
+        "proof_option_units",
+        "proof_explanation_values",
+    } <= required
+
+    prompt = content_replenishment_service._candidate_prompt(
+        "history", "আধুনিক ভারত", grounding(valid_questions), 3
+    )
+    assert "algebra_linear" in prompt
+    assert "time_work" in prompt
+    assert "ordering_constraints" in prompt
+    assert "syllogism_finite_sets" in prompt
+    assert "uncertain bengali" in prompt.lower()
