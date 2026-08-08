@@ -25,6 +25,12 @@ MIGRATION = (
     / "migrations"
     / "20260808103500_phase_d_current_affairs_events.sql"
 )
+CLAIM_PARITY_MIGRATION = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260809010000_current_affairs_claim_hash_parity.sql"
+)
 
 
 def _body(marker: str, *, correction: bool = False) -> str:
@@ -219,6 +225,15 @@ def test_phase_d_migration_has_server_only_event_claim_and_pool_contracts() -> N
     assert "to service_role" in sql
 
 
+def test_claim_projection_keeps_hash_metadata_and_atomic_prompt_claim_separate() -> None:
+    sql = CLAIM_PARITY_MIGRATION.read_text(encoding="utf-8").lower()
+    assert "source.fact_summary as source_fact_summary" in sql
+    assert "evidence.source_fact_summary as fact_summary" in sql
+    assert "evidence.canonical_claim as current_affairs_canonical_claim" in sql
+    assert "claim_projection_parity" in sql
+    assert "security definer" not in sql
+
+
 def test_current_affairs_grounding_uses_the_verified_event_pool(monkeypatch) -> None:
     calls: list[tuple[str, dict]] = []
 
@@ -272,10 +287,12 @@ def test_verified_revision_pool_uses_event_date_not_publication_age() -> None:
         "current_affairs_event_date": "2026-05-10",
         "current_affairs_practice_pool": "monthly",
         "current_affairs_verification_policy": EVENT_POLICY_VERSION,
+        "current_affairs_canonical_claim": "The verified atomic event claim.",
     }
 
     document = _validated_document(row, "current-affairs", date(2026, 8, 8))
     assert document.current_affairs_practice_pool == "monthly"
+    assert document.current_affairs_canonical_claim == "The verified atomic event claim."
 
     row["current_affairs_verification_policy"] = "unreviewed"
     with pytest.raises(QuizValidationError, match="event evidence contract"):
