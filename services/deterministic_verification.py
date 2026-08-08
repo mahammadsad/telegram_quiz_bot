@@ -76,7 +76,11 @@ def verify_candidate(
             "answer_invalid", "Deterministic verification requires one declared answer."
         )
 
-    _verify_option_quality(options, correct_index)
+    option_pattern_safe = _verify_option_quality(
+        options,
+        correct_index,
+        enforce_pattern=require_subject_proof,
+    )
     _verify_language(candidate, subject)
     _verify_source_dates(candidate, now=now)
     language_form = _verify_subject_language_contract(
@@ -98,7 +102,7 @@ def verify_candidate(
             expected_answer=None,
             checks={
                 "options_materially_distinct": True,
-                "option_pattern_safe": True,
+                "option_pattern_safe": option_pattern_safe,
                 "language_valid": True,
                 "source_dates_valid": True,
                 "unique_answer_proved": False,
@@ -163,7 +167,7 @@ def verify_candidate(
         expected_answer=expected_text,
         checks={
             "options_materially_distinct": True,
-            "option_pattern_safe": True,
+            "option_pattern_safe": option_pattern_safe,
             "language_valid": True,
             "source_dates_valid": True,
             "solver_supported": True,
@@ -177,7 +181,12 @@ def verify_candidate(
     )
 
 
-def _verify_option_quality(options: Sequence[Any], correct_index: int) -> None:
+def _verify_option_quality(
+    options: Sequence[Any],
+    correct_index: int,
+    *,
+    enforce_pattern: bool,
+) -> bool:
     material = [_material_option(value) for value in options]
     if any(not value for value in material) or len(set(material)) != 4:
         raise DeterministicVerificationError(
@@ -186,11 +195,15 @@ def _verify_option_quality(options: Sequence[Any], correct_index: int) -> None:
         )
     kinds = [_option_kind(value) for value in options]
     correct_kind = kinds[correct_index]
-    if kinds.count(correct_kind) == 1 and len(set(kinds)) > 1:
+    pattern_safe = not (
+        kinds.count(correct_kind) == 1 and len(set(kinds)) > 1
+    )
+    if not pattern_safe and enforce_pattern:
         raise DeterministicVerificationError(
             "option_pattern_leakage",
             "The correct option is the only option with its visible value pattern.",
         )
+    return pattern_safe
 
 
 def _material_option(value: Any) -> str:

@@ -61,6 +61,21 @@ def test_chapter_selector_never_crosses_subject_catalogues():
     assert select_chapter("science", date(2026, 7, 10), []) != "প্রাচীন ভারত"
 
 
+def test_collision_rotation_moves_to_another_unseen_chapter():
+    today = date(2026, 8, 8)
+    current = chapter_selector.CHAPTERS["miscellaneous"][0]
+
+    alternate = chapter_selector.select_alternate_chapter(
+        "miscellaneous",
+        today,
+        current,
+        history=[],
+    )
+
+    assert alternate != current
+    assert alternate in chapter_selector.CHAPTERS["miscellaneous"]
+
+
 def test_chapter_history_record_updates_legacy_table_without_unique_constraint(
     monkeypatch,
 ):
