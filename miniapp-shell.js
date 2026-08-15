@@ -43,10 +43,21 @@
     });
   }
 
+  function registerAdsense() {
+    if (document.querySelector('script[data-adsense-client="ca-pub-4140283253043615"]')) return;
+    var script = document.createElement("script");
+    script.async = true;
+    script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4140283253043615";
+    script.crossOrigin = "anonymous";
+    script.setAttribute("data-adsense-client", "ca-pub-4140283253043615");
+    document.head.appendChild(script);
+  }
+
   function ready() {
     installSkipLink();
     announceNetworkState();
     registerWorker();
+    registerAdsense();
     window.addEventListener("online", announceNetworkState);
     window.addEventListener("offline", announceNetworkState);
   }
