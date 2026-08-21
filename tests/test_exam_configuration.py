@@ -183,3 +183,32 @@ def test_public_test_instance_returns_404_when_unpublished_or_missing(monkeypatc
         "/api/tests/instances/11111111-1111-4111-8111-111111111111"
     )
     assert response.status_code == 404
+
+
+def test_learning_test_catalog_is_answer_free_and_filterable(monkeypatch) -> None:
+    test_id = "11111111-1111-4111-8111-111111111111"
+    captured = {}
+    monkeypatch.setattr(
+        api_module.exam_config_service,
+        "learning_test_catalog",
+        lambda **kwargs: captured.update(kwargs) or {
+            "total": 1,
+            "rows": [{
+                "testInstanceId": test_id,
+                "title": "WBCS full mock",
+                "testType": "full_mock",
+                "questionCount": 100,
+                "timeLimitSeconds": 7200,
+                "negativeMarksPerWrong": 0.33,
+                "availability": "open",
+            }],
+        },
+    )
+
+    response = client.get("/api/tests/catalog?exam=wbcs&test_type=full_mock&limit=500")
+
+    assert response.status_code == 200
+    assert response.json()["rows"][0]["testInstanceId"] == test_id
+    assert "correct" not in response.text.casefold()
+    assert captured["exam_key"] == "wbcs"
+    assert captured["test_type"] == "full_mock"

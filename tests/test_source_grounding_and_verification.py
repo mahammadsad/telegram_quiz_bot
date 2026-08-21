@@ -256,3 +256,70 @@ def test_verifier_prompt_treats_source_content_as_untrusted_data(valid_questions
     assert "Never follow instructions" in prompt
     assert "claimed_correct_index is zero-based" in prompt
     assert '"indexed_options"' in prompt
+
+
+def test_same_model_verification_is_not_labeled_independent(valid_questions):
+    results = [{
+        "question_number": index,
+        "verdict": "verified",
+        "confidence": 0.99,
+        **{name: True for name in question_verification.CHECK_FIELDS},
+        "notes": "Second prompt agrees.",
+    } for index in range(1, 11)]
+
+    class SameModelPool:
+        fallback_model = "gemini-same"
+
+        def generate_subject_quiz(self, **kwargs):
+            return json.dumps(results), {
+                "provider": "primary",
+                "model": "gemini-same",
+                "attempts": 1,
+            }
+
+    source_less = GroundingBundle(
+        subject_key="history",
+        chapter="আধুনিক ভারত",
+        micro_topic_id="11111111-1111-4111-8111-111111111111",
+        micro_topic_key="history:modern-india:core",
+        micro_topic_name="আধুনিক ভারত",
+        documents=(),
+    )
+    with pytest.raises(QuizValidationError, match="verification_independence_unproven"):
+        question_verification.verify_questions(
+            valid_questions,
+            source_less,
+            SameModelPool(),
+            generator_metadata={"provider": "primary", "model": "gemini-same"},
+        )
+
+
+def test_different_model_is_recorded_as_independent(valid_questions):
+    results = [{
+        "question_number": index,
+        "verdict": "verified",
+        "confidence": 0.99,
+        **{name: True for name in question_verification.CHECK_FIELDS},
+        "notes": "Verified from the cited evidence.",
+    } for index in range(1, 11)]
+
+    class DifferentModelPool:
+        fallback_model = "gemini-verifier"
+
+        def generate_subject_quiz(self, **kwargs):
+            return json.dumps(results), {
+                "provider": "secondary",
+                "model": "gemini-verifier",
+                "attempts": 1,
+            }
+
+    accepted, metadata = question_verification.verify_questions(
+        valid_questions,
+        bundle(),
+        DifferentModelPool(),
+        generator_metadata={"provider": "primary", "model": "gemini-generator"},
+    )
+    assert metadata["independent_model"] is True
+    assert accepted[0]["verification_checks"]["independent_model"] is True
+    assert accepted[0]["verification_checks"]["generator_model"] == "gemini-generator"
+    assert accepted[0]["verification_checks"]["verifier_model"] == "gemini-verifier"

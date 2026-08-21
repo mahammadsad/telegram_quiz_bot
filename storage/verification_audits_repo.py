@@ -20,6 +20,8 @@ def record(
     rejection_reasons: list[str],
     verifier_provider: str | None,
     verifier_model: str | None,
+    generator_provider: str | None,
+    generator_model: str | None,
 ) -> None:
     payload = {
         "quiz_id": quiz_id,
@@ -34,5 +36,7 @@ def record(
         "rejection_reasons": rejection_reasons,
         "verifier_provider": verifier_provider,
         "verifier_model": verifier_model,
+        "generator_provider": generator_provider,
+        "generator_model": generator_model,
     }
     get_client().table("question_generation_audits").insert(payload).execute()

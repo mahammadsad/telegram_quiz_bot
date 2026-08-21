@@ -97,7 +97,13 @@ class GeminiProviderPool:
             return result[:1]
         return result
 
-    def generate_subject_quiz(self, *, prompt: str, response_schema: dict) -> tuple[str, dict]:
+    def generate_subject_quiz(
+        self,
+        *,
+        prompt: str,
+        response_schema: dict,
+        preferred_model: str | None = None,
+    ) -> tuple[str, dict]:
         if not self.providers:
             raise GeminiGenerationError("not_configured", [], retryable=False)
         attempts: list[dict] = []
@@ -106,7 +112,7 @@ class GeminiProviderPool:
             raise GeminiGenerationError("providers_cooling_down", [], retryable=True)
 
         for provider in providers:
-            model = self.primary_model
+            model = preferred_model or self.primary_model
             attempt_number = 0
             model_fallback_used = False
             while attempt_number < self.max_attempts:
@@ -128,7 +134,12 @@ class GeminiProviderPool:
                         "GEMINI_PROVIDER_FAILURE provider=%s model=%s error_category=%s status=%s",
                         provider.label, model, category, status or "unknown",
                     )
-                    if category == MODEL_UNAVAILABLE and not model_fallback_used and self.fallback_model != model:
+                    if (
+                        category == MODEL_UNAVAILABLE
+                        and preferred_model is None
+                        and not model_fallback_used
+                        and self.fallback_model != model
+                    ):
                         model = self.fallback_model
                         model_fallback_used = True
                         attempt_number -= 1

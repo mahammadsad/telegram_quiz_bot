@@ -173,6 +173,7 @@ def generate_and_store_candidate_batch(
         structural,
         bundle,
         pool,
+        generator_metadata=generation,
     )
     accepted: list[dict[str, Any]] = []
     for candidate in verified:

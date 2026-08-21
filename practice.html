@@ -6,11 +6,11 @@
 <meta name="quiz-api-base" content="" />
 <meta name="theme-color" content="#0f766e" />
 <title>ব্যক্তিগত অনুশীলন</title>
-<link rel="manifest" href="/manifest.webmanifest" />
-<link rel="icon" href="/pwa-icon.svg" type="image/svg+xml" />
-<link rel="stylesheet" href="/miniapp-shell.css" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="pwa-icon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="miniapp-shell.css" />
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="/miniapp-shell.js" defer></script>
+<script src="miniapp-shell.js" defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -73,7 +73,7 @@
   </header>
   <section class="card" aria-live="polite">
     <div id="loading" class="state"><div class="loader"></div>প্রশ্ন লোড হচ্ছে...</div>
-    <div id="empty" class="state hidden"><p id="empty-message">এই তালিকায় এখন কোনো প্রশ্ন নেই। নতুন কুইজ শেষ করলে এখানে প্রশ্ন যোগ হবে।</p><div class="actions"><a class="btn primary" href="dashboard.html">ড্যাশবোর্ডে ফিরুন</a><a class="btn" id="empty-quiz-link" href="/">কুইজ খুলুন</a></div></div>
+    <div id="empty" class="state hidden"><p id="empty-message">এই তালিকায় এখন কোনো প্রশ্ন নেই। নতুন কুইজ শেষ করলে এখানে প্রশ্ন যোগ হবে।</p><div class="actions"><a class="btn primary" href="dashboard.html">ড্যাশবোর্ডে ফিরুন</a><a class="btn" id="empty-quiz-link" href="./">কুইজ খুলুন</a></div></div>
     <div id="error" class="state hidden">অনুশীলন খুলতে Telegram-এর কুইজ বাটন ব্যবহার করুন, অথবা পরে আবার চেষ্টা করুন।<div class="actions"><button class="btn" id="retry" type="button">আবার চেষ্টা করুন</button></div></div>
     <div id="practice" class="hidden">
       <div class="progress" aria-hidden="true"><span id="bar"></span></div>
@@ -88,7 +88,7 @@
   </section>
 </main>
 <nav class="bottom" aria-label="প্রধান নেভিগেশন">
-  <a href="/"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="m8 9 1.5 1.5L13 7"/><path d="M8 16h8"/></svg><span>কুইজ</span></a>
+  <a href="./"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="m8 9 1.5 1.5L13 7"/><path d="M8 16h8"/></svg><span>কুইজ</span></a>
   <a id="nav-practice" href="practice.html?source=wrong"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14 7 3 3"/></svg><span>অনুশীলন</span></a>
   <a id="nav-revision" href="practice.html?source=due"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M6.1 9A7 7 0 0 1 18 6l2 6"/><path d="M17.9 15A7 7 0 0 1 6 18l-2-6"/></svg><span>পুনরাবৃত্তি</span></a>
   <a href="dashboard.html"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 20V10"/><path d="M12 20V4"/><path d="M19 20v-7"/><path d="M3 20h18"/></svg><span>পরিসংখ্যান</span></a>

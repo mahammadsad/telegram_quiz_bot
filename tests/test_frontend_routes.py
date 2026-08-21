@@ -15,6 +15,8 @@ def test_frontend_routes_include_index_alias_for_cached_mini_apps() -> None:
         "/practice.html",
         "/settings.html",
         "/mock.html",
+        "/privacy.html",
+        "/terms.html",
     ):
         response = CLIENT.get(path)
         assert response.status_code == 200
@@ -39,6 +41,13 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert CLIENT.get("/miniapp-shell.css").headers["cache-control"] == "public, max-age=300"
 
 
+def test_mock_page_without_uuid_opens_catalog_instead_of_dead_end() -> None:
+    html = CLIENT.get("/mock.html").text
+    assert 'id="screen-catalog"' in html
+    assert 'fetch(api("/api/tests/catalog?limit=100"))' in html
+    assert "if(!validTestId(testId)){loadCatalog();return}" in html
+
+
 def test_only_answer_free_pre_submission_projections_are_cache_eligible(monkeypatch) -> None:
     test_id = uuid.UUID("11111111-1111-4111-8111-111111111111")
     monkeypatch.setattr(
@@ -61,6 +70,7 @@ def test_only_answer_free_pre_submission_projections_are_cache_eligible(monkeypa
         response = CLIENT.get(path)
         assert response.status_code == 200
         assert response.headers["x-answer-free-payload"] == "1"
-        assert response.headers["cache-control"] == "private, no-cache, max-age=0"
+        assert response.headers["cache-control"].startswith("public, max-age=300")
+        assert response.headers["etag"].startswith('"')
 
     assert "X-Answer-Free-Payload" not in CLIENT.get("/health/live").headers

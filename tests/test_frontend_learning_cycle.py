@@ -121,11 +121,11 @@ def test_only_a_complete_locale_is_advertised() -> None:
 
 def test_pwa_cache_is_fail_closed_for_answer_material() -> None:
     for source in (INDEX, DASHBOARD, PRACTICE, SETTINGS, MOCK):
-        assert 'rel="manifest" href="/manifest.webmanifest"' in source
-        assert 'src="/miniapp-shell.js" defer' in source
+        assert 'rel="manifest" href="manifest.webmanifest"' in source
+        assert 'src="miniapp-shell.js" defer' in source
     assert 'X-Answer-Free-Payload' in WORKER
     assert 'response.headers.get("X-Answer-Free-Payload") === "1"' in WORKER
-    assert 'url.pathname.startsWith("/api/")' in WORKER
+    assert 'path.startsWith("/api/")' in WORKER
     for sensitive in ("attempt", "submit", "leaderboard", "correctIndex", "explanation"):
         assert sensitive not in WORKER.split("const SHELL_URLS", 1)[1].split("];", 1)[0]
     assert 'fetch(request, {cache: "no-store"})' in WORKER
@@ -231,8 +231,8 @@ def test_mini_app_navigation_uses_live_routes_and_marks_revision_active():
     assert 'href="index.html"' not in DASHBOARD
     assert 'href="index.html"' not in PRACTICE
     assert 'href="index.html"' not in SETTINGS
-    assert 'id="nav-quiz" href="/"' in INDEX
-    assert 'id="empty-quiz-link" href="/"' in PRACTICE
+    assert 'id="nav-quiz" href="./"' in INDEX
+    assert 'id="empty-quiz-link" href="./"' in PRACTICE
     assert 'el("page-link").href=quizHomeUrl' in DASHBOARD
     assert 'link.href=quizHomeUrl' in DASHBOARD
     assert 'el("nav-practice").classList.toggle("active",requestedSource!=="due")' in PRACTICE

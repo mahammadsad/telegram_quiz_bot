@@ -300,6 +300,18 @@ def test_content_hash_creates_immutable_fact_version_for_changed_release():
     assert first["fact_version"] != second["fact_version"]
 
 
+def test_expiry_is_always_after_source_access_time():
+    release = _release(2290999, "official scientific research programme")
+    accessed = datetime(2026, 12, 1, 9, tzinfo=timezone.utc)
+    row = release_to_source_row(release, accessed)
+
+    assert datetime.fromisoformat(row["expires_at"]) > accessed
+    assert all(
+        datetime.fromisoformat(claim["expires_at"]) > accessed
+        for claim in row["current_affairs_event"]["claims"]
+    )
+
+
 def test_classifier_and_coverage_gate_require_both_chapters_and_topic_diversity():
     markers = (
         "cabinet policy decision",

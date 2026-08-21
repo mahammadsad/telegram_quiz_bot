@@ -10,7 +10,6 @@ import sys
 import time as time_module
 import unicodedata
 import urllib.request
-import xml.etree.ElementTree as ET
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
@@ -20,6 +19,9 @@ from pathlib import Path
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urljoin, urlparse
 from zoneinfo import ZoneInfo
+
+from defusedxml import ElementTree as SafeET
+from defusedxml.common import DefusedXmlException
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
@@ -58,6 +60,12 @@ MAX_FETCH_WORKERS = 6
 FETCH_ATTEMPTS = 3
 FETCH_RETRY_DELAY_SECONDS = 2
 IST = ZoneInfo("Asia/Kolkata")
+ALLOWED_CONTENT_TYPES = frozenset({
+    "application/rss+xml",
+    "application/xml",
+    "text/xml",
+    "text/html",
+})
 
 
 class CurrentAffairsRefreshError(RuntimeError):
@@ -323,6 +331,7 @@ def fetch_text(url: str) -> str:
                 payload = response.read(MAX_RESPONSE_BYTES + 1)
                 status = getattr(response, "status", 200)
                 encoding = response.headers.get_content_charset() or "utf-8"
+                content_type = response.headers.get_content_type().lower()
                 final_url = response.geturl()
             break
         except HTTPError as exc:
@@ -347,6 +356,8 @@ def fetch_text(url: str) -> str:
         raise CurrentAffairsRefreshError("Official PIB source redirected outside its host.")
     if status != 200 or len(payload) > MAX_RESPONSE_BYTES:
         raise CurrentAffairsRefreshError("Official PIB source response was rejected.")
+    if content_type not in ALLOWED_CONTENT_TYPES:
+        raise CurrentAffairsRefreshError("Official PIB source content type was rejected.")
     try:
         return payload.decode(encoding)
     except (LookupError, UnicodeDecodeError) as exc:
@@ -355,8 +366,8 @@ def fetch_text(url: str) -> str:
 
 def parse_rss_items(xml_text: str) -> list[str]:
     try:
-        root = ET.fromstring(xml_text)
-    except ET.ParseError as exc:
+        root = SafeET.fromstring(xml_text)
+    except (SafeET.ParseError, DefusedXmlException) as exc:
         raise CurrentAffairsRefreshError("The official PIB RSS feed was malformed.") from exc
     links: list[str] = []
     for item in (node for node in root.iter() if _local_name(node.tag) == "item"):
@@ -608,7 +619,14 @@ def release_to_source_row(release: Release, accessed_at: datetime) -> dict:
         source_url=release.url,
         published_at=published_at,
     )
-    expires_at = datetime.fromisoformat(str(event["expires_at"]))
+    expires_at = max(
+        datetime.fromisoformat(str(event["expires_at"])),
+        accessed_at + timedelta(days=1),
+    )
+    event["expires_at"] = expires_at.isoformat()
+    for claim in event.get("claims") or []:
+        if datetime.fromisoformat(str(claim["expires_at"])) < expires_at:
+            claim["expires_at"] = expires_at.isoformat()
     body = _truncate_at_word(release.body, MAX_FACT_SUMMARY_CHARS - 300)
     fact_summary = (
         f"Official PIB release dated {published_at.astimezone(IST).date().isoformat()} "

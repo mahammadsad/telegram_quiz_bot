@@ -38,26 +38,17 @@
 
   function registerWorker() {
     if (!("serviceWorker" in navigator) || location.protocol !== "https:") return;
-    navigator.serviceWorker.register("/service-worker.js", {scope: "/"}).catch(function () {
+    var workerUrl = new URL("service-worker.js", document.baseURI);
+    var workerScope = new URL("./", workerUrl).pathname;
+    navigator.serviceWorker.register(workerUrl.href, {scope: workerScope}).catch(function () {
       // The Mini App remains fully usable online if registration is unavailable.
     });
-  }
-
-  function registerAdsense() {
-    if (document.querySelector('script[data-adsense-client="ca-pub-4140283253043615"]')) return;
-    var script = document.createElement("script");
-    script.async = true;
-    script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-4140283253043615";
-    script.crossOrigin = "anonymous";
-    script.setAttribute("data-adsense-client", "ca-pub-4140283253043615");
-    document.head.appendChild(script);
   }
 
   function ready() {
     installSkipLink();
     announceNetworkState();
     registerWorker();
-    registerAdsense();
     window.addEventListener("online", announceNetworkState);
     window.addEventListener("offline", announceNetworkState);
   }
@@ -68,6 +59,7 @@
   window.__miniAppContract = Object.freeze({
     locale: "bn",
     supportedLocales: supportedLocales,
-    shellVersion: "8.5.0-ui1",
+    shellVersion: "8.6.0-ui1",
+    basePath: new URL("./", document.baseURI).pathname,
   });
 })();

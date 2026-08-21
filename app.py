@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import uuid
-from datetime import date
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -29,6 +31,7 @@ from services import (
     leaderboard_privacy,
     learning_resources_service,
     personal_learning_service,
+    privacy_service,
     question_moderation_service,
     quiz_pack_service,
     rate_limit,
@@ -107,10 +110,15 @@ def _merge_vary_header(headers: Any, value: str) -> None:
     headers["Vary"] = ", ".join(values)
 
 
-def _mark_answer_free(response: Response) -> None:
-    """Permit private offline storage only for projections with no answer material."""
+def _mark_answer_free(response: Response, payload: object) -> None:
+    """Permit CDN/browser caching only for public answer-free projections."""
+    serialized = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     response.headers["X-Answer-Free-Payload"] = "1"
-    response.headers["Cache-Control"] = "private, no-cache, max-age=0"
+    response.headers["Cache-Control"] = (
+        "public, max-age=300, s-maxage=3600, stale-while-revalidate=60"
+    )
+    response.headers["ETag"] = '"' + hashlib.sha256(serialized.encode("utf-8")).hexdigest() + '"'
+    _merge_vary_header(response.headers, "Accept-Encoding")
 
 
 class SubmitQuizRequest(BaseModel):
@@ -158,6 +166,21 @@ class SubmitQuizRequest(BaseModel):
         if not isinstance(value, list) or len(value) != 10 or any(type(item) is not bool for item in value):
             raise ValueError("markedForReview must contain exactly 10 booleans")
         return value
+
+
+class StartQuizRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    attempt_id: uuid.UUID = Field(alias="attemptId")
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
+
+
+class PrivacyActionRequest(BaseModel):
+    init_data: str = Field(default="", alias="initData")
+    dev_user: dict | None = Field(default=None, alias="devUser")
+
+    model_config = {"populate_by_name": True}
 
 
 class ReportQuestionRequest(BaseModel):
@@ -369,6 +392,18 @@ def settings() -> FileResponse:
     return FileResponse(ROOT / "settings.html")
 
 
+@app.get("/privacy")
+@app.get("/privacy.html")
+def privacy() -> FileResponse:
+    return FileResponse(ROOT / "privacy.html")
+
+
+@app.get("/terms")
+@app.get("/terms.html")
+def terms() -> FileResponse:
+    return FileResponse(ROOT / "terms.html")
+
+
 @app.get("/mock")
 @app.get("/mock.html")
 def mock_test() -> FileResponse:
@@ -438,10 +473,33 @@ def health_live() -> dict:
         "ok": True,
         "status": "live",
         "applicationVersion": app.version,
+        "commitSha": _release_value("RENDER_GIT_COMMIT", "GITHUB_SHA", default="unknown"),
+        "environment": _release_value("APP_ENVIRONMENT", "RENDER_SERVICE_NAME", default="local"),
+        "buildTime": _release_value("BUILD_TIME", default="unknown"),
         "timezone": APP_TIMEZONE,
         "productionConfigVersion": readiness_service.PRODUCTION_CONFIG_VERSION,
         "productionConfigHash": readiness_service.PRODUCTION_CONFIG_HASH,
     }
+
+
+@app.get("/version")
+def release_version() -> dict:
+    """Safe immutable release identity used by deploy and rollback smoke tests."""
+    return {
+        "applicationVersion": app.version,
+        "commitSha": _release_value("RENDER_GIT_COMMIT", "GITHUB_SHA", default="unknown"),
+        "environment": _release_value("APP_ENVIRONMENT", "RENDER_SERVICE_NAME", default="local"),
+        "buildTime": _release_value("BUILD_TIME", default="unknown"),
+        "serverTime": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _release_value(*names: str, default: str) -> str:
+    for name in names:
+        value = os.environ.get(name, "").strip()
+        if value:
+            return value[:120]
+    return default
 
 
 @app.get("/health/ready")
@@ -505,13 +563,35 @@ def test_definition_catalog(
         ) from exc
 
 
+@app.get("/api/tests/catalog")
+def learning_test_catalog(
+    exam: str | None = None,
+    test_type: str | None = None,
+    subject: str | None = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    try:
+        return exam_config_service.learning_test_catalog(
+            exam_key=exam,
+            test_type=test_type,
+            subject_key=subject,
+            limit=limit,
+            offset=offset,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Test catalog is temporarily unavailable.") from exc
+
+
 @app.get("/api/tests/instances/{test_instance_id}")
 def public_test_instance(test_instance_id: uuid.UUID, response: Response) -> dict:
-    _mark_answer_free(response)
     try:
         payload = exam_config_service.public_test_instance(test_instance_id)
         if payload is None:
             raise HTTPException(status_code=404, detail="Test instance not found.")
+        _mark_answer_free(response, payload)
         return payload
     except HTTPException:
         raise
@@ -655,21 +735,24 @@ def get_test_attempt(
 
 @app.get("/api/quiz/{quiz_id}")
 def get_quiz(quiz_id: str, response: Response) -> dict:
-    _mark_answer_free(response)
     clean_quiz_id = _clean_quiz_id(quiz_id)
     try:
         pack = quiz_pack_service.get_ready_quiz_pack(clean_quiz_id)
     except Exception as exc:
         legacy = _load_public_fallback(clean_quiz_id)
         if legacy:
+            _mark_answer_free(response, legacy)
             return legacy
         raise HTTPException(status_code=503, detail="কুইজটি এখন খোলা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।") from exc
     if pack:
         if len(pack.get("items") or []) != 10:
             raise HTTPException(status_code=503, detail="কুইজের তথ্য অসম্পূর্ণ। পরে আবার চেষ্টা করুন।")
-        return quiz_pack_service.public_quiz_payload(pack)
+        payload = quiz_pack_service.public_quiz_payload(pack)
+        _mark_answer_free(response, payload)
+        return payload
     legacy = _load_public_fallback(clean_quiz_id)
     if legacy:
+        _mark_answer_free(response, legacy)
         return legacy
     raise HTTPException(status_code=404, detail="Quiz pack not found.")
 
@@ -839,6 +922,30 @@ def quarantine_question(
         raise HTTPException(status_code=503, detail="Question quarantine could not be saved.") from exc
 
 
+@app.post("/api/quiz/{quiz_id}/attempts/start")
+def start_quiz_attempt(quiz_id: str, payload: StartQuizRequest) -> dict:
+    try:
+        clean_quiz_id = _clean_quiz_id(quiz_id)
+        telegram_user = _write_user_from_payload(
+            payload,
+            "quiz-start",
+            f"{clean_quiz_id}:{payload.attempt_id}",
+        )
+        return quiz_pack_service.start_quiz_attempt(
+            quiz_id=clean_quiz_id,
+            telegram_user=telegram_user,
+            attempt_id=payload.attempt_id,
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="কুইজের সময় শুরু করা যায়নি। আবার চেষ্টা করুন।") from exc
+
+
 @app.post("/api/quiz/{quiz_id}/submit")
 def submit_quiz(quiz_id: str, payload: SubmitQuizRequest) -> dict:
     try:
@@ -853,7 +960,7 @@ def submit_quiz(quiz_id: str, payload: SubmitQuizRequest) -> dict:
             telegram_user=telegram_user,
             answers=payload.answers,
             attempt_id=payload.attempt_id,
-            duration_seconds=payload.duration_seconds,
+            client_duration_seconds=payload.duration_seconds,
             response_times=payload.response_times,
             marked_for_review=payload.marked_for_review,
         )
@@ -1148,6 +1255,48 @@ def my_preferences(
         raise HTTPException(status_code=503, detail="পছন্দের সেটিং এখন লোড করা যাচ্ছে না।") from exc
 
 
+@app.post("/api/me/data-export")
+def export_my_data(payload: PrivacyActionRequest) -> dict:
+    try:
+        return privacy_service.export_my_data(
+            _write_user_from_payload(payload, "privacy-export")
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="আপনার ডেটা এখন এক্সপোর্ট করা যাচ্ছে না।") from exc
+
+
+@app.post("/api/me/account-deletion")
+def request_my_account_deletion(payload: PrivacyActionRequest) -> dict:
+    try:
+        return privacy_service.request_delete_my_account(
+            _write_user_from_payload(payload, "privacy-delete")
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="অ্যাকাউন্ট মুছে ফেলার অনুরোধ রাখা যায়নি।") from exc
+
+
+@app.post("/api/me/account-deletion/cancel")
+def cancel_my_account_deletion(payload: PrivacyActionRequest) -> dict:
+    try:
+        return privacy_service.cancel_delete_my_account(
+            _write_user_from_payload(payload, "privacy-delete-cancel")
+        )
+    except HTTPException:
+        raise
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="অনুরোধটি বাতিল করা যায়নি।") from exc
+
+
 @app.put("/api/me/preferences")
 def save_my_preferences(payload: UserPreferencesRequest) -> dict:
     try:
@@ -1265,6 +1414,8 @@ def typed_leaderboard(
 def _write_user_from_payload(
     payload: (
         SubmitQuizRequest
+        | StartQuizRequest
+        | PrivacyActionRequest
         | ReportQuestionRequest
         | BookmarkRequest
         | UserPreferencesRequest
@@ -1290,6 +1441,10 @@ def _write_user_from_payload(
     user_key = str(user.get("id") or "unknown")
     limits = {
         "quiz-submit": (30, 3600),
+        "quiz-start": (30, 3600),
+        "privacy-export": (3, 3600),
+        "privacy-delete": (3, 3600),
+        "privacy-delete-cancel": (3, 3600),
         "practice-answer": (120, 3600),
         "bookmark": (60, 3600),
         "question-report": (10, 3600),

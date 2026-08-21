@@ -482,12 +482,32 @@ def _marking_scheme(penalty: object) -> dict[str, int | float | bool]:
     }
 
 
+def start_quiz_attempt(
+    *,
+    quiz_id: str,
+    telegram_user: dict,
+    attempt_id: uuid.UUID,
+) -> dict:
+    """Create or recover the authoritative server clock for a daily attempt."""
+    pack = get_ready_quiz_pack(quiz_id)
+    if not pack or len(pack.get("items") or []) != QUESTION_COUNT:
+        raise ValueError("Quiz pack is not ready to start.")
+    if not isinstance(attempt_id, uuid.UUID):
+        raise ValueError("A valid client-generated UUID attemptId is required.")
+    user_row = users_repo.upsert_user(User.from_telegram(telegram_user))
+    return quiz_attempts_repo.start(
+        quiz_id=quiz_id,
+        user_id=user_row["id"],
+        client_attempt_id=attempt_id,
+    )
+
+
 def submit_quiz_attempts(
     quiz_id: str,
     telegram_user: dict,
     answers: list[int | None],
     attempt_id: uuid.UUID,
-    duration_seconds: int | None = None,
+    client_duration_seconds: int | None = None,
     response_times: list[float | None] | None = None,
     marked_for_review: list[bool] | None = None,
 ) -> dict:
@@ -507,7 +527,7 @@ def submit_quiz_attempts(
         user_id=user_row["id"],
         client_attempt_id=attempt_id,
         answers=answers,
-        duration_seconds=duration_seconds,
+        client_duration_seconds=client_duration_seconds,
         response_times=response_times,
         marked_for_review=marked_for_review,
     )

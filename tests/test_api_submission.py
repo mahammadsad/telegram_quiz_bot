@@ -30,7 +30,7 @@ def test_valid_submission_contract_is_200_not_422_or_503(monkeypatch):
         "telegram_user": {"id": 123, "first_name": "Test"},
         "answers": [0] * 10,
         "attempt_id": uuid.UUID(ATTEMPT_ID),
-        "duration_seconds": None,
+        "client_duration_seconds": None,
         "response_times": None,
         "marked_for_review": None,
     }
@@ -91,9 +91,58 @@ def test_submission_carries_learning_signals(monkeypatch):
         },
     )
     assert response.status_code == 200
-    assert captured["duration_seconds"] == 312
+    assert captured["client_duration_seconds"] == 312
     assert captured["response_times"] == [31.2] * 10
     assert captured["marked_for_review"][1] is True
+
+
+def test_authenticated_attempt_start_uses_server_lifecycle(monkeypatch):
+    monkeypatch.setattr(api_module, "verify_init_data", lambda *args: {"id": 123})
+    captured = {}
+    monkeypatch.setattr(
+        api_module.quiz_pack_service,
+        "start_quiz_attempt",
+        lambda **kwargs: captured.update(kwargs) or {
+            "attemptId": ATTEMPT_ID,
+            "startedAt": "2026-08-20T09:00:00+00:00",
+            "timingTrusted": True,
+        },
+    )
+    response = client.post(
+        f"/api/quiz/{QUIZ_ID}/attempts/start",
+        json={"initData": "signed", "attemptId": ATTEMPT_ID},
+    )
+    assert response.status_code == 200
+    assert response.json()["timingTrusted"] is True
+    assert captured["attempt_id"] == uuid.UUID(ATTEMPT_ID)
+
+
+def test_forged_client_duration_is_only_forwarded_as_untrusted_telemetry(monkeypatch):
+    monkeypatch.setattr(api_module, "verify_init_data", lambda *args: {"id": 123})
+    captured = {}
+    monkeypatch.setattr(
+        api_module.quiz_pack_service,
+        "submit_quiz_attempts",
+        lambda **kwargs: captured.update(kwargs) or {
+            "score": 10,
+            "durationSeconds": 57,
+            "timingTrusted": True,
+            "timingSource": "server",
+        },
+    )
+    response = client.post(
+        f"/api/quiz/{QUIZ_ID}/submit",
+        json={
+            "initData": "signed",
+            "answers": [0] * 10,
+            "attemptId": ATTEMPT_ID,
+            "durationSeconds": 0,
+        },
+    )
+    assert response.status_code == 200
+    assert captured["client_duration_seconds"] == 0
+    assert response.json()["durationSeconds"] == 57
+    assert response.json()["timingSource"] == "server"
 
 
 def test_answer_length_and_values_are_rejected():

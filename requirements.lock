@@ -25,10 +25,13 @@ charset-normalizer==3.4.9
     # via requests
 click==8.4.2
     # via uvicorn
-cryptography==49.0.0
+cryptography==50.0.0
     # via
+    #   -r requirements.txt
     #   google-auth
     #   pyjwt
+defusedxml==0.7.1
+    # via -r requirements.txt
 deprecation==2.1.0
     # via
     #   postgrest
@@ -45,8 +48,10 @@ h11==0.16.0
     # via
     #   httpcore
     #   uvicorn
-h2==4.3.0
-    # via httpx
+h2==4.4.1
+    # via
+    #   -r requirements.txt
+    #   httpx
 hpack==4.2.0
     # via h2
 httpcore==1.0.9
