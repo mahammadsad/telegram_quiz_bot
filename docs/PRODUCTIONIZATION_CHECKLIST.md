@@ -6,7 +6,7 @@ staging test has passed. Source-code inspection alone is not sufficient.
 
 ## Release safety rules
 
-- [ ] Apply every new database migration to `telegram-quiz-bot-rollout-staging`
+- [x] Apply every new database migration to `telegram-quiz-bot-rollout-staging`
   before production.
 - [ ] Never run test data, destructive DDL, or experimental generation against
   `telegram_group_data`.
@@ -125,7 +125,9 @@ staging test has passed. Source-code inspection alone is not sufficient.
   full-history scanning, and 48 browser tests across four projects.
 - [x] Staging required migration `20260724212939` and contract `2.2.0` are exact;
   all contract failure arrays are empty.
-- [ ] Staging `/health/ready` returns HTTP 200.
+- [x] Staging `/health/ready` returned HTTP 200 on 2026-08-21 with every exposed
+  readiness check true; the service was still on application 8.4.0, so the
+  8.5.0 post-deploy check remains required.
 - [ ] Staging end-to-end quiz lifecycle passes without answer leakage.
 - [ ] Screenshots cover small Android widths, dashboard identity, out-of-top-ten
   rank, revision feedback, loading, error, and empty states.

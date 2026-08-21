@@ -456,6 +456,31 @@ async function installApiMocks(page, options = {}) {
         body: JSON.stringify(body),
       });
 
+    if (path === "/api/quizzes/recent" && method === "GET") {
+      if (options.failRecentQuizzes) return route.abort("failed");
+      return json({
+        count: 2,
+        items: [
+          {
+            quizId: QUIZ_ID,
+            quizDate: "2026-07-25",
+            subjectKey: "history",
+            subjectName: "ইতিহাস",
+            chapter: "আধুনিক ভারত",
+            postedAt: "2026-07-25T11:30:00Z",
+          },
+          {
+            quizId: "20260725-geography",
+            quizDate: "2026-07-25",
+            subjectKey: "geography",
+            subjectName: "ভূগোল",
+            chapter: "ভারতের ভূগোল",
+            postedAt: "2026-07-25T10:30:00Z",
+          },
+        ],
+      });
+    }
+
     if (path === `/api/quiz/${QUIZ_ID}` && method === "GET") {
       if (options.quizLoadDelayMs) {
         await new Promise((resolve) => setTimeout(resolve, options.quizLoadDelayMs));

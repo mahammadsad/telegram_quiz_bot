@@ -59,7 +59,7 @@
   window.__miniAppContract = Object.freeze({
     locale: "bn",
     supportedLocales: supportedLocales,
-    shellVersion: "8.6.0-ui1",
+    shellVersion: "8.6.0-ui2",
     basePath: new URL("./", document.baseURI).pathname,
   });
 })();

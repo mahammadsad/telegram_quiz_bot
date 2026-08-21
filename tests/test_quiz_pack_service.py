@@ -179,6 +179,39 @@ def test_public_quiz_payload_declares_submission_capability():
     assert "correct" not in str(payload).lower()
 
 
+def test_recent_quizzes_exposes_only_valid_answer_free_metadata(monkeypatch):
+    monkeypatch.setattr(
+        service.quiz_runs_repo,
+        "list_recent_posted",
+        lambda **kwargs: [
+            {
+                "quiz_id": "20260725-history",
+                "chapter": "আধুনিক ভারত",
+                "posted_at": "2026-07-25T11:30:00+00:00",
+            },
+            {"quiz_id": "unsafe-id", "chapter": "must be skipped"},
+            {"quiz_id": "20260725-history", "chapter": "duplicate"},
+            {"quiz_id": "20260725-geography", "chapter": ""},
+        ],
+    )
+
+    result = service.recent_quizzes(limit=999)
+
+    assert result == {
+        "count": 1,
+        "items": [
+            {
+                "quizId": "20260725-history",
+                "quizDate": "2026-07-25",
+                "subjectKey": "history",
+                "subjectName": "ইতিহাস",
+                "chapter": "আধুনিক ভারত",
+                "postedAt": "2026-07-25T11:30:00+00:00",
+            }
+        ],
+    }
+
+
 def test_pack_save_uses_one_atomic_rpc_and_preserves_exact_reuse(monkeypatch, valid_questions):
     saved_pack = pack()
     monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: saved_pack)
