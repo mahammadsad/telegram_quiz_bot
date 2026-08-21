@@ -35,7 +35,7 @@ an administrator approves it.
 | `services/` | Chapter rotation, source grounding, independent verification, Gemini failover, validation, and quiz-pack rules |
 | `storage/` | Small Supabase repositories; atomic writes use RPCs |
 | `supabase/migrations/` | Current timestamped PostgreSQL migrations and security grants |
-| `index.html` | Telegram-theme-aware quiz UI with a clearly read-only static fallback |
+| `index.html` | Root preparation hub and Telegram-theme-aware quiz UI with a clearly read-only static fallback |
 | `dashboard.html` | Private learner analytics, preferences, and privacy-safe leaderboard families |
 | `practice.html` | Authenticated wrong/due/bookmark/weak-topic practice with post-answer review |
 | `mock.html` | Durable timed multi-section attempts, palette navigation, and post-submit analysis |
@@ -107,6 +107,13 @@ Static JSON is an emergency read-only fallback. When the live API is
 unavailable, the Mini App disables submission and scoring, labels the state,
 and offers retry/preview controls. Correct answers are never bundled into a
 public fallback.
+
+Opening the Main Mini App without a quiz deep link now shows a Bengali
+preparation hub instead of an error. Its bounded recent-quiz catalogue includes
+only checksum-certified quizzes that were successfully posted, exposes no
+question or answer material, and remains safely available from the answer-free
+offline cache. Direct links to due revision, full mocks, and personal progress
+keep the core learning loop reachable even if catalogue loading fails.
 
 ## Schedule
 

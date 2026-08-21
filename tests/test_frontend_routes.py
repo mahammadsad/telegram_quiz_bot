@@ -65,8 +65,17 @@ def test_only_answer_free_pre_submission_projections_are_cache_eligible(monkeypa
         "public_quiz_payload",
         lambda pack: {"qs": [{"q": "safe", "o": ["A", "B", "C", "D"]}] * 10},
     )
+    monkeypatch.setattr(
+        api_module.quiz_pack_service,
+        "recent_quizzes",
+        lambda **kwargs: {"items": [], "count": 0},
+    )
 
-    for path in (f"/api/tests/instances/{test_id}", "/api/quiz/20260808-history"):
+    for path in (
+        f"/api/tests/instances/{test_id}",
+        "/api/quiz/20260808-history",
+        "/api/quizzes/recent",
+    ):
         response = CLIENT.get(path)
         assert response.status_code == 200
         assert response.headers["x-answer-free-payload"] == "1"
@@ -74,3 +83,14 @@ def test_only_answer_free_pre_submission_projections_are_cache_eligible(monkeypa
         assert response.headers["etag"].startswith('"')
 
     assert "X-Answer-Free-Payload" not in CLIENT.get("/health/live").headers
+
+
+def test_recent_quiz_catalogue_fails_without_leaking_internal_errors(monkeypatch) -> None:
+    monkeypatch.setattr(
+        api_module.quiz_pack_service,
+        "recent_quizzes",
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError("private database detail")),
+    )
+    response = CLIENT.get("/api/quizzes/recent")
+    assert response.status_code == 503
+    assert "private database detail" not in response.text

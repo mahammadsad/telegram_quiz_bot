@@ -70,6 +70,24 @@ def list_for_date(quiz_date: str) -> list[Row]:
     return as_rows(result.data, "quiz_runs.list_for_date")
 
 
+def list_recent_posted(*, limit: int) -> list[Row]:
+    """Return only public catalogue metadata for certified, posted quizzes."""
+    result = (
+        get_client()
+        .table("quiz_runs")
+        .select(
+            "quiz_id,quiz_date,subject_key,subject_display_name,chapter,posted_at"
+        )
+        .eq("status", "posted")
+        .eq("integrity_verified", True)
+        .eq("question_count", 10)
+        .order("posted_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return as_rows(result.data, "quiz_runs.list_recent_posted")
+
+
 def record_post_intent(
     *,
     quiz_id: str,

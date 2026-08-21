@@ -262,6 +262,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 post_contract.get("ready") is True
                 and post_contract.get("post_finalization_migration_version") == POST_FINALIZATION_MIGRATION_VERSION
                 and post_contract.get("post_finalization_migration_applied") is True
+                and post_contract.get("chapter_history_uniqueness_ready") is True
                 and not post_contract.get("missing_columns")
                 and not post_contract.get("function_permission_failures")
             )

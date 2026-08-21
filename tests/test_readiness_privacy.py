@@ -80,6 +80,7 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "ready": True,
             "post_finalization_migration_version": (readiness_service.POST_FINALIZATION_MIGRATION_VERSION),
             "post_finalization_migration_applied": True,
+            "chapter_history_uniqueness_ready": True,
             "missing_columns": [],
             "function_permission_failures": [],
         },

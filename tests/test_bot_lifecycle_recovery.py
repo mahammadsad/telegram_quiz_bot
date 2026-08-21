@@ -1013,6 +1013,7 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
                 bot.POST_FINALIZATION_MIGRATION_VERSION
             ),
             "post_finalization_migration_applied": True,
+            "chapter_history_uniqueness_ready": True,
             "function_permission_failures": [],
         },
     )
@@ -1144,6 +1145,7 @@ def test_database_preflight_fails_closed_on_old_or_misgranted_contract(monkeypat
                 bot.POST_FINALIZATION_MIGRATION_VERSION
             ),
             "post_finalization_migration_applied": True,
+            "chapter_history_uniqueness_ready": True,
             "function_permission_failures": [],
         },
     )
