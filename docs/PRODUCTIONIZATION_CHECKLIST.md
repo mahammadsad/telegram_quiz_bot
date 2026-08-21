@@ -126,8 +126,9 @@ staging test has passed. Source-code inspection alone is not sufficient.
 - [x] Staging required migration `20260724212939` and contract `2.2.0` are exact;
   all contract failure arrays are empty.
 - [x] Staging `/health/ready` returned HTTP 200 on 2026-08-21 with every exposed
-  readiness check true; the service was still on application 8.4.0, so the
-  8.5.0 post-deploy check remains required.
+  readiness check true before the database upgrade. The service is still on
+  application 8.4.0 and now fails closed on the newer contract, so the 8.6.0
+  post-deploy check remains required.
 - [ ] Staging end-to-end quiz lifecycle passes without answer leakage.
 - [ ] Screenshots cover small Android widths, dashboard identity, out-of-top-ten
   rank, revision feedback, loading, error, and empty states.

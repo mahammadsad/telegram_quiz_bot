@@ -69,8 +69,15 @@ catalogue/privacy RPCs exist with service-role-only grants, and all four
 preservation counts above remain unchanged.
 
 The public staging service returned HTTP 200 from `/health/live` and
-`/health/ready` before the 8.6.0 application deployment. It was still serving
-application 8.4.0, so post-deployment 8.6.0 health remains a separate gate.
+`/health/ready` before the database upgrade. Once the 8.6 migrations were
+complete, the still-running 8.4.0 app correctly failed closed with HTTP 503 on
+the newer contract version. Deploying the exact 8.6.0 commit is therefore the
+next required staging action.
+
+GitHub Tests run 348 and Security run 16 passed on the published fix commit,
+including the disposable PostgreSQL build, all migrations, PostgreSQL-backed
+behavior, mobile browser tests, dependency review, Bandit, dependency audits,
+and Python/JavaScript CodeQL.
 
 ## External release gates still requiring deployment access
 
