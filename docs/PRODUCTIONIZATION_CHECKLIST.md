@@ -127,9 +127,13 @@ staging test has passed. Source-code inspection alone is not sufficient.
   full-history scanning, and 48 browser tests across four projects.
 - [x] Staging required migration `20260724212939` and contract `2.2.0` are exact;
   all contract failure arrays are empty.
-- [x] Staging application 8.6.0 at exact commit `be883b5` returned HTTP 200 from
+- [x] Staging application 8.6.0 at exact commit `2bd1086b` returned HTTP 200 from
   `/health/ready` with every exposed readiness check true; the guarded
   preflight passed.
+- [x] The guarded Computer subject lifecycle posted one certified ten-question
+  quiz, reconciled its stored Telegram acknowledgement after schema drift was
+  repaired, and a guarded retry returned `QUIZ_ALREADY_POSTED` without a
+  duplicate message or chapter-history row.
 - [ ] Staging end-to-end quiz lifecycle passes without answer leakage.
 - [ ] Screenshots cover small Android widths, dashboard identity, out-of-top-ten
   rank, revision feedback, loading, error, and empty states.
