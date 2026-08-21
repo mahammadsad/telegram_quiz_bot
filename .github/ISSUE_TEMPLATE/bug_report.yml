@@ -1,0 +1,33 @@
+name: Bug report
+description: Report a reproducible product or engineering defect
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: Do not include Telegram initData, tokens, service keys, private learner data, or unreleased answer keys.
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Application version / commit
+      description: Copy non-secret values from /version when available.
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options: [Telegram Mini App, Web preview, API, Content, Accessibility, Operations]
+    validations:
+      required: true
