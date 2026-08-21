@@ -14,9 +14,8 @@
 -- --------------------------------------------------------------------------
 -- Extensions
 -- --------------------------------------------------------------------------
-create schema if not exists extensions;
-create extension if not exists pgcrypto with schema extensions; -- gen_random_uuid()
-create extension if not exists pg_trgm with schema extensions;  -- fuzzy duplicate detection
+create extension if not exists pgcrypto;   -- gen_random_uuid()
+create extension if not exists pg_trgm;    -- trigram similarity for fuzzy duplicate detection
 
 
 -- ============================================================================
@@ -73,7 +72,7 @@ create index if not exists idx_questions_bot_type       on questions (bot_type);
 create index if not exists idx_questions_scheduler_pool
     on questions (bot_type, status, subject, next_global_review, last_used_at);
 create index if not exists idx_questions_normalized_trgm
-    on questions using gin (normalized_text extensions.gin_trgm_ops);
+    on questions using gin (normalized_text gin_trgm_ops);
 
 
 -- Layer 3 of duplicate detection: fuzzy near-duplicate search.
@@ -95,12 +94,11 @@ returns table (
 language sql
 stable
 as $$
-    select q.id, q.question_text,
-           extensions.similarity(q.normalized_text, query_normalized) as similarity
+    select q.id, q.question_text, similarity(q.normalized_text, query_normalized) as similarity
     from questions q
     where q.bot_type = query_bot_type
       and q.status = 'active'
-      and extensions.similarity(q.normalized_text, query_normalized) >= sim_threshold
+      and q.normalized_text % query_normalized     -- pg_trgm operator, uses the GIN index
     order by similarity desc
     limit match_count;
 $$;

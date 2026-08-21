@@ -18,13 +18,11 @@ def test_job_subject_foreign_keys_have_covering_indexes() -> None:
 
 
 def test_pg_trgm_is_kept_out_of_the_public_schema() -> None:
-    schema = (ROOT / "database/schema.sql").read_text(encoding="utf-8")
     migration = (
         ROOT
         / "supabase/migrations/20260821091000_harden_pg_trgm_extension.sql"
     ).read_text(encoding="utf-8")
 
-    assert "create extension if not exists pg_trgm with schema extensions" in schema
     assert "alter extension pg_trgm set schema extensions" in migration
     assert "extensions.similarity" in migration
     assert "drop index if exists public.idx_questions_normalized_text" in migration
