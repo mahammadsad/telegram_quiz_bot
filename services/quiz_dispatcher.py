@@ -6,7 +6,7 @@ import logging
 import os
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -34,12 +34,15 @@ class DispatchResult:
     ensured: int
     claimed: int
     outcomes: dict[str, str]
+    global_outcomes: dict[str, str]
 
     @property
     def actionable_failures(self) -> bool:
+        observed = {**self.outcomes, **self.global_outcomes}
         return any(
             value.startswith(("blocked:", "dead_letter:", "unknown:"))
-            for value in self.outcomes.values()
+            or value.startswith("overdue:")
+            for value in observed.values()
         )
 
 
@@ -166,7 +169,65 @@ def dispatch_due_jobs(
                 subject_key,
                 category,
             )
-    return DispatchResult(logical_date, len(ensured), len(claimed), outcomes)
+    try:
+        global_outcomes = global_due_outcomes(
+            specs,
+            job_health_rows(logical_date),
+            now=current.astimezone(timezone.utc),
+        )
+    except Exception:
+        LOG.exception("QUIZ_JOB_GLOBAL_HEALTH_QUERY_FAILED date=%s", logical_date)
+        global_outcomes = {"__health__": "blocked:health_query_failed"}
+    return DispatchResult(
+        logical_date,
+        len(ensured),
+        len(claimed),
+        outcomes,
+        global_outcomes,
+    )
+
+
+def global_due_outcomes(
+    specs: list[dict[str, str]],
+    rows: list[dict[str, Any]],
+    *,
+    now: datetime,
+    grace: timedelta = timedelta(minutes=30),
+) -> dict[str, str]:
+    """Evaluate every globally due subject, including unclaimed dead letters."""
+    by_subject = {str(row.get("subject_key")): row for row in rows}
+    outcomes: dict[str, str] = {}
+    for spec in specs:
+        subject = spec["subject_key"]
+        due_at = datetime.fromisoformat(spec["due_at"])
+        if due_at.tzinfo is None:
+            due_at = due_at.replace(tzinfo=timezone.utc)
+        if due_at > now:
+            outcomes[subject] = "not_due"
+            continue
+        row = by_subject.get(subject)
+        if row is None:
+            outcomes[subject] = (
+                "overdue:missing" if due_at + grace <= now else "retrying:missing"
+            )
+            continue
+        status = str(row.get("status") or "unknown")
+        retry_count = int(row.get("retry_count") or 0)
+        if status == "posted":
+            outcomes[subject] = "posted"
+        elif status == "dead_letter":
+            outcomes[subject] = "dead_letter:" + str(
+                row.get("last_error_category") or "unknown"
+            )
+        elif status in {"blocked", "posting_unknown"}:
+            outcomes[subject] = "blocked:" + status
+        elif retry_count >= QUIZ_JOB_MAX_RETRIES:
+            outcomes[subject] = "blocked:retry_policy_exhausted"
+        elif due_at + grace <= now:
+            outcomes[subject] = "overdue:" + status
+        else:
+            outcomes[subject] = "retrying:" + status
+    return outcomes
 
 
 def job_health_rows(logical_date: date) -> list[dict[str, Any]]:

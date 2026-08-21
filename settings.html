@@ -6,11 +6,11 @@
 <meta name="quiz-api-base" content="" />
 <meta name="theme-color" content="#0f766e" />
 <title>পছন্দ ও গোপনীয়তা</title>
-<link rel="manifest" href="/manifest.webmanifest" />
-<link rel="icon" href="/pwa-icon.svg" type="image/svg+xml" />
-<link rel="stylesheet" href="/miniapp-shell.css" />
+<link rel="manifest" href="manifest.webmanifest" />
+<link rel="icon" href="pwa-icon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="miniapp-shell.css" />
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="/miniapp-shell.js" defer></script>
+<script src="miniapp-shell.js" defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -22,6 +22,7 @@
   .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.field-label{display:grid;gap:5px;font-size:13px;font-weight:700}.field-help{color:var(--hint);font-size:12px;font-weight:500}.wide{grid-column:1/-1}.field{width:100%;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--surface);color:var(--text)}.group-title{display:block;margin-bottom:8px;font-size:14px}.checks{display:flex;flex-wrap:wrap;gap:7px}.checks label{display:flex;align-items:center;gap:6px;min-height:44px;border:1px solid var(--line);border-radius:999px;padding:7px 10px;font-size:13px;font-weight:700}.checks input{width:18px;height:18px;min-height:auto}
   .toggle-list{display:grid;gap:9px}.toggle{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;min-height:58px;border:1px solid var(--line);border-radius:14px;padding:10px 12px;cursor:pointer}.toggle b,.toggle small{display:block}.toggle small{margin-top:2px;color:var(--hint)}.toggle input{width:22px;height:22px;min-height:auto;accent-color:var(--button)}
   .actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}.btn{border:1px solid var(--line);border-radius:13px;padding:10px 14px;background:transparent;color:var(--text);font-weight:800;text-decoration:none;cursor:pointer}.primary{background:var(--button);border-color:var(--button);color:var(--button-text)}.message{min-height:24px;margin:8px 0 0;color:var(--hint);font-size:13px}.save-card{background:linear-gradient(135deg,color-mix(in srgb,var(--button) 10%,var(--surface)),var(--surface))}
+  .legal-links{display:flex;align-items:center;gap:4px;flex-wrap:wrap;margin:8px 0 0}.legal-links a{display:inline-flex;align-items:center;padding:8px 6px;font-weight:700}
   .bottom{position:fixed;left:50%;bottom:10px;z-index:10;transform:translateX(-50%);width:min(calc(100% - 20px),760px);display:grid;grid-template-columns:repeat(5,1fr);gap:4px;padding:6px;background:color-mix(in srgb,var(--surface) 94%,transparent);border:1px solid var(--line);border-radius:18px;box-shadow:0 8px 28px rgba(16,32,44,.16);backdrop-filter:blur(12px)}.bottom a{min-height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;text-decoration:none;color:var(--hint);padding:5px 2px;border-radius:12px;font-size:11px;font-weight:800;line-height:1.1;white-space:nowrap}.bottom svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:2}.bottom a.active{background:color-mix(in srgb,var(--button) 12%,transparent);color:var(--button)}
   @media(max-width:600px){.app{padding:14px 10px 96px}.brand h1{font-size:21px}.dashboard-link{display:none}.form-grid{grid-template-columns:1fr}.wide{grid-column:auto}.actions{align-items:stretch;flex-direction:column}.actions .btn{width:100%}}
   @media(max-width:400px){.bottom a{font-size:9px}.bottom svg{width:18px;height:18px}}
@@ -79,6 +80,14 @@
       <p class="message" id="sound-message" aria-live="polite"></p>
     </section>
 
+    <section class="card">
+      <h2>আপনার ডেটা ও অ্যাকাউন্ট</h2>
+      <p class="section-note">প্রতিটি কাজের আগে নতুন Telegram যাচাই প্রয়োজন। মুছে ফেলার অনুরোধে ৭ দিনের grace period আছে।</p>
+      <div class="actions"><button class="btn" id="export-data" type="button">আমার ডেটা এক্সপোর্ট করুন</button><button class="btn" id="cancel-deletion" type="button">মুছে ফেলার অনুরোধ বাতিল করুন</button><button class="btn" id="request-deletion" type="button">অ্যাকাউন্ট মুছে ফেলুন</button></div>
+      <p class="message" id="privacy-message" aria-live="polite"></p>
+      <p class="legal-links"><a href="privacy.html">গোপনীয়তা নোটিশ</a><span aria-hidden="true">·</span><a href="terms.html">ব্যবহারের শর্ত</a></p>
+    </section>
+
     <section class="card save-card">
       <div class="actions"><button class="btn primary" id="settings-submit" type="submit">সব পরিবর্তন সংরক্ষণ করুন</button></div>
       <p class="message" id="settings-message" role="status" aria-live="polite"></p>
@@ -87,7 +96,7 @@
 </main>
 
 <nav class="bottom" aria-label="প্রধান নেভিগেশন">
-  <a href="/"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="m8 9 1.5 1.5L13 7"/><path d="M8 16h8"/></svg><span>কুইজ</span></a>
+  <a href="./"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="m8 9 1.5 1.5L13 7"/><path d="M8 16h8"/></svg><span>কুইজ</span></a>
   <a href="practice.html?source=wrong"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14 7 3 3"/></svg><span>অনুশীলন</span></a>
   <a href="practice.html?source=due"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M6.1 9A7 7 0 0 1 18 6l2 6"/><path d="M17.9 15A7 7 0 0 1 6 18l-2-6"/></svg><span>পুনরাবৃত্তি</span></a>
   <a href="dashboard.html"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 20V10"/><path d="M12 20V4"/><path d="M19 20v-7"/><path d="M3 20h18"/></svg><span>পরিসংখ্যান</span></a>
@@ -138,6 +147,9 @@
   el("settings").addEventListener("submit",savePreferences);
   el("test-sound").addEventListener("click",testSound);
   el("settings-retry").addEventListener("click",loadPreferences);
+  el("export-data").addEventListener("click",exportData);
+  el("request-deletion").addEventListener("click",requestDeletion);
+  el("cancel-deletion").addEventListener("click",cancelDeletion);
   if(initData)loadPreferences();
   else showState("নিজের পছন্দ ও গোপনীয়তা দেখতে Telegram-এর কুইজ বাটন থেকে Mini App খুলুন।",false);
 
@@ -164,6 +176,11 @@
     var message=el("sound-message");message.textContent="শব্দ বাজানো হচ্ছে...";
     try{var AudioCtor=window.AudioContext||window.webkitAudioContext;if(!AudioCtor)throw new Error("unsupported");var context=new AudioCtor(),now=context.currentTime,oscillator=context.createOscillator(),gain=context.createGain();oscillator.type="sine";oscillator.frequency.setValueAtTime(220,now);oscillator.frequency.exponentialRampToValueAtTime(150,now+.16);gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.09,now+.018);gain.gain.exponentialRampToValueAtTime(.0001,now+.17);oscillator.connect(gain);gain.connect(context.destination);oscillator.start(now);oscillator.stop(now+.18);oscillator.onended=function(){context.close();message.textContent="পরীক্ষার শব্দ বাজানো হয়েছে।"}}catch(error){message.textContent="এই ডিভাইসে শব্দ চালু করা যায়নি।"}
   }
+
+  function privacyAction(path){return fetch(api(path),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:initData})}).then(check)}
+  function exportData(){var message=el("privacy-message");message.textContent="ডেটা প্রস্তুত হচ্ছে...";privacyAction("/api/me/data-export").then(function(data){var blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="quiz-platform-data-export.json";link.click();URL.revokeObjectURL(link.href);message.textContent="ডেটা এক্সপোর্ট তৈরি হয়েছে।"}).catch(function(){message.textContent="ডেটা এক্সপোর্ট করা যায়নি। Mini App আবার খুলে চেষ্টা করুন।"})}
+  function requestDeletion(){var message=el("privacy-message");if(!window.confirm("৭ দিন পরে আপনার অ্যাকাউন্ট ও শেখার ডেটা স্থায়ীভাবে মুছে যাবে। অনুরোধটি রাখবেন?"))return;privacyAction("/api/me/account-deletion").then(function(result){message.textContent="অনুরোধ রাখা হয়েছে। "+result.gracePeriodDays+" দিনের মধ্যে চাইলে বাতিল করুন।"}).catch(function(){message.textContent="মুছে ফেলার অনুরোধ রাখা যায়নি।"})}
+  function cancelDeletion(){var message=el("privacy-message");privacyAction("/api/me/account-deletion/cancel").then(function(result){message.textContent=result.cancelled?"মুছে ফেলার অনুরোধ বাতিল হয়েছে।":"কোনো সক্রিয় অনুরোধ পাওয়া যায়নি।"}).catch(function(){message.textContent="অনুরোধ বাতিল করা যায়নি।"})}
 
   function savePreferences(event){
     event.preventDefault();var message=el("settings-message"),button=el("settings-submit");button.disabled=true;message.textContent="সংরক্ষণ হচ্ছে...";

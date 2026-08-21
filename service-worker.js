@@ -1,27 +1,38 @@
 "use strict";
 
-const SHELL_CACHE = "quiz-miniapp-shell-v8.5.0-ui1";
-const ANSWER_FREE_CACHE = "quiz-answer-free-v8.5.0-ui1";
+const SHELL_CACHE = "quiz-miniapp-shell-v8.6.0-ui1";
+const ANSWER_FREE_CACHE = "quiz-answer-free-v8.6.0-ui1";
+const BASE_URL = new URL("./", self.location.href);
+const BASE_PATH = BASE_URL.pathname;
 const SHELL_URLS = [
-  "/",
-  "/index.html",
-  "/practice.html",
-  "/dashboard.html",
-  "/settings.html",
-  "/mock.html",
-  "/miniapp-shell.css",
-  "/miniapp-shell.js",
-  "/manifest.webmanifest",
-  "/pwa-icon.svg",
-];
+  "./",
+  "index.html",
+  "practice.html",
+  "dashboard.html",
+  "settings.html",
+  "mock.html",
+  "miniapp-shell.css",
+  "miniapp-shell.js",
+  "manifest.webmanifest",
+  "pwa-icon.svg",
+].map((path) => new URL(path, BASE_URL).pathname);
+
+function appRelativePath(url) {
+  if (!url.pathname.startsWith(BASE_PATH)) return null;
+  return "/" + url.pathname.slice(BASE_PATH.length);
+}
 
 function isAnswerFreeProjection(url) {
-  return /^\/api\/quiz\/[^/]+$/.test(url.pathname)
-    || /^\/api\/tests\/instances\/[0-9a-f-]+$/i.test(url.pathname);
+  var path = appRelativePath(url);
+  return path !== null && (
+    /^\/api\/quiz\/[^/]+$/.test(path)
+    || /^\/api\/tests\/instances\/[0-9a-f-]+$/i.test(path)
+  );
 }
 
 function isSensitiveApi(url) {
-  return url.pathname.startsWith("/api/") && !isAnswerFreeProjection(url);
+  var path = appRelativePath(url);
+  return path !== null && path.startsWith("/api/") && !isAnswerFreeProjection(url);
 }
 
 self.addEventListener("install", (event) => {

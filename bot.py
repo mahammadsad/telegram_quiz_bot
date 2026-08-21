@@ -472,6 +472,7 @@ def generate_mcqs(
         grounding_bundle,
         pool,
         quiz_id=quiz_id,
+        generator_metadata=generation,
     )
     clean = validate_questions(
         verified,
@@ -1023,6 +1024,7 @@ def dispatch_due_quiz_jobs(*, now: datetime | None = None) -> quiz_dispatcher.Di
                 "claimed": result.claimed,
                 "actionableFailures": result.actionable_failures,
                 "outcomes": result.outcomes,
+                "globalOutcomes": result.global_outcomes,
             },
             sort_keys=True,
         ),

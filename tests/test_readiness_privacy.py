@@ -14,6 +14,8 @@ def _configure_ready_dependencies(monkeypatch) -> None:
         "TELEGRAM_CHAT_ID",
     ):
         monkeypatch.setattr(readiness_service, name, "configured")
+    monkeypatch.setattr(readiness_service, "PUBLIC_APP_URL", "https://app.example")
+    monkeypatch.setattr(readiness_service, "PUBLIC_API_BASE_URL", "https://api.example")
     monkeypatch.setattr(readiness_service, "TELEGRAM_FORUM_TOPICS_JSON", "{}")
     monkeypatch.setattr(readiness_service, "TELEGRAM_GENERAL_THREAD_ID", "1")
     monkeypatch.setattr(readiness_service, "SOURCE_BACKED_ROTATION_ENABLED", False)
@@ -57,6 +59,18 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "checksum_contract_version": 2,
             "generated_checksum": "same",
             "persisted_checksum": "same",
+        },
+    )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_daily_attempt_timing_contract",
+        lambda: {
+            "ready": True,
+            "migration_version": readiness_service.DAILY_ATTEMPT_TIMING_MIGRATION_VERSION,
+            "server_timed_rank": True,
+            "legacy_timing_untrusted": True,
+            "client_response_times_untrusted": True,
+            "function_permission_failures": [],
         },
     )
     monkeypatch.setattr(

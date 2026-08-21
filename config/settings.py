@@ -202,6 +202,8 @@ QUESTION_REPORT_THRESHOLD = max(
 TELEGRAM_BOT_USERNAME = os.environ.get("TELEGRAM_BOT_USERNAME", "").strip().lstrip("@")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
 MINIAPP_SHORT_NAME = os.environ.get("MINIAPP_SHORT_NAME", "").strip()
+PUBLIC_APP_URL = os.environ.get("PUBLIC_APP_URL", "").strip().rstrip("/")
+PUBLIC_API_BASE_URL = os.environ.get("PUBLIC_API_BASE_URL", PUBLIC_APP_URL).strip().rstrip("/")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "").strip()
 TELEGRAM_FORUM_TOPICS_JSON = os.environ.get("TELEGRAM_FORUM_TOPICS_JSON", "").strip()
 # Telegram's General forum topic sometimes expects no message_thread_id. Set

@@ -44,12 +44,26 @@ def verify_questions(
     *,
     quiz_id: str | None = None,
     allow_partial: bool = False,
+    generator_metadata: dict | None = None,
 ) -> tuple[list[dict], dict]:
     prompt = _verification_prompt(questions, bundle)
     raw_text, metadata = pool.generate_subject_quiz(
         prompt=prompt,
         response_schema=VERIFICATION_JSON_SCHEMA,
+        preferred_model=getattr(pool, "fallback_model", None),
     )
+    generator = generator_metadata or {}
+    generator_model = str(generator.get("model") or "").strip()
+    verifier_model = str(metadata.get("model") or "").strip()
+    independent_model = bool(
+        generator_model and verifier_model and generator_model != verifier_model
+    )
+    metadata = {
+        **metadata,
+        "generator_provider": generator.get("provider"),
+        "generator_model": generator.get("model"),
+        "independent_model": independent_model,
+    }
     try:
         raw = json.loads(raw_text)
     except (TypeError, json.JSONDecodeError) as exc:
@@ -114,6 +128,22 @@ def verify_questions(
             continue
         notes = str(result.get("notes") or "").strip()
         deterministic = question.get("deterministic_verification")
+        deterministic_proof = bool(
+            isinstance(deterministic, dict)
+            and (deterministic.get("checks") or {}).get("unique_answer_proved") is True
+        )
+        evidence_bases = [
+            name
+            for name, present in (
+                ("authoritative_source", bundle.source_required),
+                ("deterministic_proof", deterministic_proof),
+                ("independent_model", independent_model),
+            )
+            if present
+        ]
+        if not evidence_bases:
+            rejection_reasons.append(f"question_{number}:verification_independence_unproven")
+            continue
         clean.append({
             **question,
             "verification_status": "verified",
@@ -122,8 +152,13 @@ def verify_questions(
             "verification_checks": {
                 **{name: True for name in CHECK_FIELDS},
                 "deterministic": deterministic,
-                "independent_model": True,
+                "independent_model": independent_model,
                 "source_grounded": bundle.source_required,
+                "evidence_bases": evidence_bases,
+                "generator_provider": generator.get("provider"),
+                "generator_model": generator.get("model"),
+                "verifier_provider": metadata.get("provider"),
+                "verifier_model": metadata.get("model"),
             },
             "verified_at": verified_at,
             "verification_model": metadata.get("model"),
@@ -156,9 +191,17 @@ def verify_question_candidates(
     questions: list[dict],
     bundle: GroundingBundle,
     pool: GeminiProviderPool,
+    *,
+    generator_metadata: dict | None = None,
 ) -> tuple[list[dict], dict]:
     """Verify an async candidate batch while preserving accepted items."""
-    return verify_questions(questions, bundle, pool, allow_partial=True)
+    return verify_questions(
+        questions,
+        bundle,
+        pool,
+        allow_partial=True,
+        generator_metadata=generator_metadata,
+    )
 
 
 def _verification_prompt(questions: list[dict], bundle: GroundingBundle) -> str:
@@ -258,4 +301,6 @@ def _record_audit(
         rejection_reasons=rejection_reasons,
         verifier_provider=metadata.get("provider"),
         verifier_model=metadata.get("model"),
+        generator_provider=metadata.get("generator_provider"),
+        generator_model=metadata.get("generator_model"),
     )

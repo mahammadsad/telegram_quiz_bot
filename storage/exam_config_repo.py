@@ -56,6 +56,26 @@ def public_test_instance(test_instance_id: str) -> dict | None:
     return result.data
 
 
+def learning_test_catalog(
+    *,
+    exam_key: str | None,
+    test_type: str | None,
+    subject_key: str | None,
+    limit: int,
+    offset: int,
+) -> dict:
+    return _rpc(
+        "get_learning_test_catalog",
+        {
+            "p_exam_key": exam_key,
+            "p_test_type": test_type,
+            "p_subject_key": subject_key,
+            "p_limit": limit,
+            "p_offset": offset,
+        },
+    )
+
+
 def _rpc(name: str, payload: dict) -> dict:
     result = get_client().rpc(name, payload).execute()
     if not isinstance(result.data, dict) or "rows" not in result.data:

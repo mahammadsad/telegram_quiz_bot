@@ -4,14 +4,14 @@
   "description": "বাংলা-প্রথম, কম-ডেটা পরীক্ষা অনুশীলন",
   "lang": "bn",
   "dir": "ltr",
-  "start_url": "/",
-  "scope": "/",
+  "start_url": "./",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#f4f8f7",
   "theme_color": "#0f766e",
   "icons": [
     {
-      "src": "/pwa-icon.svg",
+      "src": "pwa-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
       "purpose": "any maskable"

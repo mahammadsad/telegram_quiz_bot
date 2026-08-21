@@ -124,3 +124,33 @@ def test_midnight_catchup_runs_each_job_for_its_own_logical_date(monkeypatch):
 
     assert result.logical_date == date(2026, 8, 9)
     assert targets == [date(2026, 8, 8)]
+
+
+def test_global_health_keeps_unclaimed_dead_letter_red():
+    now = datetime(2026, 8, 8, 14, tzinfo=timezone.utc)
+    specs = quiz_dispatcher.daily_job_specs(date(2026, 8, 8))
+    rows = [{
+        "subject_key": spec["subject_key"],
+        "status": "posted",
+        "retry_count": 0,
+    } for spec in specs]
+    rows[3] = {
+        "subject_key": specs[3]["subject_key"],
+        "status": "dead_letter",
+        "retry_count": 8,
+        "last_error_category": "validation_failed",
+    }
+
+    outcomes = quiz_dispatcher.global_due_outcomes(specs, rows, now=now)
+
+    assert outcomes[specs[3]["subject_key"]] == "dead_letter:validation_failed"
+    result = quiz_dispatcher.DispatchResult(date(2026, 8, 8), 13, 0, {}, outcomes)
+    assert result.actionable_failures is True
+
+
+def test_global_health_alerts_when_due_quiz_is_over_thirty_minutes_late():
+    now = datetime(2026, 8, 8, 14, tzinfo=timezone.utc)
+    specs = quiz_dispatcher.daily_job_specs(date(2026, 8, 8))
+    outcomes = quiz_dispatcher.global_due_outcomes(specs, [], now=now)
+
+    assert any(value == "overdue:missing" for value in outcomes.values())

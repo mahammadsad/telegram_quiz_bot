@@ -30,6 +30,12 @@ services:
         sync: false
       - key: MINIAPP_SHORT_NAME
         sync: false
+      - key: PUBLIC_APP_URL
+        value: https://telegram-quiz-platform.onrender.com
+      - key: PUBLIC_API_BASE_URL
+        value: https://telegram-quiz-platform.onrender.com
+      - key: APP_ENVIRONMENT
+        value: production
       - key: GEMINI_API_KEY_PRIMARY
         sync: false
       - key: GEMINI_API_KEY_SECONDARY

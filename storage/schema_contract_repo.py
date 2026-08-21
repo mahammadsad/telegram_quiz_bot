@@ -71,6 +71,11 @@ def get_source_optional_generation_contract() -> Row:
     return as_row(result.data, "source-optional generation contract")
 
 
+def get_daily_attempt_timing_contract() -> Row:
+    result = get_client().rpc("get_daily_attempt_timing_contract", {}).execute()
+    return as_row(result.data, "daily-attempt timing contract")
+
+
 def active_quiz_probe() -> Row | None:
     result = (
         get_client()

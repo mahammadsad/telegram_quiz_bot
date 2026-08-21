@@ -98,7 +98,7 @@ def test_submission_delegates_one_atomic_rpc(monkeypatch):
         "user_id": "user-1",
         "client_attempt_id": ATTEMPT_ID,
         "answers": [0] * 10,
-        "duration_seconds": None,
+        "client_duration_seconds": None,
         "response_times": None,
         "marked_for_review": None,
     }]

@@ -62,5 +62,34 @@ def public_test_instance(test_instance_id: uuid.UUID) -> dict | None:
     return exam_config_repo.public_test_instance(str(test_instance_id))
 
 
+def learning_test_catalog(
+    *,
+    exam_key: str | None,
+    test_type: str | None,
+    subject_key: str | None,
+    limit: int,
+    offset: int,
+) -> dict:
+    clean_exam = exam_key.strip().upper() if exam_key else None
+    clean_type = test_type.strip() if test_type else None
+    clean_subject = subject_key.strip().lower() if subject_key else None
+    if clean_exam and (len(clean_exam) > 50 or any(char.isspace() for char in clean_exam)):
+        raise ValueError("Invalid exam key.")
+    if clean_type and clean_type not in TEST_TYPES:
+        raise ValueError("Unknown test type.")
+    if clean_subject and (
+        len(clean_subject) > 50
+        or not all(char.isalnum() or char == "-" for char in clean_subject)
+    ):
+        raise ValueError("Invalid subject key.")
+    return exam_config_repo.learning_test_catalog(
+        exam_key=clean_exam,
+        test_type=clean_type,
+        subject_key=clean_subject,
+        limit=_page_limit(limit),
+        offset=max(0, offset),
+    )
+
+
 def _page_limit(value: int) -> int:
     return max(1, min(value, 100))
