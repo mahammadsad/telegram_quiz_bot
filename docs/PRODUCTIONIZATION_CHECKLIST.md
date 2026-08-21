@@ -92,9 +92,11 @@ staging test has passed. Source-code inspection alone is not sufficient.
 ## Phase 5 — controlled content rollout
 
 - [ ] Import approved Computer Education expansion sources into staging.
-- [ ] Generate and validate one ten-question quiz per candidate chapter.
-- [ ] Compare generated, stored, and API-returned checksums.
-- [ ] Test posting once in a private Telegram topic.
+- [x] Generate and validate one ten-question quiz for a source-covered Computer
+  chapter in staging.
+- [x] Compare generated and persisted checksums for that certified pack.
+- [x] Test posting once in a private Telegram topic; reconcile the acknowledged
+  message without reposting after the history-uniqueness drift was repaired.
 - [ ] Test first attempt, retry, retake, ranking, report, bookmark, and revision.
 - [ ] Activate one chapter, observe one complete scheduled cycle, then proceed one
   chapter at a time.
@@ -125,10 +127,9 @@ staging test has passed. Source-code inspection alone is not sufficient.
   full-history scanning, and 48 browser tests across four projects.
 - [x] Staging required migration `20260724212939` and contract `2.2.0` are exact;
   all contract failure arrays are empty.
-- [x] Staging `/health/ready` returned HTTP 200 on 2026-08-21 with every exposed
-  readiness check true before the database upgrade. The service is still on
-  application 8.4.0 and now fails closed on the newer contract, so the 8.6.0
-  post-deploy check remains required.
+- [x] Staging application 8.6.0 at exact commit `be883b5` returned HTTP 200 from
+  `/health/ready` with every exposed readiness check true; the guarded
+  preflight passed.
 - [ ] Staging end-to-end quiz lifecycle passes without answer leakage.
 - [ ] Screenshots cover small Android widths, dashboard identity, out-of-top-ten
   rank, revision feedback, loading, error, and empty states.

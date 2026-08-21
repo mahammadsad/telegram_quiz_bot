@@ -68,11 +68,19 @@ privacy rights. The timing and verification contracts are exact and ready, the
 catalogue/privacy RPCs exist with service-role-only grants, and all four
 preservation counts above remain unchanged.
 
-The public staging service returned HTTP 200 from `/health/live` and
-`/health/ready` before the database upgrade. Once the 8.6 migrations were
-complete, the still-running 8.4.0 app correctly failed closed with HTTP 503 on
-the newer contract version. Deploying the exact 8.6.0 commit is therefore the
-next required staging action.
+The exact 8.6.0 commit `be883b5eb30664b2b92dcf7df2fa35549d14c31c` was
+deployed to the isolated Render staging service. After adding the two missing
+same-origin public URL settings, `/health/live` and `/health/ready` both
+returned HTTP 200 and every exposed readiness check was true. The guarded
+GitHub staging preflight also passed.
+
+The first guarded Computer quiz run exposed historical schema drift: the
+`chapter_history` table lacked the unique subject/date constraint required by
+`finalize_quiz_post`. Telegram had acknowledged message `2485`, so the
+application correctly recorded `posting_unknown` and refused to retry. Staging
+had no duplicate history rows. An additive migration restored uniqueness, a
+strict stored-receipt recovery path was added, and the already-delivered
+certified ten-question quiz was finalized without sending a second message.
 
 GitHub Tests run 348 and Security run 16 passed on the published fix commit,
 including the disposable PostgreSQL build, all migrations, PostgreSQL-backed
@@ -84,8 +92,8 @@ and Python/JavaScript CodeQL.
 These are not safely completable from a source-only workspace and must not be
 represented as done until evidence exists:
 
-- Publish the tested 8.6.0 commit and deploy that exact commit to staging, then
-  reconfirm `/health/ready` returns HTTP 200 with application version 8.6.0.
+- Publish and deploy the post-finalization drift repair, then reconfirm the
+  updated exact commit remains HTTP 200-ready in staging.
 - Exercise a complete answer-free quiz lifecycle in the real Telegram staging
   Mini App, including post, attempt retry, retake, report, bookmark, and revision.
 - Review production project ownership, backup/rollback approval, deploy, and

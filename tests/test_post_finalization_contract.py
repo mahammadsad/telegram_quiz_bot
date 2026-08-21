@@ -12,6 +12,12 @@ MIGRATION = (
     / "migrations"
     / "20260808063007_atomic_quiz_post_finalization.sql"
 )
+RECOVERY_MIGRATION = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / "20260821101000_reconcile_unknown_quiz_post.sql"
+)
 
 
 def test_post_finalization_migration_is_atomic_idempotent_and_locked_down():
@@ -39,6 +45,16 @@ def test_post_finalization_contract_is_required_and_self_describing():
     assert "20260808063007" in sql
     assert "function_permission_failures" in sql
     assert "missing_columns" in sql
+
+
+def test_unknown_post_recovery_requires_the_stored_telegram_receipt():
+    sql = RECOVERY_MIGRATION.read_text(encoding="utf-8").lower()
+
+    assert "v_run.status = 'posting_unknown'" in sql
+    assert "stored telegram acknowledgement does not match recovery request" in sql
+    assert "v_effective_acknowledged_at := v_run.telegram_acknowledged_at" in sql
+    assert "'reconciled_unknown', v_run.status = 'posting_unknown'" in sql
+    assert "revoke all on function public.finalize_quiz_post" in sql
 
 
 def test_finalize_repository_passes_ack_and_not_stale_counters(monkeypatch):

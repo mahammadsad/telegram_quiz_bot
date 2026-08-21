@@ -363,6 +363,62 @@ def test_post_finalization_contract_and_atomic_idempotent_usage(
             )
 
 
+def test_posting_unknown_can_be_reconciled_without_a_second_delivery(
+    database_url: str,
+    catalogue: Catalogue,
+) -> None:
+    quiz_id = "20261012-history"
+    worker_id = "post-unknown-worker"
+    raw = deepcopy(raw_questions(catalogue))
+    for index, question in enumerate(raw):
+        question["question"] = f"অজানা পোস্ট পুনর্মিলন পরীক্ষা {index} কী?"
+    save_quiz(database_url, quiz_id, "2026-10-12", raw, worker_id=worker_id)
+
+    with psycopg.connect(database_url, row_factory=dict_row, autocommit=True) as connection:
+        connection.execute(
+            "select * from public.claim_quiz_run(%s, %s, 'posting', 20, false)",
+            (quiz_id, worker_id),
+        )
+        connection.execute(
+            "select public.record_quiz_post_intent(%s, %s, %s, now())",
+            (quiz_id, worker_id, "c" * 64),
+        )
+        acknowledged_at = connection.execute("select now() as value").fetchone()["value"]
+        unknown = connection.execute(
+            """
+            select public.record_quiz_post_unknown(
+                %s, %s, 701, %s, -100, 17, 'post_finalization_failed'
+            ) as result
+            """,
+            (quiz_id, worker_id, acknowledged_at),
+        ).fetchone()["result"]
+        assert unknown["status"] == "posting_unknown"
+
+        reconciled = connection.execute(
+            """
+            select public.finalize_quiz_post(
+                %s, 'recovery-worker', 701, now(), -100, 17, 21, 180
+            ) as result
+            """,
+            (quiz_id,),
+        ).fetchone()["result"]
+        assert reconciled["status"] == "posted"
+        assert reconciled["reconciled_unknown"] is True
+        assert reconciled["telegram_message_id"] == 701
+
+        run = connection.execute(
+            """
+            select status, posted_at, telegram_acknowledged_at, last_error_category
+            from public.quiz_runs where quiz_id = %s
+            """,
+            (quiz_id,),
+        ).fetchone()
+        assert run["status"] == "posted"
+        assert run["posted_at"] == acknowledged_at
+        assert run["telegram_acknowledged_at"] == acknowledged_at
+        assert run["last_error_category"] is None
+
+
 def test_post_finalization_rolls_back_every_usage_write_on_failure(
     database_url: str,
     catalogue: Catalogue,

@@ -39,7 +39,7 @@ answer_free = true
 
 [database]
 contract_version = "2.2.0"
-post_finalization_migration_version = "20260808063007"
+post_finalization_migration_version = "20260821100000"
 quiz_jobs_migration_version = "20260808071500"
 leaderboard_privacy_rpc_fix_migration_version = "20260808084950"
 phase_c_identity_migration_version = "20260808093610"

@@ -16,5 +16,8 @@
   recent-quiz catalogue is offline, and caches only its safe public projection.
 - Covers durable job subject foreign keys, isolates `pg_trgm` in the extensions
   schema, and removes the historical duplicate normalized-text GIN index.
+- Restores the `chapter_history` uniqueness required by atomic Telegram post
+  finalization and adds strict reconciliation for an acknowledged
+  `posting_unknown` run without sending a second message.
 
 Promotion remains staging-first under `docs/PRODUCTION_RELEASE_AND_ROLLBACK.md`.
