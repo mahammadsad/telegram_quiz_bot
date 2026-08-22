@@ -255,7 +255,7 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
     assert current_source.index("validate_database_schema") < (
         current_source.index("--max-items 200 --minimum-per-chapter 4 --approve")
     )
-    assert "REFRESH PIB SOURCES IN" in current_source
+    assert "REFRESH OFFICIAL SOURCES IN" in current_source
 
 
 def test_authoritative_migration_version_is_latest_filename() -> None:
