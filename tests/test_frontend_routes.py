@@ -39,6 +39,19 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert worker.headers["cache-control"] == "no-cache, max-age=0"
     assert worker.headers["service-worker-allowed"] == "/"
     assert CLIENT.get("/miniapp-shell.css").headers["cache-control"] == "public, max-age=300"
+    source = worker.text
+    assert "NETWORK_TIMEOUT_MS = 8000" in source
+    assert "new AbortController()" in source
+    assert "cache.match(pathname)" in source
+    assert "response.status >= 500" in source
+
+
+def test_quiz_intro_uses_citizen_affairs_identity_and_parent_site_cta() -> None:
+    html = CLIENT.get("/").text
+    assert "Citizen Affairs" in html
+    assert "utm_source=telegram" in html
+    assert "🌐 Citizen Affairs বাংলা" in html
+    assert html.index("🌐 Citizen Affairs বাংলা") < html.index("▶ মক টেস্ট শুরু করুন")
 
 
 def test_mock_page_without_uuid_opens_catalog_instead_of_dead_end() -> None:

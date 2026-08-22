@@ -273,7 +273,7 @@ def test_authoritative_migration_version_is_latest_filename() -> None:
 def test_versioned_production_manifest_matches_deployment_intent() -> None:
     manifest_path = ROOT / "config" / "production.toml"
     assert manifest_path.is_file()
-    assert PRODUCTION_CONFIG_VERSION == "2026-08-23.2"
+    assert PRODUCTION_CONFIG_VERSION == "2026-08-23.3"
     assert re.fullmatch(r"[0-9a-f]{64}", PRODUCTION_CONFIG_HASH)
     assert PRODUCTION_CONFIG["quiz"]["source_backed_rotation_enabled"] is True
     assert PRODUCTION_CONFIG["quiz"]["source_optional_stable_subjects_enabled"] is True
@@ -287,6 +287,7 @@ def test_versioned_production_manifest_matches_deployment_intent() -> None:
         "require_new_candidate_proof": True,
     }
     assert PRODUCTION_CONFIG["scheduler"]["dispatcher_max_retries"] == 8
+    assert PRODUCTION_CONFIG["database"]["request_timeout_seconds"] == 8
     assert PRODUCTION_CONFIG["database"]["platform_contract_version"] == PLATFORM_CONTRACT_VERSION
     assert (
         PRODUCTION_CONFIG["database"]["platform_contract_migration_version"]

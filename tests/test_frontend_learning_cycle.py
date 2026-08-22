@@ -144,7 +144,7 @@ def test_pwa_cache_is_fail_closed_for_answer_material() -> None:
     assert 'path.startsWith("/api/")' in WORKER
     for sensitive in ("attempt", "submit", "leaderboard", "correctIndex", "explanation"):
         assert sensitive not in WORKER.split("const SHELL_URLS", 1)[1].split("];", 1)[0]
-    assert 'fetch(request, {cache: "no-store"})' in WORKER
+    assert 'fetchWithTimeout(request, {cache: "no-store"})' in WORKER
 
 
 def test_missing_quiz_message_is_user_facing_not_an_operator_instruction() -> None:

@@ -683,6 +683,13 @@
     });
   }
 
+  function fetchWithTimeout(resource, options, timeoutMs){
+    var controller = new AbortController();
+    var requestOptions = Object.assign({}, options || {}, {signal:controller.signal});
+    var timer = window.setTimeout(function(){ controller.abort(); }, timeoutMs || 8000);
+    return window.fetch(resource, requestOptions).finally(function(){ window.clearTimeout(timer); });
+  }
+
   function getQuizId(){
     var params = new URLSearchParams(window.location.search);
     if (isTelegram && tg.initDataUnsafe && tg.initDataUnsafe.start_param) return tg.initDataUnsafe.start_param;
@@ -717,7 +724,7 @@
 
   function loadQuizPreferences(){
     if (!isTelegram) return;
-    fetch(api("/api/me/preferences"), {headers:{"X-Telegram-Init-Data":tg.initData}})
+    fetchWithTimeout(api("/api/me/preferences"), {headers:{"X-Telegram-Init-Data":tg.initData}})
       .then(function(resp){ return jsonOrThrow(resp, "Preferences API"); })
       .then(function(data){
         quizMode = data.quizMode === "practice" ? "practice" : "timed";
@@ -803,7 +810,7 @@
     byId("loading-message").textContent = "সাম্প্রতিক কুইজ লোড হচ্ছে...";
     byId("home-retry-wrap").classList.add("hidden");
     show("loading");
-    fetch(api("/api/quizzes/recent?limit=26"))
+    fetchWithTimeout(api("/api/quizzes/recent?limit=26"))
       .then(function(resp){ return jsonOrThrow(resp, "Recent quizzes API"); })
       .then(function(data){ renderHome(Array.isArray(data.items) ? data.items : []); })
       .catch(function(){
@@ -859,7 +866,7 @@
     byId("btn-retry").textContent = "আবার চেষ্টা করুন";
     show("loading");
     byId("loading-message").textContent = "কুইজ তৈরি/লোড হচ্ছে...";
-    fetch(api("/api/quiz/" + encodeURIComponent(quizId)))
+    fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId)))
       .then(function(resp){ return jsonOrThrow(resp, "Quiz API"); })
       .then(function(data){
         if (!data.qs || data.qs.length !== 10) throw new Error("Quiz must contain exactly 10 questions");
@@ -884,7 +891,7 @@
     byId("btn-retry").textContent = "ফল আবার লোড করুন";
     show("loading");
     byId("loading-message").textContent = "আপনার ফলাফল লোড হচ্ছে...";
-    fetch(api("/api/quiz/" + encodeURIComponent(quizId) + "/attempt/" + encodeURIComponent(value)), {
+    fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId) + "/attempt/" + encodeURIComponent(value)), {
       headers:{"X-Telegram-Init-Data":isTelegram ? tg.initData : ""}
     })
       .then(function(resp){ return jsonOrThrow(resp, "Attempt result API"); })
@@ -904,7 +911,7 @@
   }
 
   function loadLegacyQuiz(){
-    fetch("quizzes/" + encodeURIComponent(quizId) + ".json?v=" + Date.now(), {cache:"no-store"})
+    fetchWithTimeout("quizzes/" + encodeURIComponent(quizId) + ".json?v=" + Date.now(), {cache:"no-store"})
       .then(function(resp){
         if (!resp.ok) throw new Error("Legacy quiz returned " + resp.status);
         return resp.json();
@@ -948,7 +955,7 @@
     show("resources");
     byId("resource-status").textContent = "যাচাই করা রিসোর্স লোড হচ্ছে...";
     byId("resource-list").textContent = "";
-    fetch(api("/api/quiz/" + encodeURIComponent(quizId) + "/resources"))
+    fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId) + "/resources"))
       .then(function(resp){ return jsonOrThrow(resp, "Learning resources API"); })
       .then(renderResources)
       .catch(function(err){
@@ -1062,7 +1069,7 @@
     button.addEventListener("click", function(){
       button.disabled = true;
       message.textContent = "পাঠানো হচ্ছে...";
-      fetch(api("/api/resources/" + encodeURIComponent(resource.id) + "/feedback"), {
+      fetchWithTimeout(api("/api/resources/" + encodeURIComponent(resource.id) + "/feedback"), {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({initData:tg.initData, feedbackType:select.value})
@@ -1131,7 +1138,7 @@
   function ensureServerAttemptStarted(){
     if (readOnlyMode || serverAttemptStarted) return Promise.resolve();
     if (serverStartPromise) return serverStartPromise;
-    serverStartPromise = fetch(api("/api/quiz/" + encodeURIComponent(quizId) + "/attempts/start"), {
+    serverStartPromise = fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId) + "/attempts/start"), {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
@@ -1288,7 +1295,7 @@
     byId("loading-message").textContent = "উত্তর সাবমিট হচ্ছে...";
     ensureServerAttemptStarted().catch(function(){
       // The server accepts legacy submission, but marks all timing untrusted.
-    }).then(function(){ return fetch(api("/api/quiz/" + encodeURIComponent(quizId) + "/submit"), {
+    }).then(function(){ return fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId) + "/submit"), {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
@@ -1472,7 +1479,7 @@
   function setBookmark(button, itemType, itemId){
     if (!isTelegram || !itemId || button.disabled) return;
     button.disabled = true;
-    fetch(api("/api/me/bookmarks"), {
+    fetchWithTimeout(api("/api/me/bookmarks"), {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({initData:tg.initData,itemType:itemType,itemId:itemId,active:true})
@@ -1494,7 +1501,7 @@
     }
     button.disabled = true;
     message.textContent = "রিপোর্ট পাঠানো হচ্ছে...";
-    fetch(api("/api/questions/" + encodeURIComponent(item.questionId) + "/report"), {
+    fetchWithTimeout(api("/api/questions/" + encodeURIComponent(item.questionId) + "/report"), {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
