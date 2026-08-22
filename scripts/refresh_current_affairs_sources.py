@@ -14,6 +14,7 @@ from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError
@@ -40,6 +41,7 @@ from scripts.import_source_documents import (  # noqa: E402
     validate_source_bundle,
 )
 from services.current_affairs_pipeline import (  # noqa: E402
+    authoritative_source_domain,
     build_event_bundle,
     cluster_current_affairs_rows,
 )
@@ -51,6 +53,7 @@ PIB_SECONDARY_RSS_URL = (
 PIB_ALL_RELEASES_URL = (
     "https://www.pib.gov.in/AllRelease.aspx?MenuId=3&lang=1&reg=3"
 )
+RBI_PRESS_RELEASES_RSS_URL = "https://rbi.org.in/pressreleases_rss.xml"
 USER_AGENT = "telegram-quiz-source-refresh/1.0 (+official-PIB-only)"
 MAX_RESPONSE_BYTES = 5_000_000
 MAX_FACT_SUMMARY_CHARS = 3_600
@@ -285,15 +288,47 @@ def refresh_rows(
                 # rest of the independently valid refresh batch.
                 skipped += 1
 
+    rbi_rows, rbi_stats = refresh_rbi_rows(
+        fetch_text=fetch_text,
+        now=now,
+        max_items=max_items,
+    )
+    rows.extend(rbi_rows)
+    skipped += rbi_stats.skipped
     if not rows:
         raise CurrentAffairsRefreshError(
             "No current, complete PIB releases passed the source-safety checks."
         )
     return cluster_current_affairs_rows(rows), RefreshStats(
-        rss_items=len(items),
+        rss_items=len(items) + rbi_stats.rss_items,
         accepted=len(rows),
         skipped=skipped,
     )
+
+
+def refresh_rbi_rows(*, fetch_text, now: datetime, max_items: int) -> tuple[list[dict], RefreshStats]:
+    """Read only the official RBI press-release feed, failing closed per item.
+
+    RBI is an independently operated primary authority.  Its feed embeds the
+    release text, so no unaudited third-party extraction or PDF parsing is used.
+    A temporary RBI outage never blocks valid PIB coverage.
+    """
+    try:
+        raw_items = parse_rbi_rss_items(fetch_text(RBI_PRESS_RELEASES_RSS_URL))
+    except Exception:
+        return [], RefreshStats(rss_items=0, accepted=0, skipped=0)
+    rows: list[dict] = []
+    skipped = 0
+    for item in raw_items[:max_items]:
+        try:
+            release = rbi_item_to_release(item)
+            if not release_is_current(release.published_at, now):
+                skipped += 1
+                continue
+            rows.append(release_to_source_row(release, now))
+        except (CurrentAffairsRefreshError, ValueError):
+            skipped += 1
+    return rows, RefreshStats(rss_items=len(raw_items), accepted=len(rows), skipped=skipped)
 
 
 def _interleave_unique(batches: list[list[str]]) -> list[str]:
@@ -317,6 +352,9 @@ def _interleave_unique(batches: list[list[str]]) -> list[str]:
 
 
 def fetch_text(url: str) -> str:
+    requested_domain = (urlparse(url).hostname or "").lower().removeprefix("www.")
+    if requested_domain not in {"pib.gov.in", "rbi.org.in"}:
+        raise CurrentAffairsRefreshError("Current-affairs source host is not approved.")
     request = urllib.request.Request(
         url,
         headers={
@@ -338,7 +376,7 @@ def fetch_text(url: str) -> str:
             last_error = exc
             if 400 <= exc.code < 500 and exc.code != 429:
                 raise CurrentAffairsRefreshError(
-                    "Official PIB source request was rejected."
+                    "Official current-affairs source request was rejected."
                 ) from exc
         except Exception as exc:
             last_error = exc
@@ -346,22 +384,22 @@ def fetch_text(url: str) -> str:
             time_module.sleep(FETCH_RETRY_DELAY_SECONDS * attempt)
     else:
         raise CurrentAffairsRefreshError(
-            "Official PIB source request failed."
+            "Official current-affairs source request failed."
         ) from last_error
     final = urlparse(final_url)
     if (
         final.scheme != "https"
-        or (final.hostname or "").lower().removeprefix("www.") != "pib.gov.in"
+        or (final.hostname or "").lower().removeprefix("www.") != requested_domain
     ):
-        raise CurrentAffairsRefreshError("Official PIB source redirected outside its host.")
+        raise CurrentAffairsRefreshError("Official current-affairs source redirected outside its host.")
     if status != 200 or len(payload) > MAX_RESPONSE_BYTES:
-        raise CurrentAffairsRefreshError("Official PIB source response was rejected.")
+        raise CurrentAffairsRefreshError("Official current-affairs source response was rejected.")
     if content_type not in ALLOWED_CONTENT_TYPES:
-        raise CurrentAffairsRefreshError("Official PIB source content type was rejected.")
+        raise CurrentAffairsRefreshError("Official current-affairs source content type was rejected.")
     try:
         return payload.decode(encoding)
     except (LookupError, UnicodeDecodeError) as exc:
-        raise CurrentAffairsRefreshError("Official PIB source encoding was rejected.") from exc
+        raise CurrentAffairsRefreshError("Official current-affairs source encoding was rejected.") from exc
 
 
 def parse_rss_items(xml_text: str) -> list[str]:
@@ -382,6 +420,74 @@ def parse_rss_items(xml_text: str) -> list[str]:
         if link:
             links.append(link)
     return links
+
+
+def parse_rbi_rss_items(xml_text: str) -> list[dict[str, str]]:
+    """Parse the narrow, documented RBI RSS item shape without trusting HTML."""
+    try:
+        root = SafeET.fromstring(xml_text)
+    except (SafeET.ParseError, DefusedXmlException) as exc:
+        raise CurrentAffairsRefreshError("The official RBI RSS feed was malformed.") from exc
+    rows: list[dict[str, str]] = []
+    for item in (node for node in root.iter() if _local_name(node.tag) == "item"):
+        fields = {
+            _local_name(child.tag): _clean_text(child.text or "")
+            for child in item
+        }
+        if all(fields.get(key) for key in ("title", "description", "link", "pubdate")):
+            rows.append(fields)
+    return rows
+
+
+def rbi_item_to_release(item: dict[str, str]) -> Release:
+    """Turn one canonical RBI RSS item into a provenance-preserving release."""
+    url = str(item.get("link") or "")
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or (parsed.hostname or "").lower().removeprefix("www.") != "rbi.org.in":
+        raise CurrentAffairsRefreshError("RBI RSS item points outside the official host.")
+    query = {key.lower(): values for key, values in parse_qs(parsed.query).items()}
+    prid = (query.get("prid") or [""])[0]
+    if not re.fullmatch(r"[0-9]{3,12}", prid):
+        raise CurrentAffairsRefreshError("RBI RSS item has an invalid release identifier.")
+    parser = _RBITextParser()
+    parser.feed(str(item["description"]))
+    parser.close()
+    body = _clean_body(parser.parts)
+    if len(body) < 250:
+        raise CurrentAffairsRefreshError("RBI release is missing sufficient official text.")
+    try:
+        published_at = parsedate_to_datetime(str(item["pubdate"]))
+    except (TypeError, ValueError) as exc:
+        raise CurrentAffairsRefreshError("RBI RSS item has an invalid publication date.") from exc
+    if published_at.tzinfo is None:
+        published_at = published_at.replace(tzinfo=IST)
+    return Release(
+        prid=f"rbi-{prid}", url=url, ministry="Reserve Bank of India",
+        title=_clean_text(str(item["title"])), published_at=published_at.astimezone(timezone.utc), body=body,
+    )
+
+
+class _RBITextParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() in {"script", "style", "noscript"}:
+            self._skip_depth += 1
+        elif tag.lower() in {"p", "li", "tr", "br"}:
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag.lower() in {"script", "style", "noscript"}:
+            self._skip_depth = max(0, self._skip_depth - 1)
+        elif tag.lower() in {"p", "li", "tr"}:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip_depth:
+            self.parts.append(data)
 
 
 def parse_all_release_items(html_text: str) -> list[str]:
@@ -628,8 +734,11 @@ def release_to_source_row(release: Release, accessed_at: datetime) -> dict:
         if datetime.fromisoformat(str(claim["expires_at"])) < expires_at:
             claim["expires_at"] = expires_at.isoformat()
     body = _truncate_at_word(release.body, MAX_FACT_SUMMARY_CHARS - 300)
+    source_domain = authoritative_source_domain(release.url)
+    source_label = "Official RBI press release" if source_domain == "rbi.org.in" else "Official PIB release"
+    source_prefix = "rbi" if source_domain == "rbi.org.in" else "pib"
     fact_summary = (
-        f"Official PIB release dated {published_at.astimezone(IST).date().isoformat()} "
+        f"{source_label} dated {published_at.astimezone(IST).date().isoformat()} "
         f"from {release.ministry}. Title: {release.title}. "
         f"Verified release text: {body}"
     )
@@ -649,13 +758,13 @@ def release_to_source_row(release: Release, accessed_at: datetime) -> dict:
         "micro_topic_name": topic_name,
         "source_url": release.url,
         "source_title": release.title,
-        "source_domain": "pib.gov.in",
+        "source_domain": source_domain,
         "source_kind": "official",
         "source_published_at": published_at.isoformat(),
         "source_accessed_at": accessed_at.isoformat(),
         "fact_summary": fact_summary,
         "fact_version": (
-            f"pib-{release.prid}-{local_publication_date.isoformat()}-{digest}"
+            f"{source_prefix}-{release.prid}-{local_publication_date.isoformat()}-{digest}"
         ),
         "expires_at": expires_at.isoformat(),
         "verification_notes": (
