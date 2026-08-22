@@ -18,6 +18,7 @@ import requests
 
 from config.settings import (
     APP_TIMEZONE,
+    CITIZEN_AFFAIRS_URL,
     EXPECTED_SUPABASE_PROJECT_REF,
     MINIAPP_SHORT_NAME,
     PRODUCTION_CONFIG_HASH,
@@ -849,7 +850,7 @@ def run_subject_quiz(
             "text": post_text,
             "parse_mode": "HTML",
             "disable_web_page_preview": True,
-            "reply_markup": {"inline_keyboard": [[{"text": "কুইজ শুরু করুন", "url": post_url}]]},
+            "reply_markup": _quiz_reply_markup(post_url),
         })
         message = response.get("result") or {}
         telegram_acknowledged = True
@@ -1317,13 +1318,23 @@ def build_miniapp_url(quiz_id: str) -> str:
 
 def _quiz_post_text(display_name: str, chapter: str) -> str:
     return (
-        "📝 <b>আজকের মক টেস্ট প্রস্তুত</b>\n\n"
+        "📝 <b>Citizen Affairs-এর আজকের মক টেস্ট প্রস্তুত</b>\n\n"
         f"📚 <b>বিষয়:</b> {html.escape(display_name)}\n"
         f"📖 <b>চ্যাপ্টার:</b> {html.escape(chapter)}\n"
         "🔢 <b>প্রশ্ন:</b> ১০টি\n"
         "🎯 <b>মার্কিং:</b> সঠিক +১ · ভুল −০.২৫ · উত্তরহীন ০\n\n"
         "সাবমিটের পর নেট স্কোর, ব্যাখ্যা ও এই কুইজের leaderboard দেখুন।"
     )
+
+
+def _quiz_reply_markup(quiz_url: str) -> dict:
+    """Keep the parent-site CTA visibly before the quiz start action."""
+    return {
+        "inline_keyboard": [
+            [{"text": "🌐 Citizen Affairs বাংলা", "url": CITIZEN_AFFAIRS_URL}],
+            [{"text": "▶️ কুইজ শুরু করুন", "url": quiz_url}],
+        ]
+    }
 
 
 def _chat_id_as_int(chat_id: str) -> int:

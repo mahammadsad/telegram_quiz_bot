@@ -1,5 +1,9 @@
 [meta]
-version = "2026-08-23.1"
+version = "2026-08-23.2"
+
+[brand]
+name = "Citizen Affairs Exam Prep"
+parent_site_url = "https://citizenaffairs.in/bn/?utm_source=telegram&utm_medium=quiz&utm_campaign=daily_quiz"
 
 [gemini]
 primary_model = "gemini-3.1-flash-lite"

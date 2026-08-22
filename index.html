@@ -4,8 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="quiz-api-base" content="" />
-<meta name="theme-color" content="#0f766e" />
-<title>আজকের মক টেস্ট</title>
+<meta name="theme-color" content="#07726c" />
+<title>Citizen Affairs | পরীক্ষার প্রস্তুতি</title>
 
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" href="pwa-icon.svg" type="image/svg+xml" />
@@ -21,15 +21,15 @@
 <style>
   :root{
     color-scheme:light dark;
-    --bg:var(--tg-theme-bg-color,#f5f7fb);
+    --bg:var(--tg-theme-bg-color,#f7f9fc);
     --surface:var(--tg-theme-secondary-bg-color,#ffffff);
-    --surface-2:#eef6f4;
-    --ink:var(--tg-theme-text-color,#17202a);
+    --surface-2:#e7f4f2;
+    --ink:var(--tg-theme-text-color,#172033);
     --muted:var(--tg-theme-hint-color,#627084);
     --line:#d9e0ea;
-    --primary:var(--tg-theme-button-color,#0f766e);
-    --primary-strong:#0b5f59;
-    --accent:#2563eb;
+    --primary:var(--tg-theme-button-color,#07726c);
+    --primary-strong:#065c57;
+    --accent:#0a817a;
     --danger:#d14343;
     --success:#16834a;
     --warning:#b7791f;
@@ -42,8 +42,8 @@
   body{
     margin:0;
     background:
-      linear-gradient(135deg, rgba(15,118,110,.08), transparent 34%),
-      linear-gradient(315deg, rgba(37,99,235,.08), transparent 32%),
+      linear-gradient(135deg, rgba(7,114,108,.09), transparent 34%),
+      linear-gradient(315deg, rgba(245,166,35,.08), transparent 32%),
       var(--bg);
     color:var(--ink);
     font-family:var(--font);
@@ -392,8 +392,8 @@
 <main class="app">
   <header class="topbar">
     <div class="brand">
-      <small>WB Exam Prep</small>
-      <h1 id="brand-title">দৈনিক মক টেস্ট</h1>
+      <small>Citizen Affairs</small>
+      <h1 id="brand-title">পরীক্ষা প্রস্তুতি</h1>
     </div>
     <div class="pill num" id="quiz-id-pill">লোড হচ্ছে</div>
   </header>
@@ -433,6 +433,7 @@
       <div class="meta"><b>মার্কিং</b><span id="intro-marking" class="num">-</span></div>
     </div>
     <div class="actions" id="intro-actions">
+      <a class="btn btn-secondary" href="https://citizenaffairs.in/bn/?utm_source=telegram&amp;utm_medium=quiz&amp;utm_campaign=daily_quiz" target="_blank" rel="noopener">🌐 Citizen Affairs বাংলা</a>
       <button class="btn btn-secondary" id="btn-prepare">📚 আগে প্রস্তুতি নিন</button>
       <button class="btn btn-primary browser-only" id="btn-start">▶ মক টেস্ট শুরু করুন</button>
     </div>

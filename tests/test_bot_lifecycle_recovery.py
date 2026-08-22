@@ -1201,6 +1201,17 @@ def test_database_preflight_fails_closed_when_platform_contract_is_missing(monke
         bot.validate_database_schema()
 
 
+def test_quiz_post_places_citizen_affairs_before_start_action() -> None:
+    markup = bot._quiz_reply_markup("https://t.me/example/quiz?startapp=quiz-id")
+
+    assert markup["inline_keyboard"][0][0]["text"] == "🌐 Citizen Affairs বাংলা"
+    assert markup["inline_keyboard"][0][0]["url"].startswith("https://citizenaffairs.in/bn/")
+    assert markup["inline_keyboard"][1][0] == {
+        "text": "▶️ কুইজ শুরু করুন",
+        "url": "https://t.me/example/quiz?startapp=quiz-id",
+    }
+
+
 def test_supabase_project_ref_guard_accepts_only_the_expected_host():
     from config.settings import supabase_project_ref_matches
 
