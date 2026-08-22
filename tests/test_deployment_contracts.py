@@ -28,6 +28,8 @@ from database.contract import (
     PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
     PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION,
     PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION,
+    PLATFORM_CONTRACT_MIGRATION_VERSION,
+    PLATFORM_CONTRACT_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
@@ -165,6 +167,9 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert "from database.contract import (" in source
     assert 'body.get("applicationVersion") != APPLICATION_VERSION' in source
     assert 'body.get("databaseContractVersion") != DATABASE_CONTRACT_VERSION' in source
+    assert 'body.get("platformContractVersion") != PLATFORM_CONTRACT_VERSION' in source
+    assert 'body.get("platformContractMigrationVersion")' in source
+    assert 'body.get("checks", {}).get("platformContract") is not True' in source
     assert 'body.get("personalLearningMigrationVersion")' in source
     assert 'body.get("leaderboardPrivacyMigrationVersion")' in source
     assert 'body.get("leaderboardPrivacyRpcFixMigrationVersion")' in source
@@ -268,7 +273,7 @@ def test_authoritative_migration_version_is_latest_filename() -> None:
 def test_versioned_production_manifest_matches_deployment_intent() -> None:
     manifest_path = ROOT / "config" / "production.toml"
     assert manifest_path.is_file()
-    assert PRODUCTION_CONFIG_VERSION == "2026-08-09.2"
+    assert PRODUCTION_CONFIG_VERSION == "2026-08-23.1"
     assert re.fullmatch(r"[0-9a-f]{64}", PRODUCTION_CONFIG_HASH)
     assert PRODUCTION_CONFIG["quiz"]["source_backed_rotation_enabled"] is True
     assert PRODUCTION_CONFIG["quiz"]["source_optional_stable_subjects_enabled"] is True
@@ -282,6 +287,11 @@ def test_versioned_production_manifest_matches_deployment_intent() -> None:
         "require_new_candidate_proof": True,
     }
     assert PRODUCTION_CONFIG["scheduler"]["dispatcher_max_retries"] == 8
+    assert PRODUCTION_CONFIG["database"]["platform_contract_version"] == PLATFORM_CONTRACT_VERSION
+    assert (
+        PRODUCTION_CONFIG["database"]["platform_contract_migration_version"]
+        == PLATFORM_CONTRACT_MIGRATION_VERSION
+    )
     assert PRODUCTION_CONFIG["database"]["post_finalization_migration_version"] == (POST_FINALIZATION_MIGRATION_VERSION)
     assert PRODUCTION_CONFIG["database"]["quiz_jobs_migration_version"] == (QUIZ_JOBS_MIGRATION_VERSION)
     assert (

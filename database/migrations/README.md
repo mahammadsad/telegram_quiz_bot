@@ -12,7 +12,7 @@ New migrations use the Supabase CLI timestamp convention and live in
    `001` through `003` for an existing project that has not run them.
 2. Every `supabase/migrations/*.sql` file in filename/timestamp order. The
    authoritative current endpoint is
-   `20260724212939_durable_write_rate_limits.sql`; existing hosted projects
+   `20260822190025_platform_contract_v1.sql`; existing hosted projects
    apply only ledger entries they have not already applied.
 
 `database/schema.sql` is therefore a bootstrap-only schema, not the final
@@ -35,3 +35,6 @@ The application process does not run DDL. The Supabase migration workflow is an
 explicit operator step, which keeps web and bot startup safe and predictable.
 Pasting the current migration into SQL Editor alone is insufficient because it
 does not create the required migration-ledger entry and readiness stays closed.
+After migration, run `select public.get_platform_contract_v1();` with the
+service role. The response must have `ready: true`, an empty `missing_checks`,
+and migration version `20260822190025` before the scheduler is enabled.

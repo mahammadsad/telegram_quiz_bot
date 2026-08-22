@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+from database.contract import (
+    PLATFORM_CONTRACT_KEY,
+    PLATFORM_CONTRACT_MIGRATION_VERSION,
+    PLATFORM_CONTRACT_REQUIRED_CHECKS,
+    PLATFORM_CONTRACT_VERSION,
+)
 from services import readiness_service
 
 
@@ -52,6 +58,18 @@ def _configure_ready_dependencies(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         readiness_service.schema_contract_repo,
+        "get_platform_contract",
+        lambda: {
+            "ready": True,
+            "contract_key": PLATFORM_CONTRACT_KEY,
+            "contract_version": PLATFORM_CONTRACT_VERSION,
+            "required_migration_version": PLATFORM_CONTRACT_MIGRATION_VERSION,
+            "migration_applied": True,
+            "checks": {name: True for name in PLATFORM_CONTRACT_REQUIRED_CHECKS},
+        },
+    )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
         "active_quiz_probe",
         lambda: {
             "question_count": 10,
@@ -80,6 +98,7 @@ def _configure_ready_dependencies(monkeypatch) -> None:
             "ready": True,
             "post_finalization_migration_version": (readiness_service.POST_FINALIZATION_MIGRATION_VERSION),
             "post_finalization_migration_applied": True,
+            "chapter_history_uniqueness_ready": True,
             "missing_columns": [],
             "function_permission_failures": [],
         },
@@ -294,3 +313,25 @@ def test_readiness_fails_closed_for_unsafe_leaderboard_functions(monkeypatch) ->
     assert result.checks["supabaseConnectivity"] is True
     assert result.checks["leaderboardPrivacy"] is False
     assert "leaderboard_privacy" in result.categories
+
+
+def test_readiness_fails_closed_when_platform_contract_is_missing(monkeypatch) -> None:
+    _configure_ready_dependencies(monkeypatch)
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_platform_contract",
+        lambda: {
+            "ready": False,
+            "contract_key": "telegram_quiz_platform",
+            "contract_version": "1.0.0",
+            "required_migration_version": "20260822190025",
+            "migration_applied": False,
+            "checks": {},
+        },
+    )
+
+    result = readiness_service.assess(use_cache=False)
+
+    assert result.ready is False
+    assert result.checks["platformContract"] is False
+    assert "platform_contract" in result.categories

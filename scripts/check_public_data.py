@@ -272,8 +272,9 @@ def _current_tree_failures(root: Path) -> list[str]:
 
 def _history_failures(root: Path) -> list[str]:
     """Scan committed text blobs for high-confidence credential shapes only."""
+    safe_directory = f"safe.directory={root.resolve()}"
     result = subprocess.run(
-        ["git", "rev-list", "--objects", "--all"],
+        ["git", "-c", safe_directory, "rev-list", "--objects", "--all"],
         cwd=root,
         check=True,
         capture_output=True,
@@ -290,7 +291,7 @@ def _history_failures(root: Path) -> list[str]:
         if not _is_text_path(path) or any(part in SKIP_PARTS for part in path.parts):
             continue
         blob = subprocess.run(
-            ["git", "cat-file", "-p", object_id],
+            ["git", "-c", safe_directory, "cat-file", "-p", object_id],
             cwd=root,
             check=False,
             capture_output=True,

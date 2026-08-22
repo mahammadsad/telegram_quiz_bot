@@ -1,7 +1,7 @@
 "use strict";
 
-const SHELL_CACHE = "quiz-miniapp-shell-v8.6.0-ui1";
-const ANSWER_FREE_CACHE = "quiz-answer-free-v8.6.0-ui1";
+const SHELL_CACHE = "quiz-miniapp-shell-v8.6.0-ui2";
+const ANSWER_FREE_CACHE = "quiz-answer-free-v8.6.0-ui2";
 const BASE_URL = new URL("./", self.location.href);
 const BASE_PATH = BASE_URL.pathname;
 const SHELL_URLS = [
@@ -25,7 +25,8 @@ function appRelativePath(url) {
 function isAnswerFreeProjection(url) {
   var path = appRelativePath(url);
   return path !== null && (
-    /^\/api\/quiz\/[^/]+$/.test(path)
+    path === "/api/quizzes/recent"
+    || /^\/api\/quiz\/[^/]+$/.test(path)
     || /^\/api\/tests\/instances\/[0-9a-f-]+$/i.test(path)
   );
 }

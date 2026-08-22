@@ -52,6 +52,7 @@ from database.contract import (
     SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
 )
+from database.platform_contract import failure_reasons as platform_contract_failure_reasons
 from errors import ConfigurationError, TelegramPostingError
 from services import (
     chapter_selector,
@@ -1151,6 +1152,16 @@ def preflight() -> dict[str, bool]:
 
 def validate_database_schema() -> None:
     """Verify the authoritative versioned schema, signatures, grants, and RLS."""
+    platform_reasons = platform_contract_failure_reasons(
+        schema_contract_repo.get_platform_contract()
+    )
+    if platform_reasons:
+        raise RuntimeError(
+            "Database contract is not ready: "
+            + ", ".join(platform_reasons)
+            + "."
+        )
+
     contract = schema_contract_repo.get_contract()
     post_contract = schema_contract_repo.get_post_finalization_contract()
     job_contract = schema_contract_repo.get_quiz_job_contract()

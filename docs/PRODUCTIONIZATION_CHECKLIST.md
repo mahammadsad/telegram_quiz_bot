@@ -6,7 +6,7 @@ staging test has passed. Source-code inspection alone is not sufficient.
 
 ## Release safety rules
 
-- [ ] Apply every new database migration to `telegram-quiz-bot-rollout-staging`
+- [x] Apply every new database migration to `telegram-quiz-bot-rollout-staging`
   before production.
 - [ ] Never run test data, destructive DDL, or experimental generation against
   `telegram_group_data`.
@@ -92,9 +92,11 @@ staging test has passed. Source-code inspection alone is not sufficient.
 ## Phase 5 — controlled content rollout
 
 - [ ] Import approved Computer Education expansion sources into staging.
-- [ ] Generate and validate one ten-question quiz per candidate chapter.
-- [ ] Compare generated, stored, and API-returned checksums.
-- [ ] Test posting once in a private Telegram topic.
+- [x] Generate and validate one ten-question quiz for a source-covered Computer
+  chapter in staging.
+- [x] Compare generated and persisted checksums for that certified pack.
+- [x] Test posting once in a private Telegram topic; reconcile the acknowledged
+  message without reposting after the history-uniqueness drift was repaired.
 - [ ] Test first attempt, retry, retake, ranking, report, bookmark, and revision.
 - [ ] Activate one chapter, observe one complete scheduled cycle, then proceed one
   chapter at a time.
@@ -125,7 +127,13 @@ staging test has passed. Source-code inspection alone is not sufficient.
   full-history scanning, and 48 browser tests across four projects.
 - [x] Staging required migration `20260724212939` and contract `2.2.0` are exact;
   all contract failure arrays are empty.
-- [ ] Staging `/health/ready` returns HTTP 200.
+- [x] Staging application 8.6.0 at exact commit `2bd1086b` returned HTTP 200 from
+  `/health/ready` with every exposed readiness check true; the guarded
+  preflight passed.
+- [x] The guarded Computer subject lifecycle posted one certified ten-question
+  quiz, reconciled its stored Telegram acknowledgement after schema drift was
+  repaired, and a guarded retry returned `QUIZ_ALREADY_POSTED` without a
+  duplicate message or chapter-history row.
 - [ ] Staging end-to-end quiz lifecycle passes without answer leakage.
 - [ ] Screenshots cover small Android widths, dashboard identity, out-of-top-ten
   rank, revision feedback, loading, error, and empty states.

@@ -9,6 +9,12 @@ import pytest
 
 import bot
 from config.subjects import QUIZ_SUBJECTS
+from database.contract import (
+    PLATFORM_CONTRACT_KEY,
+    PLATFORM_CONTRACT_MIGRATION_VERSION,
+    PLATFORM_CONTRACT_REQUIRED_CHECKS,
+    PLATFORM_CONTRACT_VERSION,
+)
 from services.gemini_provider_pool import GeminiGenerationError
 from services.inventory_quiz_service import InventoryQuiz
 from services.question_verification import CHECK_FIELDS
@@ -21,6 +27,18 @@ from utils.quiz_ids import build_quiz_id
 @pytest.fixture(autouse=True)
 def no_persisted_daily_runs(monkeypatch):
     monkeypatch.setattr(bot.quiz_runs_repo, "list_for_date", lambda _quiz_date: [])
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_platform_contract",
+        lambda: {
+            "ready": True,
+            "contract_key": PLATFORM_CONTRACT_KEY,
+            "contract_version": PLATFORM_CONTRACT_VERSION,
+            "required_migration_version": PLATFORM_CONTRACT_MIGRATION_VERSION,
+            "migration_applied": True,
+            "checks": {name: True for name in PLATFORM_CONTRACT_REQUIRED_CHECKS},
+        },
+    )
 
 
 def pack_from_questions(questions, subject_key="history", chapter="আধুনিক ভারত"):
@@ -1013,6 +1031,7 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
                 bot.POST_FINALIZATION_MIGRATION_VERSION
             ),
             "post_finalization_migration_applied": True,
+            "chapter_history_uniqueness_ready": True,
             "function_permission_failures": [],
         },
     )
@@ -1144,6 +1163,7 @@ def test_database_preflight_fails_closed_on_old_or_misgranted_contract(monkeypat
                 bot.POST_FINALIZATION_MIGRATION_VERSION
             ),
             "post_finalization_migration_applied": True,
+            "chapter_history_uniqueness_ready": True,
             "function_permission_failures": [],
         },
     )
@@ -1160,6 +1180,24 @@ def test_database_preflight_fails_closed_on_old_or_misgranted_contract(monkeypat
         },
     )
     with pytest.raises(RuntimeError, match="Database contract is not ready"):
+        bot.validate_database_schema()
+
+
+def test_database_preflight_fails_closed_when_platform_contract_is_missing(monkeypatch):
+    monkeypatch.setattr(
+        bot.schema_contract_repo,
+        "get_platform_contract",
+        lambda: {
+            "ready": False,
+            "contract_key": "telegram_quiz_platform",
+            "contract_version": "1.0.0",
+            "required_migration_version": "20260822190025",
+            "migration_applied": False,
+            "checks": {},
+        },
+    )
+
+    with pytest.raises(RuntimeError, match="migration_ledger"):
         bot.validate_database_schema()
 
 
