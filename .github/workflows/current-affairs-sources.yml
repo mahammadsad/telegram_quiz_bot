@@ -12,7 +12,7 @@ on:
         type: choice
         options: [staging, production]
       operation:
-        description: Validate official PIB coverage or refresh verified rows
+        description: Validate official source coverage or refresh verified rows
         required: true
         default: validate
         type: choice
@@ -74,7 +74,7 @@ jobs:
               if not os.environ.get("SUPABASE_SERVICE_KEY"):
                   raise SystemExit("Refusing refresh: service configuration is incomplete.")
               if os.environ.get("GITHUB_EVENT_NAME") != "schedule":
-                  expected_ack = f"REFRESH PIB SOURCES IN {target.upper()} {expected_ref}"
+                  expected_ack = f"REFRESH OFFICIAL SOURCES IN {target.upper()} {expected_ref}"
                   if os.environ.get("SAFETY_ACK") != expected_ack:
                       raise SystemExit(
                           "Refusing refresh: enter the exact PIB-source acknowledgement."
@@ -93,12 +93,12 @@ jobs:
           validate_database_schema()
           print("database_contract_identity=true")
           PY
-      - name: Validate official PIB source coverage
+      - name: Validate official source coverage
         if: env.OPERATION == 'validate'
         run: >-
           python scripts/refresh_current_affairs_sources.py
           --max-items 200 --minimum-per-chapter 4 --validate-only
-      - name: Refresh verified official PIB source rows
+      - name: Refresh verified official source rows
         if: env.OPERATION == 'refresh'
         run: >-
           python scripts/refresh_current_affairs_sources.py
