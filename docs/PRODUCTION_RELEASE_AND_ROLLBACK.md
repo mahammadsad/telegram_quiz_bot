@@ -31,8 +31,8 @@ Never print service keys, bot tokens or synthetic `initData` in logs.
 
    ```text
    APP_ENVIRONMENT=production
-   PUBLIC_APP_URL=https://telegram-quiz-platform.onrender.com
-   PUBLIC_API_BASE_URL=https://telegram-quiz-platform.onrender.com
+   PUBLIC_APP_URL=https://telegram-quiz-bot-h7p1.onrender.com
+   PUBLIC_API_BASE_URL=https://telegram-quiz-bot-h7p1.onrender.com
    EXPECTED_SUPABASE_PROJECT_REF=tizxodkcpglmxgtwepor
    ```
 
@@ -71,9 +71,9 @@ Do not continue if any gate is red.
 4. Independently inspect:
 
    ```text
-   GET https://telegram-quiz-platform.onrender.com/version
-   GET https://telegram-quiz-platform.onrender.com/health/live
-   GET https://telegram-quiz-platform.onrender.com/health/ready
+   GET https://telegram-quiz-bot-h7p1.onrender.com/version
+   GET https://telegram-quiz-bot-h7p1.onrender.com/health/live
+   GET https://telegram-quiz-bot-h7p1.onrender.com/health/ready
    ```
 
 5. In BotFather/Telegram Mini Apps, set and then verify the launch URL is exactly the canonical HTTPS URL. Open it from Telegram with the synthetic account and repeat start, submit, dashboard, catalog, export request and deletion-request cancellation. Do not create a due deletion request for a real learner.
