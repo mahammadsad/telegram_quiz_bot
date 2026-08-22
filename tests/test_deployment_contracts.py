@@ -51,7 +51,7 @@ def _load_yaml(path: Path) -> dict:
     return payload
 
 
-def test_render_blueprint_is_fail_closed_and_uses_readiness() -> None:
+def test_render_blueprint_uses_process_liveness_and_ci_deploy_gating() -> None:
     blueprint = _load_yaml(ROOT / "render.yaml")
     services = blueprint.get("services")
     assert isinstance(services, list) and len(services) == 1
@@ -59,7 +59,7 @@ def test_render_blueprint_is_fail_closed_and_uses_readiness() -> None:
 
     assert service["runtime"] == "python"
     assert service["plan"] == "free"
-    assert service["healthCheckPath"] == "/health/ready"
+    assert service["healthCheckPath"] == "/health/live"
     assert service["autoDeployTrigger"] == "checksPass"
     assert "$PORT" in service["startCommand"]
 

@@ -209,7 +209,8 @@ different trusted origin; same-origin deployment needs no CORS list.
 
 The checked-in `render.yaml` defines the Python 3.12 free web service in
 Singapore, installs `requirements.lock`, starts Uvicorn on `$PORT`, waits for CI
-checks before auto-deploy, and uses `/health/ready`. Before applying the
+checks before auto-deploy, and uses `/health/live` for the platform liveness
+probe. `/health/ready` remains the strict release gate. Before applying the
 Blueprint, run `render blueprints validate`, then fill every `sync: false`
 value in the Render Dashboard. Do not add a Render database; Supabase remains
 the datastore.
