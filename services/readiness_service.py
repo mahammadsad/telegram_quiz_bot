@@ -42,6 +42,8 @@ from database.contract import (
     PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
     PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION,
     PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION,
+    PLATFORM_CONTRACT_MIGRATION_VERSION,
+    PLATFORM_CONTRACT_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
@@ -49,6 +51,7 @@ from database.contract import (
     SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
 )
+from database.platform_contract import failure_reasons as platform_contract_failure_reasons
 from storage import schema_contract_repo
 from telegram.routing import ForumRouter, ForumRoutingError
 
@@ -74,6 +77,8 @@ class Readiness:
             "publicAppUrlConfigured": bool(PUBLIC_APP_URL),
             "publicApiBaseUrlConfigured": bool(PUBLIC_API_BASE_URL),
             "requiredMigrationVersion": REQUIRED_MIGRATION_VERSION,
+            "platformContractVersion": PLATFORM_CONTRACT_VERSION,
+            "platformContractMigrationVersion": PLATFORM_CONTRACT_MIGRATION_VERSION,
             "sourceRolloutMigrationVersion": SOURCE_ROLLOUT_MIGRATION_VERSION,
             "quizQualityMigrationVersion": QUIZ_QUALITY_MIGRATION_VERSION,
             "personalLearningMigrationVersion": (PERSONAL_LEARNING_MIGRATION_VERSION),
@@ -110,6 +115,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
         "telegramConfiguration": False,
         "aiConfiguration": False,
         "supabaseConnectivity": False,
+        "platformContract": False,
         "databaseContract": False,
         "databasePermissions": False,
         "leaderboardPrivacy": False,
@@ -173,6 +179,17 @@ def assess(*, use_cache: bool = True) -> Readiness:
         try:
             contract = schema_contract_repo.get_contract()
             checks["supabaseConnectivity"] = True
+            try:
+                platform_contract = schema_contract_repo.get_platform_contract()
+                checks["platformContract"] = not platform_contract_failure_reasons(
+                    platform_contract
+                )
+            except Exception as exc:
+                platform_contract = {}
+                LOG.warning(
+                    "READINESS_PLATFORM_CONTRACT_FAILURE category=%s",
+                    type(exc).__name__,
+                )
             try:
                 privacy_contract = schema_contract_repo.get_leaderboard_privacy_contract()
             except Exception as exc:
@@ -262,6 +279,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 post_contract.get("ready") is True
                 and post_contract.get("post_finalization_migration_version") == POST_FINALIZATION_MIGRATION_VERSION
                 and post_contract.get("post_finalization_migration_applied") is True
+                and post_contract.get("chapter_history_uniqueness_ready") is True
                 and not post_contract.get("missing_columns")
                 and not post_contract.get("function_permission_failures")
             )
@@ -384,6 +402,8 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and contract.get("personal_learning_projection_ready") is True
             )
             checks["databaseContract"] = bool(
+                checks["platformContract"]
+                and
                 contract.get("ready")
                 and contract.get("contract_key") == DATABASE_CONTRACT_KEY
                 and contract.get("contract_version") == DATABASE_CONTRACT_VERSION
@@ -418,6 +438,8 @@ def assess(*, use_cache: bool = True) -> Readiness:
             )
     if not checks["supabaseConnectivity"]:
         failures.append("database_connectivity")
+    if not checks["platformContract"]:
+        failures.append("platform_contract")
     elif not checks["databaseContract"]:
         failures.append("database_contract")
     if not checks["leaderboardPrivacy"]:

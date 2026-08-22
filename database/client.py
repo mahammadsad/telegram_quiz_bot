@@ -9,7 +9,13 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from config.settings import require_env, supabase_project_ref_matches
+from supabase.client import ClientOptions
+
+from config.settings import (
+    DATABASE_REQUEST_TIMEOUT_SECONDS,
+    require_env,
+    supabase_project_ref_matches,
+)
 from errors import ConfigurationError
 from supabase import Client, create_client
 
@@ -23,4 +29,12 @@ def get_client() -> Client:
         raise ConfigurationError(
             "Supabase URL does not match EXPECTED_SUPABASE_PROJECT_REF."
         )
-    return create_client(url, key)
+    return create_client(
+        url,
+        key,
+        options=ClientOptions(
+            postgrest_client_timeout=DATABASE_REQUEST_TIMEOUT_SECONDS,
+            storage_client_timeout=DATABASE_REQUEST_TIMEOUT_SECONDS,
+            schema="public",
+        ),
+    )

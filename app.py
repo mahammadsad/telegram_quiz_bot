@@ -540,6 +540,20 @@ def exam_configuration_catalog(
         ) from exc
 
 
+@app.get("/api/quizzes/recent")
+def recent_quiz_catalogue(response: Response, limit: int = 26) -> dict:
+    """Expose a bounded, answer-free list for the Mini App root destination."""
+    try:
+        payload = quiz_pack_service.recent_quizzes(limit=limit)
+        _mark_answer_free(response, payload)
+        return payload
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503,
+            detail="সাম্প্রতিক কুইজের তালিকা এখন পাওয়া যাচ্ছে না।",
+        ) from exc
+
+
 @app.get("/api/tests/definitions")
 def test_definition_catalog(
     as_of: date | None = None,

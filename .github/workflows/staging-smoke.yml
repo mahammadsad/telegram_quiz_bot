@@ -206,6 +206,8 @@ jobs:
               PHASE_E_PERSONAL_LEARNING_MIGRATION_VERSION,
               PHASE_E_PREVIOUS_YEAR_MOCK_MIGRATION_VERSION,
               PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION,
+              PLATFORM_CONTRACT_MIGRATION_VERSION,
+              PLATFORM_CONTRACT_VERSION,
               POST_FINALIZATION_MIGRATION_VERSION,
               QUIZ_JOBS_MIGRATION_VERSION,
               REQUIRED_MIGRATION_VERSION,
@@ -228,6 +230,10 @@ jobs:
                   "applicationVersion": body.get("applicationVersion"),
                   "databaseContractVersion": body.get("databaseContractVersion"),
                   "requiredMigrationVersion": body.get("requiredMigrationVersion"),
+                  "platformContractVersion": body.get("platformContractVersion"),
+                  "platformContractMigrationVersion": body.get(
+                      "platformContractMigrationVersion"
+                  ),
                   "sourceRolloutMigrationVersion": body.get(
                       "sourceRolloutMigrationVersion"
                   ),
@@ -290,6 +296,15 @@ jobs:
                   raise SystemExit("Staging database contract version mismatch.")
               if body.get("requiredMigrationVersion") != REQUIRED_MIGRATION_VERSION:
                   raise SystemExit("Staging migration version mismatch.")
+              if body.get("platformContractVersion") != PLATFORM_CONTRACT_VERSION:
+                  raise SystemExit("Staging platform contract version mismatch.")
+              if (
+                  body.get("platformContractMigrationVersion")
+                  != PLATFORM_CONTRACT_MIGRATION_VERSION
+              ):
+                  raise SystemExit("Staging platform contract migration mismatch.")
+              if body.get("checks", {}).get("platformContract") is not True:
+                  raise SystemExit("Staging platform contract is not ready.")
               if (
                   body.get("personalLearningMigrationVersion")
                   != PERSONAL_LEARNING_MIGRATION_VERSION

@@ -29,6 +29,22 @@ def test_quiz_ui_autosaves_resumes_navigates_and_confirms_submission():
     )[0]
 
 
+def test_root_without_a_quiz_id_is_a_real_discovery_home() -> None:
+    for contract in (
+        'id="screen-home"',
+        'id="quiz-catalogue"',
+        '"/api/quizzes/recent?limit=26"',
+        'href="practice.html?source=due"',
+        'href="mock.html"',
+        'href="dashboard.html"',
+    ):
+        assert contract in INDEX
+    no_quiz_branch = INDEX.split("if (!quizId)", 1)[1].split("} else {", 1)[0]
+    assert "loadHome();" in no_quiz_branch
+    assert "showError" not in no_quiz_branch
+    assert 'path === "/api/quizzes/recent"' in WORKER
+
+
 def test_quiz_result_links_the_complete_learning_cycle():
     assert 'id="btn-wrong-practice"' in INDEX
     assert 'id="btn-revise"' in INDEX
@@ -128,7 +144,7 @@ def test_pwa_cache_is_fail_closed_for_answer_material() -> None:
     assert 'path.startsWith("/api/")' in WORKER
     for sensitive in ("attempt", "submit", "leaderboard", "correctIndex", "explanation"):
         assert sensitive not in WORKER.split("const SHELL_URLS", 1)[1].split("];", 1)[0]
-    assert 'fetch(request, {cache: "no-store"})' in WORKER
+    assert 'fetchWithTimeout(request, {cache: "no-store"})' in WORKER
 
 
 def test_missing_quiz_message_is_user_facing_not_an_operator_instruction() -> None:

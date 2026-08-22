@@ -18,6 +18,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from database.contract import LATEST_MIGRATION_VERSION  # noqa: E402
+from database.platform_contract import failure_reasons as platform_contract_failure_reasons  # noqa: E402
 
 BOOTSTRAP = ROOT / "database" / "schema.sql"
 DATABASE_MIGRATIONS = ROOT / "database" / "migrations"
@@ -131,6 +132,15 @@ def rebuild(database_url: str) -> dict:
         contract = connection.execute("select public.get_application_schema_contract()").fetchone()[0]
         if not contract.get("ready"):
             raise RuntimeError("Disposable database contract is not ready after migrations.")
+        platform_contract = connection.execute(
+            "select public.get_platform_contract_v1()"
+        ).fetchone()[0]
+        platform_failures = platform_contract_failure_reasons(platform_contract)
+        if platform_failures:
+            raise RuntimeError(
+                "Disposable platform contract is not ready after migrations: "
+                + ", ".join(platform_failures)
+            )
         privacy_contract = connection.execute("select public.get_leaderboard_privacy_contract()").fetchone()[0]
         if not privacy_contract.get("ready"):
             raise RuntimeError("Disposable leaderboard privacy contract is not ready after migrations.")
@@ -181,6 +191,7 @@ def rebuild(database_url: str) -> dict:
         contract.update(phase_e_exam_configuration_contract)
         contract.update(phase_e_previous_year_mock_contract)
         contract.update(phase_e_question_quality_contract)
+        contract.update(platform_contract)
         return contract
 
 

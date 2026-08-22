@@ -59,6 +59,43 @@ REPORT_REASONS = {
 }
 
 
+def recent_quizzes(*, limit: int = 26) -> dict:
+    """Build an answer-free discovery catalogue for the Mini App home screen."""
+    page_limit = max(1, min(limit, 52))
+    items: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for row in quiz_runs_repo.list_recent_posted(limit=page_limit):
+        quiz_id = str(row.get("quiz_id") or "").strip()
+        if not quiz_id or quiz_id in seen:
+            continue
+        try:
+            quiz_date, subject_key = parse_quiz_id(quiz_id, allow_legacy=False)
+        except ValueError:
+            LOG.warning("RECENT_QUIZ_SKIPPED invalid_quiz_id=%s", quiz_id)
+            continue
+        if subject_key is None:
+            continue
+        subject = SUBJECTS.get(subject_key)
+        if subject is None or not subject.quiz_enabled:
+            LOG.warning("RECENT_QUIZ_SKIPPED invalid_subject quiz_id=%s", quiz_id)
+            continue
+        chapter = str(row.get("chapter") or "").strip()
+        if not chapter:
+            continue
+        seen.add(quiz_id)
+        items.append(
+            {
+                "quizId": quiz_id,
+                "quizDate": quiz_date.isoformat(),
+                "subjectKey": subject_key,
+                "subjectName": subject.telegram_display_name,
+                "chapter": chapter,
+                "postedAt": row.get("posted_at"),
+            }
+        )
+    return {"items": items, "count": len(items)}
+
+
 def quiz_source(quiz_id: str) -> str:
     return f"{QUIZ_PACK_SOURCE_PREFIX}{quiz_id}"
 

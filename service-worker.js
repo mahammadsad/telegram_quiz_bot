@@ -1,7 +1,8 @@
 "use strict";
 
-const SHELL_CACHE = "quiz-miniapp-shell-v8.6.0-ui1";
-const ANSWER_FREE_CACHE = "quiz-answer-free-v8.6.0-ui1";
+const SHELL_CACHE = "quiz-miniapp-shell-v8.6.0-ui3";
+const ANSWER_FREE_CACHE = "quiz-answer-free-v8.6.0-ui3";
+const NETWORK_TIMEOUT_MS = 8000;
 const BASE_URL = new URL("./", self.location.href);
 const BASE_PATH = BASE_URL.pathname;
 const SHELL_URLS = [
@@ -25,7 +26,8 @@ function appRelativePath(url) {
 function isAnswerFreeProjection(url) {
   var path = appRelativePath(url);
   return path !== null && (
-    /^\/api\/quiz\/[^/]+$/.test(path)
+    path === "/api/quizzes/recent"
+    || /^\/api\/quiz\/[^/]+$/.test(path)
     || /^\/api\/tests\/instances\/[0-9a-f-]+$/i.test(path)
   );
 }
@@ -53,9 +55,13 @@ self.addEventListener("activate", (event) => {
 async function answerFreeNetworkFirst(request) {
   var cache = await caches.open(ANSWER_FREE_CACHE);
   try {
-    var response = await fetch(request, {cache: "no-store"});
+    var response = await fetchWithTimeout(request, {cache: "no-store"});
     if (response.ok && response.headers.get("X-Answer-Free-Payload") === "1") {
       await cache.put(request, response.clone());
+    }
+    if (!response.ok && response.status >= 500) {
+      var stale = await cache.match(request);
+      if (stale) return stale;
     }
     return response;
   } catch (error) {
@@ -65,6 +71,20 @@ async function answerFreeNetworkFirst(request) {
   }
 }
 
+function fetchWithTimeout(request, options) {
+  var controller = new AbortController();
+  var timer = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
+  return fetch(request, {...options, signal: controller.signal})
+    .finally(() => clearTimeout(timer));
+}
+
+async function shellFromCacheOrNetwork(request) {
+  var cache = await caches.open(SHELL_CACHE);
+  var pathname = new URL(request.url).pathname;
+  var cached = await cache.match(pathname);
+  return cached || fetchWithTimeout(request, {cache: "no-store"});
+}
+
 self.addEventListener("fetch", (event) => {
   var request = event.request;
   if (request.method !== "GET") return;
@@ -72,7 +92,7 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (isSensitiveApi(url)) {
-    event.respondWith(fetch(request, {cache: "no-store"}));
+    event.respondWith(fetchWithTimeout(request, {cache: "no-store"}));
     return;
   }
   if (isAnswerFreeProjection(url)) {
@@ -80,6 +100,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
   if (SHELL_URLS.includes(url.pathname)) {
-    event.respondWith(caches.match(request).then((cached) => cached || fetch(request)));
+    event.respondWith(shellFromCacheOrNetwork(request));
   }
 });

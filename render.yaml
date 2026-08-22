@@ -6,7 +6,10 @@ services:
     region: singapore
     buildCommand: pip install --disable-pip-version-check -r requirements.lock
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
-    healthCheckPath: /health/ready
+    # Keep the process alive while readiness reports a controlled dependency or
+    # migration failure. Release verification, not the liveness probe, gates
+    # publication on /health/ready.
+    healthCheckPath: /health/live
     autoDeployTrigger: checksPass
     maxShutdownDelaySeconds: 30
     envVars:

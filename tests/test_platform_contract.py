@@ -1,0 +1,62 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+from database.contract import (
+    LATEST_MIGRATION_VERSION,
+    PLATFORM_CONTRACT_KEY,
+    PLATFORM_CONTRACT_MIGRATION_VERSION,
+    PLATFORM_CONTRACT_REQUIRED_CHECKS,
+    PLATFORM_CONTRACT_VERSION,
+)
+from database.platform_contract import failure_reasons, is_ready
+
+ROOT = Path(__file__).resolve().parents[1]
+MIGRATION = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / f"{PLATFORM_CONTRACT_MIGRATION_VERSION}_platform_contract_v1.sql"
+)
+
+
+def _ready_contract() -> dict:
+    return {
+        "ready": True,
+        "contract_key": PLATFORM_CONTRACT_KEY,
+        "contract_version": PLATFORM_CONTRACT_VERSION,
+        "required_migration_version": PLATFORM_CONTRACT_MIGRATION_VERSION,
+        "migration_applied": True,
+        "checks": {name: True for name in PLATFORM_CONTRACT_REQUIRED_CHECKS},
+    }
+
+
+def test_platform_contract_is_the_latest_timestamped_migration() -> None:
+    assert MIGRATION.is_file()
+    assert LATEST_MIGRATION_VERSION == PLATFORM_CONTRACT_MIGRATION_VERSION
+
+    source = MIGRATION.read_text(encoding="utf-8")
+    assert "create or replace function public.get_platform_contract_v1()" in source
+    assert "security definer" in source
+    assert "set search_path = ''" in source
+    assert "revoke all on function public.get_platform_contract_v1()" in source
+    assert "grant execute on function public.get_platform_contract_v1() to service_role" in source
+    assert "generator_provider" in source
+    assert "generator_model" in source
+    assert "supabase_migrations.schema_migrations" in source
+    for check in PLATFORM_CONTRACT_REQUIRED_CHECKS:
+        assert f"'{check}'" in source
+
+
+def test_platform_contract_validator_accepts_only_exact_complete_contracts() -> None:
+    ready = _ready_contract()
+    assert is_ready(ready)
+    assert failure_reasons(ready) == ()
+
+    missing = _ready_contract()
+    missing["checks"]["questionVerificationIndependence"] = False
+    assert failure_reasons(missing) == ("questionVerificationIndependence",)
+
+    stale = _ready_contract()
+    stale["required_migration_version"] = "20260820100000"
+    assert "migration_version" in failure_reasons(stale)

@@ -4,8 +4,8 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <meta name="quiz-api-base" content="" />
-<meta name="theme-color" content="#0f766e" />
-<title>আজকের মক টেস্ট</title>
+<meta name="theme-color" content="#07726c" />
+<title>Citizen Affairs | পরীক্ষার প্রস্তুতি</title>
 
 <link rel="manifest" href="manifest.webmanifest" />
 <link rel="icon" href="pwa-icon.svg" type="image/svg+xml" />
@@ -21,15 +21,15 @@
 <style>
   :root{
     color-scheme:light dark;
-    --bg:var(--tg-theme-bg-color,#f5f7fb);
+    --bg:var(--tg-theme-bg-color,#f7f9fc);
     --surface:var(--tg-theme-secondary-bg-color,#ffffff);
-    --surface-2:#eef6f4;
-    --ink:var(--tg-theme-text-color,#17202a);
+    --surface-2:#e7f4f2;
+    --ink:var(--tg-theme-text-color,#172033);
     --muted:var(--tg-theme-hint-color,#627084);
     --line:#d9e0ea;
-    --primary:var(--tg-theme-button-color,#0f766e);
-    --primary-strong:#0b5f59;
-    --accent:#2563eb;
+    --primary:var(--tg-theme-button-color,#07726c);
+    --primary-strong:#065c57;
+    --accent:#0a817a;
     --danger:#d14343;
     --success:#16834a;
     --warning:#b7791f;
@@ -42,8 +42,8 @@
   body{
     margin:0;
     background:
-      linear-gradient(135deg, rgba(15,118,110,.08), transparent 34%),
-      linear-gradient(315deg, rgba(37,99,235,.08), transparent 32%),
+      linear-gradient(135deg, rgba(7,114,108,.09), transparent 34%),
+      linear-gradient(315deg, rgba(245,166,35,.08), transparent 32%),
       var(--bg);
     color:var(--ink);
     font-family:var(--font);
@@ -161,6 +161,18 @@
   .actions{display:flex; gap:10px; margin-top:18px}
   .actions .btn{flex:1}
   body.tg-native .browser-only{display:none!important}
+  .home-hero{display:grid;gap:8px;margin-bottom:18px}
+  .home-hero p{margin:0;line-height:1.65}
+  .home-actions{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin:16px 0 22px}
+  .home-action{display:grid;align-content:center;min-height:88px;border:1px solid var(--line);border-radius:var(--radius);padding:12px;background:var(--surface);color:var(--ink);text-decoration:none;font-weight:800;text-align:center}
+  .home-action small{display:block;margin-top:4px;color:var(--muted);font-weight:600;line-height:1.4}
+  .home-heading{display:flex;align-items:end;justify-content:space-between;gap:12px;margin-bottom:10px}
+  .home-heading h2{margin:0;font-size:20px}.home-heading small{color:var(--muted)}
+  .quiz-catalogue{display:grid;gap:10px}
+  .quiz-card{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:center;gap:12px;border:1px solid var(--line);border-radius:var(--radius);padding:13px;background:var(--surface);color:var(--ink);text-decoration:none}
+  .quiz-card:hover,.quiz-card:focus-visible{border-color:var(--primary)}
+  .quiz-card strong,.quiz-card span{display:block}.quiz-card strong{font-size:16px}.quiz-card span{margin-top:3px;color:var(--muted);font-size:13px;line-height:1.45}.quiz-card time{color:var(--primary);font-size:12px;font-weight:800;white-space:nowrap}
+  .home-state{border:1px dashed var(--line);border-radius:var(--radius);padding:18px;text-align:center;color:var(--muted);line-height:1.6}
 
   .quiz-head{
     display:grid;
@@ -367,6 +379,8 @@
     .score-ring{width:126px; margin:0 auto}
     .navigator{grid-template-columns:repeat(5,1fr)}
     .result-metrics{grid-template-columns:repeat(2,1fr)}
+    .home-actions{grid-template-columns:1fr}
+    .home-action{min-height:64px;text-align:left}
   }
   @media (max-width:400px){.bottom-nav a{font-size:9px}.bottom-nav svg{width:18px;height:18px}}
   @media (prefers-reduced-motion:reduce){
@@ -378,8 +392,8 @@
 <main class="app">
   <header class="topbar">
     <div class="brand">
-      <small>WB Exam Prep</small>
-      <h1>দৈনিক মক টেস্ট</h1>
+      <small>Citizen Affairs</small>
+      <h1 id="brand-title">পরীক্ষা প্রস্তুতি</h1>
     </div>
     <div class="pill num" id="quiz-id-pill">লোড হচ্ছে</div>
   </header>
@@ -387,6 +401,22 @@
   <section id="screen-loading" class="surface section center" aria-live="polite">
     <div class="loader"></div>
     <p class="muted" id="loading-message">কুইজ তৈরি/লোড হচ্ছে...</p>
+  </section>
+
+  <section id="screen-home" class="surface section hidden" aria-labelledby="home-title">
+    <div class="home-hero">
+      <small class="muted">আপনার সম্পূর্ণ প্রস্তুতি কেন্দ্র</small>
+      <h2 class="hero-title" id="home-title">আজ কী পড়বেন?</h2>
+      <p class="muted">সাম্প্রতিক দৈনিক কুইজ বেছে নিন, পূর্ণাঙ্গ মক দিন, অথবা আপনার দুর্বল বিষয় অনুশীলন করুন।</p>
+    </div>
+    <div class="home-actions" aria-label="দ্রুত কাজ">
+      <a class="home-action" href="practice.html?source=due">আজকের পুনরাবৃত্তি<small>সময় হওয়া প্রশ্নগুলো ঝালিয়ে নিন</small></a>
+      <a class="home-action" href="mock.html">পূর্ণাঙ্গ মক টেস্ট<small>সময়বদ্ধ বহু-বিভাগ পরীক্ষা</small></a>
+      <a class="home-action" href="dashboard.html">আমার অগ্রগতি<small>দুর্বলতা, লক্ষ্য ও র‍্যাঙ্ক দেখুন</small></a>
+    </div>
+    <div class="home-heading"><h2>সাম্প্রতিক কুইজ</h2><small id="home-count"></small></div>
+    <div class="quiz-catalogue" id="quiz-catalogue" aria-live="polite"></div>
+    <div class="actions hidden" id="home-retry-wrap"><button class="btn btn-primary" id="btn-home-retry" type="button">আবার লোড করুন</button></div>
   </section>
 
   <section id="screen-error" class="surface section hidden" aria-live="assertive">
@@ -403,9 +433,11 @@
       <div class="meta"><b>মার্কিং</b><span id="intro-marking" class="num">-</span></div>
     </div>
     <div class="actions" id="intro-actions">
+      <a class="btn btn-secondary" href="https://citizenaffairs.in/bn/?utm_source=telegram&amp;utm_medium=quiz&amp;utm_campaign=daily_quiz" target="_blank" rel="noopener">🌐 Citizen Affairs বাংলা</a>
       <button class="btn btn-secondary" id="btn-prepare">📚 আগে প্রস্তুতি নিন</button>
-      <button class="btn btn-primary browser-only" id="btn-start">▶ মক টেস্ট শুরু করুন</button>
+      <button class="btn btn-primary browser-only" id="btn-start">▶ প্রশ্ন প্রিভিউ</button>
     </div>
+    <p class="muted browser-only">স্কোর, র‍্যাঙ্ক ও অগ্রগতি সংরক্ষণ করতে Telegram থেকে কুইজটি খুলুন।</p>
     <div class="fallback-box hidden" id="fallback-box" role="status">
       <strong>এটি শুধু জরুরি read-only কপি।</strong><br />
       এখন উত্তর যাচাই বা স্কোর সংরক্ষণ করা যাবে না। লাইভ API ফিরে এলে কুইজ শুরু করুন।
@@ -427,7 +459,7 @@
     <div class="resource-list" id="resource-list"></div>
     <div class="actions browser-only">
       <button class="btn btn-secondary" id="btn-resource-back">কুইজ পরিচিতিতে ফিরুন</button>
-      <button class="btn btn-primary" id="btn-resource-start">▶ মক টেস্ট শুরু করুন</button>
+      <button class="btn btn-primary" id="btn-resource-start">▶ প্রশ্ন প্রিভিউ</button>
     </div>
   </section>
 
@@ -536,6 +568,7 @@
 
   var screens = {
     loading: byId("screen-loading"),
+    home: byId("screen-home"),
     error: byId("screen-error"),
     intro: byId("screen-intro"),
     resources: byId("screen-resources"),
@@ -562,6 +595,7 @@
   byId("btn-submit-back").addEventListener("click", hideSubmitConfirmation);
   byId("btn-submit-confirm").addEventListener("click", function(){ hideSubmitConfirmation(); finishQuiz(true); });
   byId("btn-retry").addEventListener("click", function(){ retryAction(); });
+  byId("btn-home-retry").addEventListener("click", loadHome);
 
   if (isTelegram) {
     tg.MainButton.onClick(function(){
@@ -588,7 +622,7 @@
   });
 
   if (!quizId) {
-    showError("কুইজ আইডি পাওয়া যায়নি। Telegram পোস্টের কুইজ বাটন থেকে খুলুন।");
+    loadHome();
   } else {
     byId("quiz-id-pill").textContent = "#" + quizId;
     byId("nav-quiz").href = quizHomeUrl();
@@ -650,6 +684,13 @@
     });
   }
 
+  function fetchWithTimeout(resource, options, timeoutMs){
+    var controller = new AbortController();
+    var requestOptions = Object.assign({}, options || {}, {signal:controller.signal});
+    var timer = window.setTimeout(function(){ controller.abort(); }, timeoutMs || 8000);
+    return window.fetch(resource, requestOptions).finally(function(){ window.clearTimeout(timer); });
+  }
+
   function getQuizId(){
     var params = new URLSearchParams(window.location.search);
     if (isTelegram && tg.initDataUnsafe && tg.initDataUnsafe.start_param) return tg.initDataUnsafe.start_param;
@@ -684,7 +725,7 @@
 
   function loadQuizPreferences(){
     if (!isTelegram) return;
-    fetch(api("/api/me/preferences"), {headers:{"X-Telegram-Init-Data":tg.initData}})
+    fetchWithTimeout(api("/api/me/preferences"), {headers:{"X-Telegram-Init-Data":tg.initData}})
       .then(function(resp){ return jsonOrThrow(resp, "Preferences API"); })
       .then(function(data){
         quizMode = data.quizMode === "practice" ? "practice" : "timed";
@@ -762,12 +803,71 @@
     }
   }
 
+  function loadHome(){
+    retryAction = loadHome;
+    document.title = "পরীক্ষা প্রস্তুতি";
+    byId("brand-title").textContent = "পরীক্ষা প্রস্তুতি";
+    byId("quiz-id-pill").textContent = "প্রস্তুতি হাব";
+    byId("loading-message").textContent = "সাম্প্রতিক কুইজ লোড হচ্ছে...";
+    byId("home-retry-wrap").classList.add("hidden");
+    show("loading");
+    fetchWithTimeout(api("/api/quizzes/recent?limit=26"))
+      .then(function(resp){ return jsonOrThrow(resp, "Recent quizzes API"); })
+      .then(function(data){ renderHome(Array.isArray(data.items) ? data.items : []); })
+      .catch(function(){
+        renderHome([]);
+        byId("quiz-catalogue").textContent = "";
+        var state = document.createElement("div");
+        state.className = "home-state";
+        state.textContent = "সাম্প্রতিক কুইজ এখন লোড করা যাচ্ছে না। অনুশীলন, মক ও অগ্রগতির অংশ ব্যবহার করতে পারেন।";
+        byId("quiz-catalogue").appendChild(state);
+        byId("home-retry-wrap").classList.remove("hidden");
+      });
+  }
+
+  function renderHome(items){
+    var catalogue = byId("quiz-catalogue");
+    catalogue.textContent = "";
+    byId("home-count").textContent = items.length ? bn(items.length) + "টি উপলভ্য" : "";
+    if (!items.length) {
+      var empty = document.createElement("div");
+      empty.className = "home-state";
+      empty.textContent = "এখনও কোনো প্রকাশিত কুইজ নেই। প্রথম কুইজ প্রকাশ হলে এখানে দেখা যাবে।";
+      catalogue.appendChild(empty);
+    }
+    items.forEach(function(item){
+      var link = document.createElement("a");
+      link.className = "quiz-card";
+      link.href = telegramUrl("./?quiz=" + encodeURIComponent(item.quizId || ""));
+      var copy = document.createElement("div");
+      var title = document.createElement("strong");
+      var chapter = document.createElement("span");
+      var when = document.createElement("time");
+      title.textContent = item.subjectName || "দৈনিক কুইজ";
+      chapter.textContent = item.chapter || "প্রতিযোগিতামূলক পরীক্ষার প্রস্তুতি";
+      when.dateTime = item.quizDate || "";
+      when.textContent = formatHomeDate(item.quizDate);
+      copy.append(title, chapter);link.append(copy, when);catalogue.appendChild(link);
+    });
+    show("home");
+  }
+
+  function formatHomeDate(value){
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value || "")) return "কুইজ খুলুন";
+    try {
+      return new Intl.DateTimeFormat("bn-IN", {day:"numeric", month:"short"})
+        .format(new Date(value + "T12:00:00Z"));
+    } catch(e) { return bn(value); }
+  }
+
   function loadQuiz(){
     retryAction = loadQuiz;
+    document.title = "আজকের মক টেস্ট";
+    byId("brand-title").textContent = "দৈনিক মক টেস্ট";
     byId("btn-retry").textContent = "আবার চেষ্টা করুন";
     show("loading");
     byId("loading-message").textContent = "কুইজ তৈরি/লোড হচ্ছে...";
-    fetch(api("/api/quiz/" + encodeURIComponent(quizId)))
+    fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId)))
       .then(function(resp){ return jsonOrThrow(resp, "Quiz API"); })
       .then(function(data){
         if (!data.qs || data.qs.length !== 10) throw new Error("Quiz must contain exactly 10 questions");
@@ -792,7 +892,7 @@
     byId("btn-retry").textContent = "ফল আবার লোড করুন";
     show("loading");
     byId("loading-message").textContent = "আপনার ফলাফল লোড হচ্ছে...";
-    fetch(api("/api/quiz/" + encodeURIComponent(quizId) + "/attempt/" + encodeURIComponent(value)), {
+    fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId) + "/attempt/" + encodeURIComponent(value)), {
       headers:{"X-Telegram-Init-Data":isTelegram ? tg.initData : ""}
     })
       .then(function(resp){ return jsonOrThrow(resp, "Attempt result API"); })
@@ -812,7 +912,7 @@
   }
 
   function loadLegacyQuiz(){
-    fetch("quizzes/" + encodeURIComponent(quizId) + ".json?v=" + Date.now(), {cache:"no-store"})
+    fetchWithTimeout("quizzes/" + encodeURIComponent(quizId) + ".json?v=" + Date.now(), {cache:"no-store"})
       .then(function(resp){
         if (!resp.ok) throw new Error("Legacy quiz returned " + resp.status);
         return resp.json();
@@ -856,7 +956,7 @@
     show("resources");
     byId("resource-status").textContent = "যাচাই করা রিসোর্স লোড হচ্ছে...";
     byId("resource-list").textContent = "";
-    fetch(api("/api/quiz/" + encodeURIComponent(quizId) + "/resources"))
+    fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId) + "/resources"))
       .then(function(resp){ return jsonOrThrow(resp, "Learning resources API"); })
       .then(renderResources)
       .catch(function(err){
@@ -970,7 +1070,7 @@
     button.addEventListener("click", function(){
       button.disabled = true;
       message.textContent = "পাঠানো হচ্ছে...";
-      fetch(api("/api/resources/" + encodeURIComponent(resource.id) + "/feedback"), {
+      fetchWithTimeout(api("/api/resources/" + encodeURIComponent(resource.id) + "/feedback"), {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({initData:tg.initData, feedbackType:select.value})
@@ -1014,7 +1114,9 @@
       loadQuiz();
       return;
     }
-    readOnlyMode = legacyLocal;
+    // A public browser URL cannot supply Telegram-signed identity. Keep it
+    // genuinely read-only instead of starting a timer that can never submit.
+    readOnlyMode = legacyLocal || !isTelegram || previewOnly === true;
     clearResultLocation();
     discardDraft();
     attemptId = newAttemptId();
@@ -1039,7 +1141,7 @@
   function ensureServerAttemptStarted(){
     if (readOnlyMode || serverAttemptStarted) return Promise.resolve();
     if (serverStartPromise) return serverStartPromise;
-    serverStartPromise = fetch(api("/api/quiz/" + encodeURIComponent(quizId) + "/attempts/start"), {
+    serverStartPromise = fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId) + "/attempts/start"), {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
@@ -1139,8 +1241,8 @@
 
   function startTimer(){
     clearInterval(timerHandle);
-    if (quizMode === "practice" && !readOnlyMode) {
-      byId("timer").textContent = "Practice";
+    if (readOnlyMode || quizMode === "practice") {
+      byId("timer").textContent = readOnlyMode ? "Preview" : "Practice";
       byId("timer").classList.remove("low");
       return;
     }
@@ -1181,7 +1283,7 @@
     if (readOnlyMode) {
       retryAction = loadQuiz;
       byId("btn-retry").textContent = "লাইভ কুইজ আবার চেষ্টা করুন";
-      showError("Read-only কপি শেষ হয়েছে। এখানে উত্তর যাচাই বা স্কোর সংরক্ষণ করা হয়নি।");
+      showError("এটি শুধু প্রশ্ন প্রিভিউ। উত্তর যাচাই, স্কোর ও র‍্যাঙ্ক পেতে Telegram থেকে কুইজটি খুলুন।");
       return;
     }
     if (confirmed !== true) {
@@ -1196,7 +1298,7 @@
     byId("loading-message").textContent = "উত্তর সাবমিট হচ্ছে...";
     ensureServerAttemptStarted().catch(function(){
       // The server accepts legacy submission, but marks all timing untrusted.
-    }).then(function(){ return fetch(api("/api/quiz/" + encodeURIComponent(quizId) + "/submit"), {
+    }).then(function(){ return fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId) + "/submit"), {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
@@ -1380,7 +1482,7 @@
   function setBookmark(button, itemType, itemId){
     if (!isTelegram || !itemId || button.disabled) return;
     button.disabled = true;
-    fetch(api("/api/me/bookmarks"), {
+    fetchWithTimeout(api("/api/me/bookmarks"), {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({initData:tg.initData,itemType:itemType,itemId:itemId,active:true})
@@ -1402,7 +1504,7 @@
     }
     button.disabled = true;
     message.textContent = "রিপোর্ট পাঠানো হচ্ছে...";
-    fetch(api("/api/questions/" + encodeURIComponent(item.questionId) + "/report"), {
+    fetchWithTimeout(api("/api/questions/" + encodeURIComponent(item.questionId) + "/report"), {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
