@@ -51,7 +51,14 @@ def test_quiz_intro_uses_citizen_affairs_identity_and_parent_site_cta() -> None:
     assert "Citizen Affairs" in html
     assert "utm_source=telegram" in html
     assert "🌐 Citizen Affairs বাংলা" in html
-    assert html.index("🌐 Citizen Affairs বাংলা") < html.index("▶ মক টেস্ট শুরু করুন")
+    assert html.index("🌐 Citizen Affairs বাংলা") < html.index("▶ প্রশ্ন প্রিভিউ")
+
+
+def test_browser_quiz_preview_does_not_claim_to_save_an_unauthenticated_attempt() -> None:
+    html = CLIENT.get("/").text
+    assert "স্কোর, র‍্যাঙ্ক ও অগ্রগতি সংরক্ষণ করতে Telegram থেকে কুইজটি খুলুন" in html
+    assert "readOnlyMode = legacyLocal || !isTelegram || previewOnly === true" in html
+    assert 'readOnlyMode ? "Preview" : "Practice"' in html
 
 
 def test_mock_page_without_uuid_opens_catalog_instead_of_dead_end() -> None:

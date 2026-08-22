@@ -435,8 +435,9 @@
     <div class="actions" id="intro-actions">
       <a class="btn btn-secondary" href="https://citizenaffairs.in/bn/?utm_source=telegram&amp;utm_medium=quiz&amp;utm_campaign=daily_quiz" target="_blank" rel="noopener">🌐 Citizen Affairs বাংলা</a>
       <button class="btn btn-secondary" id="btn-prepare">📚 আগে প্রস্তুতি নিন</button>
-      <button class="btn btn-primary browser-only" id="btn-start">▶ মক টেস্ট শুরু করুন</button>
+      <button class="btn btn-primary browser-only" id="btn-start">▶ প্রশ্ন প্রিভিউ</button>
     </div>
+    <p class="muted browser-only">স্কোর, র‍্যাঙ্ক ও অগ্রগতি সংরক্ষণ করতে Telegram থেকে কুইজটি খুলুন।</p>
     <div class="fallback-box hidden" id="fallback-box" role="status">
       <strong>এটি শুধু জরুরি read-only কপি।</strong><br />
       এখন উত্তর যাচাই বা স্কোর সংরক্ষণ করা যাবে না। লাইভ API ফিরে এলে কুইজ শুরু করুন।
@@ -458,7 +459,7 @@
     <div class="resource-list" id="resource-list"></div>
     <div class="actions browser-only">
       <button class="btn btn-secondary" id="btn-resource-back">কুইজ পরিচিতিতে ফিরুন</button>
-      <button class="btn btn-primary" id="btn-resource-start">▶ মক টেস্ট শুরু করুন</button>
+      <button class="btn btn-primary" id="btn-resource-start">▶ প্রশ্ন প্রিভিউ</button>
     </div>
   </section>
 
@@ -1113,7 +1114,9 @@
       loadQuiz();
       return;
     }
-    readOnlyMode = legacyLocal;
+    // A public browser URL cannot supply Telegram-signed identity. Keep it
+    // genuinely read-only instead of starting a timer that can never submit.
+    readOnlyMode = legacyLocal || !isTelegram || previewOnly === true;
     clearResultLocation();
     discardDraft();
     attemptId = newAttemptId();
@@ -1238,8 +1241,8 @@
 
   function startTimer(){
     clearInterval(timerHandle);
-    if (quizMode === "practice" && !readOnlyMode) {
-      byId("timer").textContent = "Practice";
+    if (readOnlyMode || quizMode === "practice") {
+      byId("timer").textContent = readOnlyMode ? "Preview" : "Practice";
       byId("timer").classList.remove("low");
       return;
     }
@@ -1280,7 +1283,7 @@
     if (readOnlyMode) {
       retryAction = loadQuiz;
       byId("btn-retry").textContent = "লাইভ কুইজ আবার চেষ্টা করুন";
-      showError("Read-only কপি শেষ হয়েছে। এখানে উত্তর যাচাই বা স্কোর সংরক্ষণ করা হয়নি।");
+      showError("এটি শুধু প্রশ্ন প্রিভিউ। উত্তর যাচাই, স্কোর ও র‍্যাঙ্ক পেতে Telegram থেকে কুইজটি খুলুন।");
       return;
     }
     if (confirmed !== true) {

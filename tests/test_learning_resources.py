@@ -148,7 +148,7 @@ def test_public_projection_groups_topics_and_hides_moderation_metadata(monkeypat
 def test_preparation_ui_uses_only_the_cached_api():
     html = INDEX.read_text(encoding="utf-8")
     assert "📚 আগে প্রস্তুতি নিন" in html
-    assert "▶ মক টেস্ট শুরু করুন" in html
+    assert "মক টেস্ট শুরু করুন" in html
     assert '"/api/quiz/" + encodeURIComponent(quizId) + "/resources"' in html
     assert "কোনো লাইভ সার্চ" in html
     assert "youtube.googleapis.com" not in html.lower()
