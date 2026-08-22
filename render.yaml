@@ -1,6 +1,6 @@
 services:
   - type: web
-    name: telegram-quiz-platform
+    name: telegram_quiz_bot
     runtime: python
     plan: free
     region: singapore
@@ -11,7 +11,6 @@ services:
     # publication on /health/ready.
     healthCheckPath: /health/live
     autoDeployTrigger: checksPass
-    maxShutdownDelaySeconds: 30
     envVars:
       - key: APP_TIMEZONE
         value: Asia/Kolkata
@@ -34,9 +33,9 @@ services:
       - key: MINIAPP_SHORT_NAME
         sync: false
       - key: PUBLIC_APP_URL
-        value: https://telegram-quiz-platform.onrender.com
+        value: https://telegram-quiz-bot-h7p1.onrender.com
       - key: PUBLIC_API_BASE_URL
-        value: https://telegram-quiz-platform.onrender.com
+        value: https://telegram-quiz-bot-h7p1.onrender.com
       - key: APP_ENVIRONMENT
         value: production
       - key: GEMINI_API_KEY_PRIMARY

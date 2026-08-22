@@ -3,6 +3,10 @@ name: Canonical deployment smoke
 on:
   workflow_dispatch:
     inputs:
+      base_url:
+        description: Canonical deployed application HTTPS URL
+        required: true
+        default: https://telegram-quiz-bot-h7p1.onrender.com
       quiz_id:
         description: Posted answer-free quiz ID for synthetic smoke
         required: true
@@ -34,7 +38,7 @@ jobs:
           SMOKE_TELEGRAM_INIT_DATA: ${{ secrets.SMOKE_TELEGRAM_INIT_DATA }}
         run: >-
           python -m scripts.deployed_smoke
-          --base-url https://telegram-quiz-platform.onrender.com
+          --base-url "${{ inputs.base_url }}"
           --expected-commit "${{ inputs.expected_commit }}"
           --quiz-id "${{ inputs.quiz_id }}"
           ${{ inputs.authenticated && '--authenticated' || '' }}
