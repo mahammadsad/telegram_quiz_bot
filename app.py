@@ -47,6 +47,7 @@ from routes.leaderboards import build_leaderboard_router
 from routes.learner import build_learner_router
 from routes.static_pages import build_static_router
 from routes.system import build_system_router
+from routes.test_attempts import build_test_attempt_router
 from services import (
     exam_config_service,
     leaderboard_privacy,
@@ -184,112 +185,6 @@ app.include_router(
         mark_answer_free=_mark_answer_free,
     )
 )
-
-
-@app.post("/api/tests/instances/{test_instance_id}/attempts/start")
-def start_test_attempt(
-    test_instance_id: uuid.UUID,
-    payload: StartTestAttemptRequest,
-) -> dict:
-    try:
-        return test_attempts_service.start(
-            _write_user_from_payload(payload, "test-attempt-start", str(test_instance_id)),
-            test_instance_id=test_instance_id,
-            client_attempt_id=payload.client_attempt_id,
-        )
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="Test attempt could not be started.") from exc
-
-
-@app.put("/api/tests/attempts/{attempt_id}/progress")
-def save_test_attempt_progress(
-    attempt_id: uuid.UUID,
-    payload: SaveTestProgressRequest,
-) -> dict:
-    try:
-        responses = [item.model_dump() for item in payload.responses]
-        return test_attempts_service.save_progress(
-            _write_user_from_payload(payload, "test-attempt-progress", str(attempt_id)),
-            attempt_id=attempt_id,
-            responses=responses,
-        )
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="Test progress could not be saved.") from exc
-
-
-@app.post("/api/tests/attempts/{attempt_id}/sections/advance")
-def advance_test_attempt_section(
-    attempt_id: uuid.UUID,
-    payload: AdvanceTestSectionRequest,
-) -> dict:
-    try:
-        return test_attempts_service.advance_section(
-            _write_user_from_payload(payload, "test-attempt-section", str(attempt_id)),
-            attempt_id=attempt_id,
-            next_section_instance_id=payload.next_section_instance_id,
-        )
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="Test section could not be advanced.") from exc
-
-
-@app.post("/api/tests/attempts/{attempt_id}/submit")
-def submit_test_attempt(
-    attempt_id: uuid.UUID,
-    payload: SubmitTestAttemptRequest,
-) -> dict:
-    try:
-        return test_attempts_service.submit(
-            _write_user_from_payload(payload, "test-attempt-submit", str(attempt_id)),
-            attempt_id=attempt_id,
-            auto_submit=payload.auto_submit,
-        )
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="Test attempt could not be submitted.") from exc
-
-
-@app.get("/api/tests/attempts/{attempt_id}")
-def get_test_attempt(
-    attempt_id: uuid.UUID,
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    try:
-        payload = test_attempts_service.get(
-            _telegram_user_from_init_data(init_data),
-            attempt_id=attempt_id,
-        )
-        if payload is None:
-            raise HTTPException(status_code=404, detail="Test attempt not found.")
-        return payload
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="Test attempt is temporarily unavailable.") from exc
 
 
 @app.get("/api/quiz/{quiz_id}")
@@ -601,6 +496,14 @@ app.include_router(
         learning_service=personal_learning_service,
         moderation_service=question_moderation_service,
         privacy_service=privacy_service,
+        read_user=_telegram_user_from_init_data,
+        write_user=_write_user_from_payload,
+        value_error_status=_value_error_status,
+    )
+)
+app.include_router(
+    build_test_attempt_router(
+        attempt_service=test_attempts_service,
         read_user=_telegram_user_from_init_data,
         write_user=_write_user_from_payload,
         value_error_status=_value_error_status,
