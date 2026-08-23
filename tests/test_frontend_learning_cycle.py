@@ -15,7 +15,10 @@ DASHBOARD = (
     + (ROOT / "dashboard.css").read_text(encoding="utf-8")
     + (ROOT / "dashboard.js").read_text(encoding="utf-8")
 )
-SETTINGS = (ROOT / "settings.html").read_text(encoding="utf-8")
+SETTINGS = (
+    (ROOT / "settings.html").read_text(encoding="utf-8")
+    + (ROOT / "settings.css").read_text(encoding="utf-8")
+)
 MOCK = (
     (ROOT / "mock.html").read_text(encoding="utf-8")
     + (ROOT / "mock.js").read_text(encoding="utf-8")
@@ -199,6 +202,12 @@ def test_dashboard_styles_are_externalized_for_the_csp_migration() -> None:
     assert "dashboard.css" in WORKER
     assert '<script src="dashboard.js"></script>' in DASHBOARD
     assert "dashboard.js" in WORKER
+
+
+def test_settings_styles_are_externalized_for_the_csp_migration() -> None:
+    assert '<link rel="stylesheet" href="settings.css" />' in SETTINGS
+    assert "<style>" not in SETTINGS
+    assert "settings.css" in WORKER
 
 
 def test_missing_quiz_message_is_user_facing_not_an_operator_instruction() -> None:

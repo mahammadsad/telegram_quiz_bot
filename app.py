@@ -500,6 +500,11 @@ def dashboard_script() -> FileResponse:
     )
 
 
+@app.get("/settings.css")
+def settings_styles() -> FileResponse:
+    return FileResponse(ROOT / "settings.css", media_type="text/css", headers={"Cache-Control": "public, max-age=300"})
+
+
 @app.get("/service-worker.js")
 def service_worker() -> FileResponse:
     return FileResponse(
