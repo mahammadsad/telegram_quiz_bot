@@ -349,7 +349,7 @@ app.include_router(
         application_version=app.version,
         app_timezone=APP_TIMEZONE,
         release_value=_release_value,
-        readiness_assess=readiness_service.assess,
+        readiness_service=readiness_service,
         production_config_version=readiness_service.PRODUCTION_CONFIG_VERSION,
         production_config_hash=readiness_service.PRODUCTION_CONFIG_HASH,
     )

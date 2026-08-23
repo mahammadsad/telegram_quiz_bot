@@ -15,7 +15,7 @@ def build_system_router(
     application_version: str,
     app_timezone: str,
     release_value: Callable[..., str],
-    readiness_assess: Callable[[], Any],
+    readiness_service: Any,
     production_config_version: str,
     production_config_hash: str,
 ) -> APIRouter:
@@ -47,7 +47,7 @@ def build_system_router(
         }
 
     def readiness_response() -> JSONResponse:
-        readiness = readiness_assess()
+        readiness = readiness_service.assess()
         return JSONResponse(readiness.public_payload(), status_code=200 if readiness.ready else 503)
 
     router.add_api_route("/health/ready", readiness_response, methods=["GET"])
