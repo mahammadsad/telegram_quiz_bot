@@ -241,7 +241,7 @@ def test_admin_apis_require_auth_and_delegate_to_guarded_service(monkeypatch):
 
 
 def test_resource_feedback_ui_and_maintenance_workflows_are_bounded():
-    html = (ROOT / "index.html").read_text(encoding="utf-8")
+    html = (ROOT / "index.html").read_text(encoding="utf-8") + (ROOT / "index.js").read_text(encoding="utf-8")
     resource_workflow = RESOURCE_WORKFLOW.read_text(encoding="utf-8")
     schedule_workflow = SCHEDULE_WORKFLOW.read_text(encoding="utf-8")
     assert '"/api/resources/" + encodeURIComponent(resource.id) + "/feedback"' in html
