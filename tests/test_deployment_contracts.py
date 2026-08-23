@@ -211,6 +211,31 @@ def test_staging_workflow_uses_only_staging_secret_expressions() -> None:
         assert env[name] == f"${{{{ secrets.{name} }}}}"
 
 
+def test_production_migration_workflow_is_manual_and_fail_closed() -> None:
+    path = WORKFLOW_DIR / "supabase-migrations.yml"
+    workflow = _load_yaml(path)
+    trigger = workflow.get("on") or workflow.get(True)
+    assert set(trigger) == {"workflow_dispatch"}
+    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["concurrency"]["cancel-in-progress"] is False
+
+    job = workflow["jobs"]["apply-migrations"]
+    assert job["environment"] == "production"
+    assert job["timeout-minutes"] == 20
+    assert job["env"]["EXPECTED_SUPABASE_PROJECT_REF"] == PRODUCTION_PROJECT_REF
+    assert job["env"]["SUPABASE_URL"] == PRODUCTION_SUPABASE_URL
+    for name in ("SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_PASSWORD", "SUPABASE_SERVICE_KEY"):
+        assert job["env"][name] == f"${{{{ secrets.{name} }}}}"
+
+    source = path.read_text(encoding="utf-8")
+    assert "APPLY TRACKED MIGRATIONS TO {expected_ref}" in source
+    assert "--dry-run" in source
+    assert "--skip-vault" in source
+    assert "get_my_question_report_statuses" in source
+    assert "schedule:" not in source
+    assert "push:" not in source
+
+
 def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> None:
     static_path = WORKFLOW_DIR / "source-rollout.yml"
     static = _load_yaml(static_path)

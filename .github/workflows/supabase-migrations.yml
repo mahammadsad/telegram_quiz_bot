@@ -1,0 +1,113 @@
+name: Apply Production Supabase Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      safety_ack:
+        description: Enter APPLY TRACKED MIGRATIONS TO tizxodkcpglmxgtwepor
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-supabase-migrations
+  cancel-in-progress: false
+
+jobs:
+  apply-migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    env:
+      EXPECTED_SUPABASE_PROJECT_REF: tizxodkcpglmxgtwepor
+      SUPABASE_URL: https://tizxodkcpglmxgtwepor.supabase.co
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+      INPUT_SAFETY_ACK: ${{ inputs.safety_ack }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Fail-closed production identity and credential gate
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          from database.contract import LEARNER_REPORT_STATUS_PROJECTION_MIGRATION_VERSION
+
+          expected_ref = "tizxodkcpglmxgtwepor"
+          expected_ack = f"APPLY TRACKED MIGRATIONS TO {expected_ref}"
+          if os.environ.get("EXPECTED_SUPABASE_PROJECT_REF") != expected_ref:
+              raise SystemExit("Refusing migration: production project ref is not exact.")
+          if os.environ.get("SUPABASE_URL") != f"https://{expected_ref}.supabase.co":
+              raise SystemExit("Refusing migration: production Supabase URL is not exact.")
+          if os.environ.get("INPUT_SAFETY_ACK") != expected_ack:
+              raise SystemExit("Refusing migration: production acknowledgement is not exact.")
+          missing = [
+              name
+              for name in (
+                  "SUPABASE_ACCESS_TOKEN",
+                  "SUPABASE_DB_PASSWORD",
+                  "SUPABASE_SERVICE_KEY",
+              )
+              if not os.environ.get(name)
+          ]
+          if missing:
+              raise SystemExit("Refusing migration: required production credentials are unavailable.")
+          migration = Path("supabase/migrations") / (
+              f"{LEARNER_REPORT_STATUS_PROJECTION_MIGRATION_VERSION}_"
+              "learner_report_status_projection.sql"
+          )
+          if not migration.is_file():
+              raise SystemExit("Refusing migration: expected reviewed migration is missing.")
+          print("Production identity, acknowledgement, credentials, and migration file gate passed.")
+          PY
+
+      - name: Show migration plan without changing production
+        run: >-
+          npx --yes supabase@2.77.0 db push
+          --project-ref "$EXPECTED_SUPABASE_PROJECT_REF"
+          --password "$SUPABASE_DB_PASSWORD"
+          --include-all --skip-vault --dry-run --yes
+
+      - name: Apply tracked migrations after successful dry run
+        run: >-
+          npx --yes supabase@2.77.0 db push
+          --project-ref "$EXPECTED_SUPABASE_PROJECT_REF"
+          --password "$SUPABASE_DB_PASSWORD"
+          --include-all --skip-vault --yes
+
+      - name: Verify learner report status projection is callable
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from urllib.request import Request, urlopen
+
+          url = os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1/rpc/get_my_question_report_statuses"
+          request = Request(
+              url,
+              data=json.dumps({
+                  "p_user_id": "00000000-0000-0000-0000-000000000000",
+                  "p_limit": 1,
+                  "p_offset": 0,
+              }).encode("utf-8"),
+              headers={
+                  "apikey": os.environ["SUPABASE_SERVICE_KEY"],
+                  "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_KEY']}",
+                  "Content-Type": "application/json",
+              },
+              method="POST",
+          )
+          with urlopen(request, timeout=15) as response:
+              payload = json.loads(response.read().decode("utf-8"))
+          if not isinstance(payload, dict) or not {"items", "total", "limit", "offset"} <= payload.keys():
+              raise SystemExit("Migration verification returned an unexpected projection payload.")
+          print("Learner report status projection is callable.")
+          PY
