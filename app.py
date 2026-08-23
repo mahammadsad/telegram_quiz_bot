@@ -6,7 +6,6 @@ import hashlib
 import json
 import os
 import uuid
-from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -45,6 +44,7 @@ from database.contract import APPLICATION_VERSION, REQUIRED_MIGRATION_VERSION
 from routes.admin import build_admin_router
 from routes.catalog import build_catalog_router
 from routes.leaderboards import build_leaderboard_router
+from routes.learner import build_learner_router
 from routes.static_pages import build_static_router
 from routes.system import build_system_router
 from services import (
@@ -462,301 +462,6 @@ def report_question(question_id: uuid.UUID, payload: ReportQuestionRequest) -> d
         raise HTTPException(status_code=503, detail="রিপোর্ট জমা করা যায়নি। একটু পরে আবার চেষ্টা করুন।") from exc
 
 
-@app.get("/api/me/dashboard")
-def my_learning_dashboard(
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    try:
-        return personal_learning_service.dashboard(_telegram_user_from_init_data(init_data))
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="ব্যক্তিগত ড্যাশবোর্ড এখন খোলা যাচ্ছে না।") from exc
-
-
-@app.get("/api/me/question-reports")
-def my_question_report_statuses(
-    limit: int = 50,
-    offset: int = 0,
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    try:
-        return question_moderation_service.my_report_statuses(
-            _telegram_user_from_init_data(init_data), limit=limit, offset=offset
-        )
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="রিপোর্টের অবস্থা এখন লোড করা যাচ্ছে না।") from exc
-
-
-@app.get("/api/me/reviews/due")
-def my_due_reviews(
-    limit: int = 20,
-    offset: int = 0,
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    try:
-        return personal_learning_service.due_reviews(
-            _telegram_user_from_init_data(init_data),
-            limit=limit,
-            offset=offset,
-        )
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="রিভিশনের প্রশ্ন এখন লোড করা যাচ্ছে না।") from exc
-
-
-@app.get("/api/me/reviews/knowledge")
-def my_knowledge_reviews(
-    limit: int = 20,
-    offset: int = 0,
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    try:
-        return personal_learning_service.knowledge_reviews(
-            _telegram_user_from_init_data(init_data),
-            limit=limit,
-            offset=offset,
-        )
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="জ্ঞানভিত্তিক রিভিশন এখন লোড করা যাচ্ছে না।") from exc
-
-
-@app.get("/api/me/learning/daily")
-def my_learning_daily_rollups(
-    date_from: date | None = None,
-    date_to: date | None = None,
-    limit: int = 30,
-    offset: int = 0,
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    try:
-        return personal_learning_service.daily_rollups(
-            _telegram_user_from_init_data(init_data),
-            date_from=date_from,
-            date_to=date_to,
-            limit=limit,
-            offset=offset,
-        )
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="দৈনিক শেখার অগ্রগতি এখন লোড করা যাচ্ছে না।") from exc
-
-
-@app.get("/api/me/learning/knowledge-points")
-def my_knowledge_mastery(
-    subject: str | None = None,
-    strength: str = "all",
-    limit: int = 30,
-    offset: int = 0,
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    try:
-        return personal_learning_service.knowledge_mastery(
-            _telegram_user_from_init_data(init_data),
-            subject_key=subject,
-            strength=strength,
-            limit=limit,
-            offset=offset,
-        )
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="জ্ঞানভিত্তিক অগ্রগতি এখন লোড করা যাচ্ছে না।") from exc
-
-
-@app.get("/api/me/wrong-questions")
-def my_wrong_questions(
-    subject: str | None = None,
-    limit: int = 20,
-    offset: int = 0,
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    try:
-        return personal_learning_service.wrong_questions(
-            _telegram_user_from_init_data(init_data),
-            subject_key=subject,
-            limit=limit,
-            offset=offset,
-        )
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="ভুল প্রশ্ন এখন লোড করা যাচ্ছে না।") from exc
-
-
-@app.post("/api/me/practice/{question_id}")
-def submit_my_practice_answer(question_id: uuid.UUID, payload: PracticeAnswerRequest) -> dict:
-    try:
-        return personal_learning_service.submit_practice_answer(
-            _write_user_from_payload(
-                payload,
-                "practice-answer",
-                str(payload.attempt_id),
-            ),
-            question_id=str(question_id),
-            client_attempt_id=payload.attempt_id,
-            selected_option=payload.selected_option,
-            source_type=payload.source_type,
-            mode=payload.mode,
-            response_time_seconds=payload.response_time_seconds,
-            marked_for_review=payload.marked_for_review,
-        )
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="অনুশীলনের উত্তর সংরক্ষণ করা যায়নি।") from exc
-
-
-@app.post("/api/me/practice/{question_id}/report")
-def report_my_practice_question(
-    question_id: uuid.UUID,
-    payload: PracticeQuestionReportRequest,
-) -> dict:
-    try:
-        return personal_learning_service.report_practice_question(
-            _write_user_from_payload(
-                payload,
-                "question-report",
-                str(payload.attempt_id),
-            ),
-            question_id=str(question_id),
-            client_attempt_id=payload.attempt_id,
-            reason=payload.reason,
-            details=payload.details,
-        )
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        message = str(exc)
-        status = 409 if "already reported" in message else 429 if "rate limit" in message else 400
-        raise HTTPException(status_code=status, detail=message) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="রিপোর্ট জমা করা যায়নি। একটু পরে আবার চেষ্টা করুন।",
-        ) from exc
-
-
-@app.get("/api/me/bookmarks")
-def my_bookmarks(
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    try:
-        return personal_learning_service.bookmarks(_telegram_user_from_init_data(init_data))
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="বুকমার্ক এখন লোড করা যাচ্ছে না।") from exc
-
-
-@app.post("/api/me/bookmarks")
-def set_my_bookmark(payload: BookmarkRequest) -> dict:
-    try:
-        return personal_learning_service.set_bookmark(
-            _write_user_from_payload(
-                payload,
-                "bookmark",
-                f"{payload.item_type}:{payload.item_id}",
-            ),
-            item_type=payload.item_type,
-            item_id=str(payload.item_id),
-            active=payload.active,
-        )
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="বুকমার্ক সংরক্ষণ করা যায়নি।") from exc
-
-
-@app.get("/api/me/preferences")
-def my_preferences(
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    try:
-        return personal_learning_service.preferences(_telegram_user_from_init_data(init_data))
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="পছন্দের সেটিং এখন লোড করা যাচ্ছে না।") from exc
-
-
-@app.post("/api/me/data-export")
-def export_my_data(payload: PrivacyActionRequest) -> dict:
-    try:
-        return privacy_service.export_my_data(_write_user_from_payload(payload, "privacy-export"))
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="আপনার ডেটা এখন এক্সপোর্ট করা যাচ্ছে না।") from exc
-
-
-@app.post("/api/me/account-deletion")
-def request_my_account_deletion(payload: PrivacyActionRequest) -> dict:
-    try:
-        return privacy_service.request_delete_my_account(_write_user_from_payload(payload, "privacy-delete"))
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="অ্যাকাউন্ট মুছে ফেলার অনুরোধ রাখা যায়নি।") from exc
-
-
-@app.post("/api/me/account-deletion/cancel")
-def cancel_my_account_deletion(payload: PrivacyActionRequest) -> dict:
-    try:
-        return privacy_service.cancel_delete_my_account(_write_user_from_payload(payload, "privacy-delete-cancel"))
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="অনুরোধটি বাতিল করা যায়নি।") from exc
-
-
-@app.put("/api/me/preferences")
-def save_my_preferences(payload: UserPreferencesRequest) -> dict:
-    try:
-        return personal_learning_service.save_preferences(
-            _write_user_from_payload(payload, "preferences"),
-            payload.model_dump(exclude={"init_data", "dev_user"}),
-        )
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="পছন্দের সেটিং সংরক্ষণ করা যায়নি।") from exc
-
-
 def _write_user_from_payload(
     payload: (
         SubmitQuizRequest
@@ -889,5 +594,15 @@ app.include_router(
         subjects=SUBJECTS,
         read_user=_telegram_user_from_init_data,
         clean_quiz_id=_clean_quiz_id,
+    )
+)
+app.include_router(
+    build_learner_router(
+        learning_service=personal_learning_service,
+        moderation_service=question_moderation_service,
+        privacy_service=privacy_service,
+        read_user=_telegram_user_from_init_data,
+        write_user=_write_user_from_payload,
+        value_error_status=_value_error_status,
     )
 )
