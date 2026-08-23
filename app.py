@@ -43,6 +43,7 @@ from config.settings import (
 from config.subjects import SUBJECTS
 from database.contract import APPLICATION_VERSION, REQUIRED_MIGRATION_VERSION
 from models.user import User
+from routes.admin import build_admin_router
 from routes.catalog import build_catalog_router
 from routes.static_pages import build_static_router
 from routes.system import build_system_router
@@ -1094,3 +1095,14 @@ def _load_public_fallback(quiz_id: str) -> dict | None:
             for item in questions
         ],
     }
+
+
+app.include_router(
+    build_admin_router(
+        resource_service=resource_quality_service,
+        moderation_service=question_moderation_service,
+        read_user=_telegram_user_from_init_data,
+        write_user=_write_user_from_payload,
+        value_error_status=_value_error_status,
+    )
+)
