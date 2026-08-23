@@ -149,7 +149,7 @@
   function renderActivity(rows){
     var box=el("activity"),max=Math.max.apply(null,[1].concat(rows.map(function(row){return row.answered||0})));box.textContent="";box.className="activity";
     if(!rows.length){box.textContent="এখনও দৈনিক অগ্রগতির তথ্য নেই।";box.className="muted";return}
-    rows.forEach(function(row){var bar=document.createElement("progress");bar.className="day";bar.max=max;bar.value=row.answered||0;bar.tabIndex=0;bar.dataset.label=row.date+": "+bn(row.answered||0)+"টি";box.appendChild(bar)});
+    rows.forEach(function(row){var bar=document.createElement("span"),svg=document.createElementNS("http://www.w3.org/2000/svg","svg"),track=document.createElementNS("http://www.w3.org/2000/svg","rect"),fill=document.createElementNS("http://www.w3.org/2000/svg","rect");bar.className="day";bar.dataset.label=row.date+": "+bn(row.answered||0)+"টি";bar.setAttribute("aria-hidden","true");svg.setAttribute("viewBox","0 0 100 10");svg.setAttribute("preserveAspectRatio","none");track.setAttribute("class","day-track");track.setAttribute("width","100");track.setAttribute("height","10");fill.setAttribute("class","day-value");fill.setAttribute("width",String(Math.max(0,Math.min(100,(row.answered||0)/max*100))));fill.setAttribute("height","10");svg.append(track,fill);bar.appendChild(svg);box.appendChild(bar)});
   }
 
   function renderBars(id,rows,label,value){
