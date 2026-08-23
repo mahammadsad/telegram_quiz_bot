@@ -9,7 +9,7 @@
     --button-text:var(--tg-theme-button-text-color,#fff);
     --line:color-mix(in srgb,var(--hint) 25%,transparent);
     --success:#158047;
-    --danger:#c93f4b;
+    --danger:#b42332;
     --warning:#b16c00;
     --radius:16px;
     --font:'Noto Sans Bengali',system-ui,sans-serif;
