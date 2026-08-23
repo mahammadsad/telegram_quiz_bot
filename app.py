@@ -446,6 +446,15 @@ def index_script() -> FileResponse:
     )
 
 
+@app.get("/mock.css")
+def mock_styles() -> FileResponse:
+    return FileResponse(
+        ROOT / "mock.css",
+        media_type="text/css",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
 @app.get("/service-worker.js")
 def service_worker() -> FileResponse:
     return FileResponse(

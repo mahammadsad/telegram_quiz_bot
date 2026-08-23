@@ -167,6 +167,12 @@ def test_home_styles_are_externalized_for_the_csp_migration() -> None:
     assert "index.js" in WORKER
 
 
+def test_mock_styles_are_externalized_for_the_csp_migration() -> None:
+    assert '<link rel="stylesheet" href="mock.css" />' in MOCK
+    assert "<style>" not in MOCK
+    assert "mock.css" in WORKER
+
+
 def test_missing_quiz_message_is_user_facing_not_an_operator_instruction() -> None:
     assert "এই কুইজটি এখনও পাওয়া যাচ্ছে না" in INDEX
     assert "API status:" not in INDEX
