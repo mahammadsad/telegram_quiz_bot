@@ -4,7 +4,7 @@
     --surface:var(--tg-theme-secondary-bg-color,#fff);
     --text:var(--tg-theme-text-color,#14212b);
     --hint:var(--tg-theme-hint-color,#52606d);
-    --link:var(--tg-theme-link-color,#066c76);
+    --link:#066c76;
     --button:var(--tg-theme-button-color,#066257);
     --button-text:var(--tg-theme-button-text-color,#fff);
     --line:color-mix(in srgb,var(--hint) 25%,transparent);
