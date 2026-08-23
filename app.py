@@ -491,6 +491,15 @@ def dashboard_styles() -> FileResponse:
     )
 
 
+@app.get("/dashboard.js")
+def dashboard_script() -> FileResponse:
+    return FileResponse(
+        ROOT / "dashboard.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @app.get("/service-worker.js")
 def service_worker() -> FileResponse:
     return FileResponse(
