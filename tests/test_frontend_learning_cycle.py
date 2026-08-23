@@ -18,6 +18,7 @@ DASHBOARD = (
 SETTINGS = (
     (ROOT / "settings.html").read_text(encoding="utf-8")
     + (ROOT / "settings.css").read_text(encoding="utf-8")
+    + (ROOT / "settings.js").read_text(encoding="utf-8")
 )
 MOCK = (
     (ROOT / "mock.html").read_text(encoding="utf-8")
@@ -208,6 +209,9 @@ def test_settings_styles_are_externalized_for_the_csp_migration() -> None:
     assert '<link rel="stylesheet" href="settings.css" />' in SETTINGS
     assert "<style>" not in SETTINGS
     assert "settings.css" in WORKER
+    assert '<script src="settings.js"></script>' in SETTINGS
+    assert "<script>" not in SETTINGS
+    assert "settings.js" in WORKER
 
 
 def test_missing_quiz_message_is_user_facing_not_an_operator_instruction() -> None:

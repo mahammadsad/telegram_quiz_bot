@@ -505,6 +505,15 @@ def settings_styles() -> FileResponse:
     return FileResponse(ROOT / "settings.css", media_type="text/css", headers={"Cache-Control": "public, max-age=300"})
 
 
+@app.get("/settings.js")
+def settings_script() -> FileResponse:
+    return FileResponse(
+        ROOT / "settings.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @app.get("/service-worker.js")
 def service_worker() -> FileResponse:
     return FileResponse(

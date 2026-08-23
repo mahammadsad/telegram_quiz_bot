@@ -35,6 +35,7 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
         "/dashboard.css": "text/css",
         "/dashboard.js": "text/javascript",
         "/settings.css": "text/css",
+        "/settings.js": "text/javascript",
         "/miniapp-shell.js": "text/javascript",
         "/service-worker.js": "text/javascript",
         "/manifest.webmanifest": "application/manifest+json",
@@ -57,6 +58,7 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert CLIENT.get("/dashboard.css").headers["cache-control"] == "public, max-age=300"
     assert CLIENT.get("/dashboard.js").headers["cache-control"] == "public, max-age=3600"
     assert CLIENT.get("/settings.css").headers["cache-control"] == "public, max-age=300"
+    assert CLIENT.get("/settings.js").headers["cache-control"] == "public, max-age=3600"
     source = worker.text
     assert "NETWORK_TIMEOUT_MS = 8000" in source
     assert "new AbortController()" in source
