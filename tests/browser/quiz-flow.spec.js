@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const AxeBuilder = require("@axe-core/playwright").default;
 
 const {
   QUIZ_ID,
@@ -10,6 +11,13 @@ const {
   installTelegramMock,
   quizPayload,
 } = require("./fixtures");
+
+async function expectWcag22Aa(page) {
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
+}
 
 async function openIntro(page, options = {}) {
   await installTelegramMock(page);
@@ -93,6 +101,7 @@ test("complete quiz lifecycle hides answers until submission and recovers the re
   await expect.poll(() => api.quizSubmissions.length).toBe(1);
   await capture(page, testInfo, "quiz-submission-loading");
   await expect(page.locator("#screen-result")).toBeVisible();
+  await expectWcag22Aa(page);
 
   expect(api.quizSubmissions).toHaveLength(1);
   const firstAttemptId = api.quizSubmissions[0].attemptId;

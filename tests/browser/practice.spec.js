@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const AxeBuilder = require("@axe-core/playwright").default;
 
 const {
   assertBottomNavigationDoesNotCoverContent,
@@ -8,6 +9,13 @@ const {
   installApiMocks,
   installTelegramMock,
 } = require("./fixtures");
+
+async function expectWcag22Aa(page) {
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
+}
 
 async function openPractice(page, source, options = {}) {
   await installTelegramMock(page);
@@ -37,6 +45,7 @@ test("revision queue reveals checked answers, reports issues, and plays one mist
   await expect(page.locator("#feedback")).toContainText("সঠিক উত্তর");
   await expect(page.locator("#feedback")).toContainText("যাচাইকৃত পুনরাবৃত্তি ব্যাখ্যা");
   await expect(page.locator("#feedback a")).toHaveAttribute("rel", "noopener noreferrer");
+  await expectWcag22Aa(page);
 
   expect(api.practiceSubmissions).toHaveLength(1);
   expect(api.practiceSubmissions[0].mode).toBe("revision");
