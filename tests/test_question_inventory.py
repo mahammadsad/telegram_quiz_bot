@@ -7,6 +7,7 @@ import pytest
 from services.question_inventory import (
     InventoryExhausted,
     assemble_verified_quiz,
+    exposure_quality_report,
     inventory_report,
     replenishment_plan,
 )
@@ -117,3 +118,31 @@ def test_inventory_days_and_replenishment_batches_are_reported() -> None:
         "batch_count": 4,
     }
 
+
+def test_exposure_quality_reports_repeat_and_same_quiz_targets() -> None:
+    events = [
+        {"question_id": "q1", "quiz_id": "quiz-a"},
+        {"question_id": "q1", "quiz_id": "quiz-b"},
+        {"question_id": "q2", "quiz_id": "quiz-b"},
+        {"question_id": "q2", "quiz_id": "quiz-b"},
+        {"quiz_id": "quiz-c"},
+    ]
+    assert exposure_quality_report(events) == {
+        "total_events": 5,
+        "identified_events": 4,
+        "unidentified_events": 1,
+        "unique_questions": 2,
+        "repeated_questions": 2,
+        "repeated_events": 2,
+        "repeated_exposure_percent": 50.0,
+        "same_quiz_duplicate_events": 1,
+        "passes_repeat_target": False,
+        "passes_same_quiz_target": False,
+    }
+
+
+def test_empty_exposure_quality_report_is_safe_and_green() -> None:
+    report = exposure_quality_report([])
+    assert report["repeated_exposure_percent"] == 0.0
+    assert report["passes_repeat_target"] is True
+    assert report["passes_same_quiz_target"] is True

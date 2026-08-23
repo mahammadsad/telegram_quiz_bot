@@ -73,9 +73,7 @@ def assemble_verified_quiz(
     rules = policy or RotationPolicy()
     safe = [dict(row) for row in candidates if _is_safety_eligible(row, current)]
     if len(safe) < count:
-        raise InventoryExhausted(
-            f"Only {len(safe)} verified, supported candidates are available; {count} required."
-        )
+        raise InventoryExhausted(f"Only {len(safe)} verified, supported candidates are available; {count} required.")
     ordered = sorted(safe, key=_candidate_order)
     history = [dict(row) for row in recent_usage]
     selected: list[dict[str, Any]] = []
@@ -100,17 +98,13 @@ def assemble_verified_quiz(
                 continue
             selected.append(candidate)
             selected_ids.add(candidate_id)
-            used_relaxations = tuple(
-                name for name in _RELAXATION_ORDER if name in violations
-            )
+            used_relaxations = tuple(name for name in _RELAXATION_ORDER if name in violations)
             selected_with_relaxation[candidate_id] = used_relaxations
             relaxed.update(used_relaxations)
             if len(selected) == count:
                 return AssemblyResult(
                     questions=selected,
-                    relaxed_constraints=tuple(
-                        name for name in _RELAXATION_ORDER if name in relaxed
-                    ),
+                    relaxed_constraints=tuple(name for name in _RELAXATION_ORDER if name in relaxed),
                     selected_with_relaxation=selected_with_relaxation,
                 )
     raise InventoryExhausted("Verified inventory could not fill the requested quiz size.")
@@ -166,6 +160,45 @@ def replenishment_plan(
         "missing_count": missing,
         "batch_size": batch_size,
         "batch_count": (missing + batch_size - 1) // batch_size,
+    }
+
+
+def exposure_quality_report(
+    usage_events: Iterable[dict[str, Any]],
+    *,
+    repeat_target_percent: float = 0.5,
+) -> dict[str, float | int | bool]:
+    """Measure repeated learner exposure without returning question content."""
+    events = [dict(event) for event in usage_events]
+    question_counts: dict[str, int] = {}
+    quiz_question_counts: dict[tuple[str, str], int] = {}
+    unidentified = 0
+    for event in events:
+        question_id = str(event.get("question_id") or event.get("variant_fingerprint") or "").strip()
+        if not question_id:
+            unidentified += 1
+            continue
+        question_counts[question_id] = question_counts.get(question_id, 0) + 1
+        quiz_id = str(event.get("quiz_id") or "").strip()
+        if quiz_id:
+            key = (quiz_id, question_id)
+            quiz_question_counts[key] = quiz_question_counts.get(key, 0) + 1
+
+    identified_events = sum(question_counts.values())
+    repeated_events = sum(max(0, count - 1) for count in question_counts.values())
+    repeated_rate = round((repeated_events / identified_events) * 100, 4) if identified_events else 0.0
+    same_quiz_duplicate_events = sum(max(0, count - 1) for count in quiz_question_counts.values())
+    return {
+        "total_events": len(events),
+        "identified_events": identified_events,
+        "unidentified_events": unidentified,
+        "unique_questions": len(question_counts),
+        "repeated_questions": sum(1 for count in question_counts.values() if count > 1),
+        "repeated_events": repeated_events,
+        "repeated_exposure_percent": repeated_rate,
+        "same_quiz_duplicate_events": same_quiz_duplicate_events,
+        "passes_repeat_target": repeated_rate < repeat_target_percent,
+        "passes_same_quiz_target": same_quiz_duplicate_events == 0,
     }
 
 
