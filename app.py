@@ -5,13 +5,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import uuid
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from api_models import (
     AdvanceTestSectionRequest,
@@ -45,6 +43,7 @@ from routes.admin import build_admin_router
 from routes.catalog import build_catalog_router
 from routes.leaderboards import build_leaderboard_router
 from routes.learner import build_learner_router
+from routes.quizzes import build_quiz_router
 from routes.static_pages import build_static_router
 from routes.system import build_system_router
 from routes.test_attempts import build_test_attempt_router
@@ -148,17 +147,6 @@ def _value_error_status(exc: ValueError) -> int:
 app.include_router(build_static_router(ROOT))
 
 
-@app.get("/quizzes/{quiz_file}")
-def legacy_quiz_file(quiz_file: str) -> JSONResponse:
-    if not quiz_file.endswith(".json"):
-        raise HTTPException(status_code=404, detail="Quiz file not found.")
-    quiz_id = _clean_quiz_id(quiz_file[:-5])
-    payload = _load_public_fallback(quiz_id)
-    if not payload:
-        raise HTTPException(status_code=404, detail="Quiz file not found.")
-    return JSONResponse(payload)
-
-
 def _release_value(*names: str, default: str) -> str:
     for name in names:
         value = os.environ.get(name, "").strip()
@@ -185,176 +173,6 @@ app.include_router(
         mark_answer_free=_mark_answer_free,
     )
 )
-
-
-@app.get("/api/quiz/{quiz_id}")
-def get_quiz(quiz_id: str, response: Response) -> dict:
-    clean_quiz_id = _clean_quiz_id(quiz_id)
-    try:
-        pack = quiz_pack_service.get_ready_quiz_pack(clean_quiz_id)
-    except Exception as exc:
-        legacy = _load_public_fallback(clean_quiz_id)
-        if legacy:
-            _mark_answer_free(response, legacy)
-            return legacy
-        raise HTTPException(status_code=503, detail="কুইজটি এখন খোলা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।") from exc
-    if pack:
-        if len(pack.get("items") or []) != 10:
-            raise HTTPException(status_code=503, detail="কুইজের তথ্য অসম্পূর্ণ। পরে আবার চেষ্টা করুন।")
-        payload = quiz_pack_service.public_quiz_payload(pack)
-        _mark_answer_free(response, payload)
-        return payload
-    legacy = _load_public_fallback(clean_quiz_id)
-    if legacy:
-        _mark_answer_free(response, legacy)
-        return legacy
-    raise HTTPException(status_code=404, detail="Quiz pack not found.")
-
-
-@app.get("/api/quiz/{quiz_id}/resources")
-def quiz_learning_resources(quiz_id: str) -> dict:
-    clean_quiz_id = _clean_quiz_id(quiz_id)
-    try:
-        pack = quiz_pack_service.get_ready_quiz_pack(clean_quiz_id)
-        if not pack:
-            raise HTTPException(status_code=404, detail="Quiz pack not found.")
-        return learning_resources_service.public_resources_for_quiz(clean_quiz_id)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="প্রস্তুতির রিসোর্স এখন খোলা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।",
-        ) from exc
-
-
-@app.post("/api/resources/{resource_id}/feedback")
-def submit_resource_feedback(resource_id: uuid.UUID, payload: ResourceFeedbackRequest) -> dict:
-    try:
-        return resource_quality_service.submit_feedback(
-            _write_user_from_payload(payload, "resource-feedback", str(resource_id)),
-            resource_id=str(resource_id),
-            feedback_type=payload.feedback_type,
-            rating=payload.rating,
-            details=payload.details,
-        )
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="রিসোর্স মতামত সংরক্ষণ করা যায়নি।") from exc
-
-
-@app.post("/api/quiz/{quiz_id}/attempts/start")
-def start_quiz_attempt(quiz_id: str, payload: StartQuizRequest) -> dict:
-    try:
-        clean_quiz_id = _clean_quiz_id(quiz_id)
-        telegram_user = _write_user_from_payload(
-            payload,
-            "quiz-start",
-            f"{clean_quiz_id}:{payload.attempt_id}",
-        )
-        return quiz_pack_service.start_quiz_attempt(
-            quiz_id=clean_quiz_id,
-            telegram_user=telegram_user,
-            attempt_id=payload.attempt_id,
-        )
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="কুইজের সময় শুরু করা যায়নি। আবার চেষ্টা করুন।") from exc
-
-
-@app.post("/api/quiz/{quiz_id}/submit")
-def submit_quiz(quiz_id: str, payload: SubmitQuizRequest) -> dict:
-    try:
-        clean_quiz_id = _clean_quiz_id(quiz_id)
-        telegram_user = _write_user_from_payload(
-            payload,
-            "quiz-submit",
-            f"{clean_quiz_id}:{payload.attempt_id}",
-        )
-        return quiz_pack_service.submit_quiz_attempts(
-            quiz_id=clean_quiz_id,
-            telegram_user=telegram_user,
-            answers=payload.answers,
-            attempt_id=payload.attempt_id,
-            client_duration_seconds=payload.duration_seconds,
-            response_times=payload.response_times,
-            marked_for_review=payload.marked_for_review,
-        )
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="স্কোর জমা করা যায়নি। একটু পরে আবার চেষ্টা করুন।") from exc
-
-
-@app.get("/api/quiz/{quiz_id}/attempt/{attempt_id}")
-def get_quiz_attempt_result(
-    quiz_id: str,
-    attempt_id: uuid.UUID,
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    try:
-        result = quiz_pack_service.get_quiz_attempt_result(
-            quiz_id=_clean_quiz_id(quiz_id),
-            telegram_user=_telegram_user_from_init_data(init_data),
-            client_attempt_id=attempt_id,
-        )
-        if result is None:
-            raise HTTPException(status_code=404, detail="এই চেষ্টার ফল পাওয়া যায়নি।")
-        return result
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="ফলাফল এখন খোলা যাচ্ছে না। একটু পরে আবার চেষ্টা করুন।",
-        ) from exc
-
-
-@app.post("/api/questions/{question_id}/report")
-def report_question(question_id: uuid.UUID, payload: ReportQuestionRequest) -> dict:
-    try:
-        clean_quiz_id = _clean_quiz_id(payload.quiz_id)
-        telegram_user = _write_user_from_payload(
-            payload,
-            "question-report",
-            f"{clean_quiz_id}:{payload.attempt_id}",
-        )
-        return quiz_pack_service.submit_question_report(
-            question_id=str(question_id),
-            quiz_id=clean_quiz_id,
-            telegram_user=telegram_user,
-            client_attempt_id=payload.attempt_id,
-            reason=payload.reason,
-            details=payload.details,
-        )
-    except HTTPException:
-        raise
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        message = str(exc)
-        status = 409 if "already reported" in message else 429 if "rate limit" in message else 400
-        raise HTTPException(status_code=status, detail=message) from exc
-    except Exception as exc:
-        raise HTTPException(status_code=503, detail="রিপোর্ট জমা করা যায়নি। একটু পরে আবার চেষ্টা করুন।") from exc
 
 
 def _write_user_from_payload(
@@ -472,6 +290,19 @@ def _load_public_fallback(quiz_id: str) -> dict | None:
     }
 
 
+app.include_router(
+    build_quiz_router(
+        quiz_service=quiz_pack_service,
+        learning_resources_service=learning_resources_service,
+        resource_quality_service=resource_quality_service,
+        read_user=_telegram_user_from_init_data,
+        write_user=_write_user_from_payload,
+        clean_quiz_id=_clean_quiz_id,
+        load_public_fallback=lambda quiz_id: _load_public_fallback(quiz_id),
+        mark_answer_free=_mark_answer_free,
+        value_error_status=_value_error_status,
+    )
+)
 app.include_router(
     build_admin_router(
         resource_service=resource_quality_service,
