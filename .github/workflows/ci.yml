@@ -35,6 +35,7 @@ jobs:
         with:
           python-version: "3.12"
       - run: pip install -r requirements-dev.lock
+      - run: python scripts/check_lockfile_parity.py
       - run: ruff check .
       - run: mypy
       - name: Build disposable database and apply every migration

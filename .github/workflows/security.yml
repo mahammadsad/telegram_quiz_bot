@@ -26,6 +26,7 @@ jobs:
           node-version: "22"
           cache: npm
       - run: pip install -r requirements-dev.lock
+      - run: python scripts/check_lockfile_parity.py
       - run: pip-audit -r requirements.lock
       - run: bandit -q -lll -r app.py bot.py config database models services storage telegram utils scripts
       - run: npm ci
