@@ -94,6 +94,7 @@ class RefreshStats:
     rss_items: int
     accepted: int
     skipped: int
+    source_status: str = "available"
 
 
 CLASSIFICATIONS: dict[str, tuple[str, str, str]] = {
@@ -222,6 +223,7 @@ def main() -> int:
         "sourceDomains": dict(sorted(Counter(
             str(row["source_domain"]) for row in clean_rows
         ).items())),
+        "sourceStatus": {"rbi": stats.source_status},
         "coverage": coverage,
         "imported": imported_count,
         "approved": args.approve,
@@ -310,6 +312,7 @@ def refresh_rows(
         rss_items=len(items) + rbi_stats.rss_items,
         accepted=len(rows),
         skipped=skipped,
+        source_status=rbi_stats.source_status,
     )
 
 
@@ -323,7 +326,14 @@ def refresh_rbi_rows(*, fetch_text, now: datetime, max_items: int) -> tuple[list
     try:
         raw_items = parse_rbi_rss_items(fetch_text(RBI_PRESS_RELEASES_RSS_URL))
     except Exception:
-        return [], RefreshStats(rss_items=0, accepted=0, skipped=0)
+        # RBI is supplementary: preserve healthy PIB ingestion, but expose the
+        # loss of independent-source diversity in every workflow log.
+        return [], RefreshStats(
+            rss_items=0,
+            accepted=0,
+            skipped=0,
+            source_status="unavailable",
+        )
     rows: list[dict] = []
     skipped = 0
     for item in raw_items[:max_items]:

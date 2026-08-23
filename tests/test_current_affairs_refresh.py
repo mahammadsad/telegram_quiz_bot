@@ -18,6 +18,7 @@ from scripts.refresh_current_affairs_sources import (
     parse_pib_datetime,
     parse_rbi_rss_items,
     rbi_item_to_release,
+    refresh_rbi_rows,
     refresh_rows,
     release_to_source_row,
     validate_current_affairs_coverage,
@@ -126,6 +127,17 @@ def test_rbi_rss_release_is_canonicalized_and_retains_only_safe_official_text():
     assert row["source_domain"] == "rbi.org.in"
     assert row["fact_version"].startswith("rbi-rbi-63426-")
     assert len(validate_source_bundle([row])) == 1
+
+
+def test_rbi_outage_is_explicitly_reported_without_blocking_other_official_sources():
+    rows, stats = refresh_rbi_rows(
+        fetch_text=lambda _url: (_ for _ in ()).throw(OSError("network unavailable")),
+        now=datetime(2026, 8, 23, tzinfo=timezone.utc),
+        max_items=20,
+    )
+
+    assert rows == []
+    assert stats.source_status == "unavailable"
 
 
 def test_refresh_combines_every_official_pib_endpoint_for_broad_coverage():
