@@ -31,3 +31,30 @@ test("quiz start experience satisfies automated WCAG 2.2 AA checks", async ({ pa
   await expect(page.locator("#screen-intro")).toBeVisible();
   await expectWcag22Aa(page);
 });
+
+test("dashboard satisfies automated WCAG 2.2 AA checks", async ({ page }) => {
+  await installTelegramMock(page);
+  await installApiMocks(page);
+  await page.goto("/dashboard.html");
+
+  await expect(page.locator("#content")).toBeVisible();
+  await expectWcag22Aa(page);
+});
+
+test("settings satisfies automated WCAG 2.2 AA checks", async ({ page }) => {
+  await installTelegramMock(page);
+  await installApiMocks(page);
+  await page.goto("/settings.html");
+
+  await expect(page.locator("#settings")).toBeVisible();
+  await expectWcag22Aa(page);
+});
+
+test("revision practice satisfies automated WCAG 2.2 AA checks", async ({ page }) => {
+  await installTelegramMock(page);
+  await installApiMocks(page, { practiceSource: "due" });
+  await page.goto("/practice.html?source=due");
+
+  await expect(page.locator("#practice")).toBeVisible();
+  await expectWcag22Aa(page);
+});
