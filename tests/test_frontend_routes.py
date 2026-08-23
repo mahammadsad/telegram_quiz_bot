@@ -27,6 +27,7 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     expected = {
         "/miniapp-shell.css": "text/css",
         "/index.css": "text/css",
+        "/index.js": "text/javascript",
         "/miniapp-shell.js": "text/javascript",
         "/service-worker.js": "text/javascript",
         "/manifest.webmanifest": "application/manifest+json",
@@ -41,6 +42,7 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert worker.headers["service-worker-allowed"] == "/"
     assert CLIENT.get("/miniapp-shell.css").headers["cache-control"] == "public, max-age=300"
     assert CLIENT.get("/index.css").headers["cache-control"] == "public, max-age=300"
+    assert CLIENT.get("/index.js").headers["cache-control"] == "public, max-age=3600"
     source = worker.text
     assert "NETWORK_TIMEOUT_MS = 8000" in source
     assert "new AbortController()" in source
@@ -59,8 +61,9 @@ def test_quiz_intro_uses_citizen_affairs_identity_and_parent_site_cta() -> None:
 def test_browser_quiz_preview_does_not_claim_to_save_an_unauthenticated_attempt() -> None:
     html = CLIENT.get("/").text
     assert "স্কোর, র‍্যাঙ্ক ও অগ্রগতি সংরক্ষণ করতে Telegram থেকে কুইজটি খুলুন" in html
-    assert "readOnlyMode = legacyLocal || !isTelegram || previewOnly === true" in html
-    assert 'readOnlyMode ? "Preview" : "Practice"' in html
+    script = CLIENT.get("/index.js").text
+    assert "readOnlyMode = legacyLocal || !isTelegram || previewOnly === true" in script
+    assert 'readOnlyMode ? "Preview" : "Practice"' in script
 
 
 def test_mock_page_without_uuid_opens_catalog_instead_of_dead_end() -> None:

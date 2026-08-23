@@ -2,7 +2,10 @@ import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-INDEX = (ROOT / "index.html").read_text(encoding="utf-8")
+INDEX = (
+    (ROOT / "index.html").read_text(encoding="utf-8")
+    + (ROOT / "index.js").read_text(encoding="utf-8")
+)
 PRACTICE = (ROOT / "practice.html").read_text(encoding="utf-8")
 DASHBOARD = (ROOT / "dashboard.html").read_text(encoding="utf-8")
 SETTINGS = (ROOT / "settings.html").read_text(encoding="utf-8")
@@ -158,7 +161,10 @@ def test_authenticated_learning_pages_bound_stalled_network_requests() -> None:
 def test_home_styles_are_externalized_for_the_csp_migration() -> None:
     assert '<link rel="stylesheet" href="index.css" />' in INDEX
     assert "<style>" not in INDEX
+    assert '<script src="index.js"></script>' in INDEX
+    assert INDEX.count("<script") == 3
     assert "index.css" in WORKER
+    assert "index.js" in WORKER
 
 
 def test_missing_quiz_message_is_user_facing_not_an_operator_instruction() -> None:

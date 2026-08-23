@@ -437,6 +437,15 @@ def index_styles() -> FileResponse:
     )
 
 
+@app.get("/index.js")
+def index_script() -> FileResponse:
+    return FileResponse(
+        ROOT / "index.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @app.get("/service-worker.js")
 def service_worker() -> FileResponse:
     return FileResponse(
