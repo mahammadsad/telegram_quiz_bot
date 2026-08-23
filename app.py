@@ -42,9 +42,9 @@ from config.settings import (
 )
 from config.subjects import SUBJECTS
 from database.contract import APPLICATION_VERSION, REQUIRED_MIGRATION_VERSION
-from models.user import User
 from routes.admin import build_admin_router
 from routes.catalog import build_catalog_router
+from routes.leaderboards import build_leaderboard_router
 from routes.static_pages import build_static_router
 from routes.system import build_system_router
 from services import (
@@ -757,103 +757,6 @@ def save_my_preferences(payload: UserPreferencesRequest) -> dict:
         raise HTTPException(status_code=503, detail="পছন্দের সেটিং সংরক্ষণ করা যায়নি।") from exc
 
 
-@app.get("/api/quiz/{quiz_id}/leaderboard")
-def quiz_leaderboard(
-    quiz_id: str,
-    limit: int = 10,
-    offset: int = 0,
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    clean_quiz_id = _clean_quiz_id(quiz_id)
-    try:
-        user_id = None
-        if init_data:
-            telegram_user = _telegram_user_from_init_data(init_data)
-            user_id = str(users_repo.upsert_user(User.from_telegram(telegram_user))["id"])
-        result = stats_repo.quiz_leaderboard_for_user(
-            clean_quiz_id,
-            user_id=user_id,
-            limit=max(1, min(limit, 50)),
-            offset=max(0, offset),
-        )
-        return leaderboard_privacy.project_quiz_leaderboard(result)
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail=leaderboard_privacy.PRIVACY_MAINTENANCE_MESSAGE,
-        ) from exc
-
-
-@app.get("/api/leaderboard")
-def leaderboard(
-    limit: int = 20,
-    offset: int = 0,
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    try:
-        user_id = None
-        if init_data:
-            telegram_user = _telegram_user_from_init_data(init_data)
-            user_id = str(users_repo.upsert_user(User.from_telegram(telegram_user))["id"])
-        result = stats_repo.typed_leaderboard_for_user(
-            "overall_rank",
-            subject_key=None,
-            user_id=user_id,
-            limit=max(1, min(limit, 100)),
-            offset=max(0, offset),
-        )
-        return {
-            **leaderboard_privacy.project_typed_leaderboard(result),
-            "unavailable": False,
-        }
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail=leaderboard_privacy.PRIVACY_MAINTENANCE_MESSAGE,
-        ) from exc
-
-
-@app.get("/api/leaderboards/{board_type}")
-def typed_leaderboard(
-    board_type: str,
-    subject: str | None = None,
-    limit: int = 20,
-    offset: int = 0,
-    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
-) -> dict:
-    try:
-        if subject and subject not in SUBJECTS:
-            raise ValueError("Unknown subject key.")
-        user_id = None
-        if init_data:
-            telegram_user = _telegram_user_from_init_data(init_data)
-            user_id = str(users_repo.upsert_user(User.from_telegram(telegram_user))["id"])
-        result = stats_repo.typed_leaderboard_for_user(
-            board_type,
-            subject_key=subject,
-            user_id=user_id,
-            limit=max(1, min(limit, 100)),
-            offset=max(0, offset),
-        )
-        return {
-            **leaderboard_privacy.project_typed_leaderboard(result),
-            "unavailable": False,
-        }
-    except TelegramAuthError as exc:
-        raise HTTPException(status_code=401, detail=str(exc)) from exc
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail=leaderboard_privacy.PRIVACY_MAINTENANCE_MESSAGE,
-        ) from exc
-
-
 def _write_user_from_payload(
     payload: (
         SubmitQuizRequest
@@ -976,5 +879,15 @@ app.include_router(
         read_user=_telegram_user_from_init_data,
         write_user=_write_user_from_payload,
         value_error_status=_value_error_status,
+    )
+)
+app.include_router(
+    build_leaderboard_router(
+        stats_repo=stats_repo,
+        users_repo=users_repo,
+        privacy_service=leaderboard_privacy,
+        subjects=SUBJECTS,
+        read_user=_telegram_user_from_init_data,
+        clean_quiz_id=_clean_quiz_id,
     )
 )
