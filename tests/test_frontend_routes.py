@@ -26,6 +26,7 @@ def test_frontend_routes_include_index_alias_for_cached_mini_apps() -> None:
 def test_pwa_shell_routes_and_cache_boundaries() -> None:
     expected = {
         "/miniapp-shell.css": "text/css",
+        "/index.css": "text/css",
         "/miniapp-shell.js": "text/javascript",
         "/service-worker.js": "text/javascript",
         "/manifest.webmanifest": "application/manifest+json",
@@ -39,6 +40,7 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert worker.headers["cache-control"] == "no-cache, max-age=0"
     assert worker.headers["service-worker-allowed"] == "/"
     assert CLIENT.get("/miniapp-shell.css").headers["cache-control"] == "public, max-age=300"
+    assert CLIENT.get("/index.css").headers["cache-control"] == "public, max-age=300"
     source = worker.text
     assert "NETWORK_TIMEOUT_MS = 8000" in source
     assert "new AbortController()" in source

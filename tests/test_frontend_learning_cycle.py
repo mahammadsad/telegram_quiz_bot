@@ -155,6 +155,12 @@ def test_authenticated_learning_pages_bound_stalled_network_requests() -> None:
         assert 'src="miniapp-shell.js"></script>' in source
 
 
+def test_home_styles_are_externalized_for_the_csp_migration() -> None:
+    assert '<link rel="stylesheet" href="index.css" />' in INDEX
+    assert "<style>" not in INDEX
+    assert "index.css" in WORKER
+
+
 def test_missing_quiz_message_is_user_facing_not_an_operator_instruction() -> None:
     assert "এই কুইজটি এখনও পাওয়া যাচ্ছে না" in INDEX
     assert "API status:" not in INDEX

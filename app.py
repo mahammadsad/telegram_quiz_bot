@@ -428,6 +428,15 @@ def miniapp_shell_styles() -> FileResponse:
     )
 
 
+@app.get("/index.css")
+def index_styles() -> FileResponse:
+    return FileResponse(
+        ROOT / "index.css",
+        media_type="text/css",
+        headers={"Cache-Control": "public, max-age=300"},
+    )
+
+
 @app.get("/service-worker.js")
 def service_worker() -> FileResponse:
     return FileResponse(
