@@ -1,0 +1,176 @@
+(function(){
+  "use strict";
+  var tg=window.Telegram&&window.Telegram.WebApp?window.Telegram.WebApp:null;
+  var initData=tg&&tg.initData?tg.initData:"";
+  var telegramLaunchHash=/(?:^|&)tgWebAppData=/.test(window.location.hash.slice(1))
+    ?window.location.hash:"";
+  installTelegramNavigation();
+  if(tg){try{tg.ready();tg.expand();}catch(e){}}
+  var API_BASE=(window.QUIZ_API_BASE||document.querySelector('meta[name="quiz-api-base"]').content||"").replace(/\/$/,"");
+  var params=new URLSearchParams(location.search);
+  var requestedSource=params.get("source")||"wrong";
+  var subject=params.get("subject")||"";
+  if(["wrong","due","bookmark","weak_topic"].indexOf(requestedSource)<0)requestedSource="wrong";
+  var launchQuizId=(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.start_param)||"";
+  var quizHomeUrl=telegramUrl(launchQuizId?"/?quiz="+encodeURIComponent(launchQuizId):"/");
+  var rows=[],index=0,selected=null,started=0,submitting=false,answerFrozen=false;
+  var queueMode="",queueSource="",attemptId="",audioContext=null;
+  var feedbackPlayed=Object.create(null);
+  var preferences={sound:readLocalPreference("revisionSoundEnabled",true),vibration:readLocalPreference("revisionVibrationEnabled",false)};
+  var LETTERS=["A","B","C","D"],BN=["০","১","২","৩","৪","৫","৬","৭","৮","৯"];
+  var labels={wrong:["ভুল প্রশ্ন অনুশীলন","সাম্প্রতিক ভুলগুলো আবার চেষ্টা করুন"],due:["আজকের পুনরাবৃত্তি","নির্ধারিত প্রশ্নগুলো মনে করুন"],bookmark:["বুকমার্ক অনুশীলন","সংরক্ষিত প্রশ্নগুলো ঝালিয়ে নিন"],weak_topic:["দুর্বল টপিক","কম দক্ষতার প্রশ্ন অনুশীলন করুন"]};
+
+  function el(id){return document.getElementById(id)}
+  function bn(v){return String(v).replace(/[0-9]/g,function(d){return BN[+d]})}
+  function api(p){return API_BASE+p}
+  function telegramUrl(path){
+    var url=new URL(path,window.location.href);
+    if(url.origin!==window.location.origin)return url.href;
+    if(telegramLaunchHash){
+      if(url.hash&&url.hash!==telegramLaunchHash){
+        var section=url.hash.slice(1);
+        if(/^[A-Za-z0-9_-]+$/.test(section))url.searchParams.set("section",section);
+      }
+      url.hash=telegramLaunchHash;
+    }
+    return url.pathname+url.search+url.hash;
+  }
+  function navigateTelegram(path){window.location.href=telegramUrl(path)}
+  function installTelegramNavigation(){
+    if(!telegramLaunchHash)return;
+    document.addEventListener("click",function(event){
+      if(event.defaultPrevented||(event.button!==undefined&&event.button!==0)||
+          event.metaKey||event.ctrlKey||event.shiftKey||event.altKey)return;
+      var link=event.target.closest?event.target.closest("a[href]"):null;
+      if(!link||link.target==="_blank"||link.hasAttribute("download"))return;
+      var url=new URL(link.getAttribute("href"),window.location.href);
+      if(url.origin!==window.location.origin)return;
+      event.preventDefault();navigateTelegram(link.getAttribute("href"));
+    });
+  }
+  function state(name){["loading","empty","error","practice"].forEach(function(k){el(k).classList.toggle("hidden",k!==name)})}
+  function check(response){return response.ok?response.json():response.json().catch(function(){return{}}).then(function(body){var error=new Error(body.detail||String(response.status));error.status=response.status;throw error})}
+  function readLocalPreference(name,fallback){try{var value=localStorage.getItem("telegram-quiz-pref:"+name);return value===null?fallback:value==="true"}catch(e){return fallback}}
+  function writeLocalPreference(name,value){try{localStorage.setItem("telegram-quiz-pref:"+name,String(!!value))}catch(e){}}
+  function attemptKey(){return "telegram-practice-attempt:"+(rows[index]&&rows[index].questionId||"unknown")+":"+queueMode}
+  function validUuid(value){return /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value||"")}
+  function newUuid(){
+    if(window.crypto&&typeof window.crypto.randomUUID==="function")return window.crypto.randomUUID();
+    if(!window.crypto||typeof window.crypto.getRandomValues!=="function")throw new Error("নতুন চেষ্টার নিরাপদ পরিচয় তৈরি করা যায়নি।");
+    var bytes=new Uint8Array(16);window.crypto.getRandomValues(bytes);bytes[6]=(bytes[6]&15)|64;bytes[8]=(bytes[8]&63)|128;
+    var hex=Array.prototype.map.call(bytes,function(value){return value.toString(16).padStart(2,"0")}).join("");
+    return hex.slice(0,8)+"-"+hex.slice(8,12)+"-"+hex.slice(12,16)+"-"+hex.slice(16,20)+"-"+hex.slice(20);
+  }
+  function savePending(submitted){try{localStorage.setItem(attemptKey(),JSON.stringify({attemptId:attemptId,selectedIndex:selected,submitted:!!submitted}))}catch(e){}}
+  function clearPending(){try{localStorage.removeItem(attemptKey())}catch(e){}}
+  function restorePending(){
+    var pending=null;try{pending=JSON.parse(localStorage.getItem(attemptKey())||"null")}catch(e){}
+    if(!pending||!validUuid(pending.attemptId)){attemptId=newUuid();selected=null;answerFrozen=false;savePending(false);return}
+    attemptId=pending.attemptId;
+    selected=[0,1,2,3].indexOf(pending.selectedIndex)>=0?pending.selectedIndex:null;
+    answerFrozen=!!pending.submitted;
+  }
+
+  el("title").textContent=labels[requestedSource][0];el("subtitle").textContent=labels[requestedSource][1];
+  el("empty-quiz-link").href=quizHomeUrl;
+  el("nav-practice").classList.toggle("active",requestedSource!=="due");
+  el("nav-revision").classList.toggle("active",requestedSource==="due");
+  el("submit").addEventListener("click",submit);el("next").addEventListener("click",next);el("retry").addEventListener("click",load);
+  document.addEventListener("keydown",function(event){if(answerFrozen||submitting)return;if(["1","2","3","4"].indexOf(event.key)>=0){selected=+event.key-1;savePending(false);renderOptions()}else if(event.key==="Enter"&&selected!==null)submit()});
+  load();
+
+  function load(){
+    if(!initData){state("error");return}
+    state("loading");
+    var path=requestedSource==="due"?"/api/me/reviews/due?limit=100":requestedSource==="bookmark"?"/api/me/bookmarks":"/api/me/wrong-questions?limit=100"+(subject?"&subject="+encodeURIComponent(subject):"");
+    Promise.all([
+      miniappFetch(api(path),{headers:{"X-Telegram-Init-Data":initData}}).then(check),
+      miniappFetch(api("/api/me/preferences"),{headers:{"X-Telegram-Init-Data":initData}}).then(check).catch(function(){return null})
+    ]).then(function(result){
+      var data=result[0],prefs=result[1];
+      if(["revision","practice"].indexOf(data.mode)<0||["wrong","due","bookmark","weak_topic"].indexOf(data.sourceType)<0)throw new Error("Queue mode is missing");
+      queueMode=data.mode;queueSource=data.sourceType;
+      if(prefs){preferences.sound=prefs.revisionSoundEnabled!==false;preferences.vibration=prefs.revisionVibrationEnabled===true;writeLocalPreference("revisionSoundEnabled",preferences.sound);writeLocalPreference("revisionVibrationEnabled",preferences.vibration)}
+      rows=requestedSource==="bookmark"?(data.questions||[]):(data.rows||[]);
+      if(queueSource==="weak_topic")rows.sort(function(a,b){return(a.masteryScore||0)-(b.masteryScore||0)});
+      el("count").textContent=bn(rows.length)+"টি";
+      if(!rows.length){state("empty");return}index=0;render();
+    }).catch(function(){state("error")});
+  }
+
+  function render(){
+    state("practice");submitting=false;started=performance.now();restorePending();
+    el("marked").checked=!!rows[index].markedForReview;el("marked").disabled=answerFrozen;
+    el("feedback").classList.add("hidden");el("next-wrap").classList.add("hidden");el("submit").parentElement.classList.remove("hidden");
+    el("submit").disabled=false;el("submit").textContent=answerFrozen?"একই উত্তর আবার পাঠান":"উত্তর যাচাই করুন";
+    el("position").textContent="প্রশ্ন "+bn(index+1)+" / "+bn(rows.length);el("topic").textContent=rows[index].chapter||rows[index].subjectKey||"";
+    el("question").textContent=rows[index].q;el("bar").style.width=((index+1)/rows.length*100)+"%";
+    el("next").textContent=index===rows.length-1?(queueMode==="revision"?"পুনরাবৃত্তি শেষ করুন":"অনুশীলন শেষ করুন"):"পরবর্তী প্রশ্ন";
+    renderOptions();
+  }
+
+  function renderOptions(review){
+    var wrap=el("options");wrap.textContent="";(rows[index].o||[]).forEach(function(label,i){
+      var button=document.createElement("button");button.type="button";button.className="option"+(selected===i?" selected":"");
+      if(review){if(i===review.correctIndex)button.classList.add("correct");else if(i===selected)button.classList.add("wrong")}
+      button.disabled=answerFrozen||submitting||!!review;button.innerHTML='<span class="key">'+LETTERS[i]+'</span><span></span>';button.lastChild.textContent=label;
+      button.addEventListener("click",function(){if(!answerFrozen&&!submitting){selected=i;savePending(false);renderOptions()}});wrap.appendChild(button);
+    });
+  }
+
+  function primeFeedback(){
+    if(queueMode!=="revision"||!preferences.sound)return;
+    try{var AudioCtor=window.AudioContext||window.webkitAudioContext;if(!AudioCtor)return;if(!audioContext)audioContext=new AudioCtor();if(audioContext.state==="suspended")audioContext.resume()}catch(e){}
+  }
+  function revisionMistakeFeedback(result){
+    if(result.mode!=="revision"||result.isCorrect||feedbackPlayed[attemptId])return;
+    feedbackPlayed[attemptId]=true;
+    if(preferences.sound&&audioContext){
+      try{var now=audioContext.currentTime,oscillator=audioContext.createOscillator(),gain=audioContext.createGain();oscillator.type="sine";oscillator.frequency.setValueAtTime(220,now);oscillator.frequency.exponentialRampToValueAtTime(150,now+.16);gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.09,now+.018);gain.gain.exponentialRampToValueAtTime(.0001,now+.17);oscillator.connect(gain);gain.connect(audioContext.destination);oscillator.start(now);oscillator.stop(now+.18)}catch(e){}
+    }
+    if(preferences.vibration&&navigator.vibrate){try{navigator.vibrate(70)}catch(e){}}
+  }
+
+  function submit(){
+    if(submitting||selected===null)return;primeFeedback();submitting=true;answerFrozen=true;savePending(true);renderOptions();el("feedback").classList.add("hidden");
+    el("submit").disabled=true;el("submit").textContent="উত্তর যাচাই হচ্ছে...";el("marked").disabled=true;
+    var seconds=Math.min(3600,Math.max(0,(performance.now()-started)/1000));
+    miniappFetch(api("/api/me/practice/"+encodeURIComponent(rows[index].questionId)),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:initData,attemptId:attemptId,selectedIndex:selected,sourceType:queueSource,mode:queueMode,responseTimeSeconds:seconds,markedForReview:el("marked").checked})})
+      .then(check).then(function(result){
+        submitting=false;clearPending();renderOptions(result);revisionMistakeFeedback(result);
+        var box=el("feedback");box.className="feedback"+(result.isCorrect?"":" bad");box.textContent="";
+        var heading=document.createElement("h2");heading.textContent=result.isCorrect?"সঠিক উত্তর":"উত্তরটি ভুল হয়েছে";box.appendChild(heading);
+        if(!result.isCorrect){var correct=document.createElement("p");correct.textContent="সঠিক উত্তর: "+rows[index].o[result.correctIndex];box.appendChild(correct)}
+        var explanation=document.createElement("p");explanation.textContent=result.explanation||"ব্যাখ্যা পাওয়া যায়নি।";box.appendChild(explanation);
+        if(result.sourceUrl&&/^https:\/\//i.test(result.sourceUrl)){var link=document.createElement("a");link.href=result.sourceUrl;link.target="_blank";link.rel="noopener noreferrer";link.textContent="যাচাই করা উৎস দেখুন";box.appendChild(link)}
+        if(result.mode==="revision")appendReportControl(box,rows[index].questionId,attemptId);
+        box.classList.remove("hidden");el("submit").parentElement.classList.add("hidden");el("next-wrap").classList.remove("hidden");el("next").focus();
+      }).catch(function(error){
+        submitting=false;var box=el("feedback");box.className="feedback bad";box.textContent="";
+        var heading=document.createElement("h2"),message=document.createElement("p");heading.textContent="উত্তর সংরক্ষণ নিশ্চিত হয়নি";
+        el("submit").disabled=error.status===409;el("submit").textContent=error.status===409?"এই উত্তরটি বদলানো যাবে না":"একই উত্তর আবার পাঠান";
+        message.textContent=error.status===409?"এই চেষ্টায় অন্য একটি উত্তর আগে জমা হয়েছে। প্রশ্নটি আবার খুলে নতুন চেষ্টা শুরু করুন।":"ইন্টারনেট সংযোগ দেখে একই উত্তর দিয়ে আবার চেষ্টা করুন। এতে নকল চেষ্টা তৈরি হবে না।";
+        box.append(heading,message);box.classList.remove("hidden");renderOptions();
+      });
+  }
+
+  function appendReportControl(box,questionId,reportAttemptId){
+    var details=document.createElement("details"),summary=document.createElement("summary"),fields=document.createElement("div"),reason=document.createElement("select"),notes=document.createElement("textarea"),button=document.createElement("button"),message=document.createElement("p");
+    details.className="report";summary.textContent="প্রশ্নটি রিপোর্ট করুন";fields.className="report-fields";reason.className="field";reason.setAttribute("aria-label","রিপোর্টের কারণ");
+    [["wrong_answer","সঠিক উত্তর ভুল"],["multiple_correct","একাধিক উত্তর সঠিক"],["ambiguous","প্রশ্ন অস্পষ্ট"],["incorrect_explanation","ব্যাখ্যা ভুল"],["language_spelling","ভাষা বা বানান"],["outdated","তথ্য পুরোনো"],["outside_syllabus","সিলেবাসের বাইরে"],["broken_source","উৎস খোলা যাচ্ছে না"],["duplicate_question","একই প্রশ্ন পুনরাবৃত্তি"],["translation_error","অনুবাদ ভুল"],["other","অন্যান্য"]].forEach(function(item){var option=document.createElement("option");option.value=item[0];option.textContent=item[1];reason.appendChild(option)});
+    notes.className="field";notes.maxLength=1000;notes.placeholder="প্রয়োজনে সংক্ষিপ্ত বিবরণ লিখুন";button.type="button";button.className="btn";button.textContent="রিপোর্ট পাঠান";message.className="report-message";message.setAttribute("aria-live","polite");
+    button.addEventListener("click",function(){submitPracticeReport(questionId,reportAttemptId,reason,notes,button,message)});fields.append(reason,notes,button,message);details.append(summary,fields);box.appendChild(details);
+  }
+
+  function submitPracticeReport(questionId,reportAttemptId,reason,notes,button,message){
+    if(button.disabled)return;button.disabled=true;button.textContent="পাঠানো হচ্ছে...";message.textContent="";
+    miniappFetch(api("/api/me/practice/"+encodeURIComponent(questionId)+"/report"),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:initData,attemptId:reportAttemptId,reason:reason.value,details:notes.value})})
+      .then(check).then(function(){message.textContent="রিপোর্ট গ্রহণ করা হয়েছে। ধন্যবাদ।";button.textContent="রিপোর্ট পাঠানো হয়েছে"})
+      .catch(function(error){button.disabled=false;button.textContent="আবার রিপোর্ট পাঠান";message.textContent=error.status===409?"এই পুনরাবৃত্তি থেকে প্রশ্নটি আগে রিপোর্ট করা হয়েছে।":"রিপোর্ট পাঠানো যায়নি। আবার চেষ্টা করুন।"});
+  }
+
+  function next(){
+    if(index<rows.length-1){index++;render()}
+    else{state("empty");el("empty-message").textContent=queueMode==="revision"?"আজকের পুনরাবৃত্তি শেষ। আপনার পরবর্তী সময়সূচি আপডেট হয়েছে।":"এই অনুশীলন শেষ। আপনার অগ্রগতি সংরক্ষিত হয়েছে।"}
+  }
+})();

@@ -6,7 +6,10 @@ INDEX = (
     (ROOT / "index.html").read_text(encoding="utf-8")
     + (ROOT / "index.js").read_text(encoding="utf-8")
 )
-PRACTICE = (ROOT / "practice.html").read_text(encoding="utf-8")
+PRACTICE = (
+    (ROOT / "practice.html").read_text(encoding="utf-8")
+    + (ROOT / "practice.js").read_text(encoding="utf-8")
+)
 DASHBOARD = (ROOT / "dashboard.html").read_text(encoding="utf-8")
 SETTINGS = (ROOT / "settings.html").read_text(encoding="utf-8")
 MOCK = (
@@ -182,6 +185,8 @@ def test_practice_styles_are_externalized_for_the_csp_migration() -> None:
     assert '<link rel="stylesheet" href="practice.css" />' in PRACTICE
     assert "<style>" not in PRACTICE
     assert "practice.css" in WORKER
+    assert '<script src="practice.js"></script>' in PRACTICE
+    assert "practice.js" in WORKER
 
 
 def test_missing_quiz_message_is_user_facing_not_an_operator_instruction() -> None:

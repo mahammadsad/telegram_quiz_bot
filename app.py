@@ -473,6 +473,15 @@ def practice_styles() -> FileResponse:
     )
 
 
+@app.get("/practice.js")
+def practice_script() -> FileResponse:
+    return FileResponse(
+        ROOT / "practice.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @app.get("/service-worker.js")
 def service_worker() -> FileResponse:
     return FileResponse(
