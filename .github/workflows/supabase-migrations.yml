@@ -68,19 +68,24 @@ jobs:
           print("Production identity, acknowledgement, credentials, and migration file gate passed.")
           PY
 
+      - name: Link the exact production project for this ephemeral runner
+        run: >-
+          npx --yes supabase@2.77.0 link
+          --project-ref "$EXPECTED_SUPABASE_PROJECT_REF"
+          --password "$SUPABASE_DB_PASSWORD"
+          --yes
+
       - name: Show migration plan without changing production
         run: >-
           npx --yes supabase@2.77.0 db push
-          --project-ref "$EXPECTED_SUPABASE_PROJECT_REF"
           --password "$SUPABASE_DB_PASSWORD"
-          --include-all --skip-vault --dry-run --yes
+          --include-all --dry-run --yes
 
       - name: Apply tracked migrations after successful dry run
         run: >-
           npx --yes supabase@2.77.0 db push
-          --project-ref "$EXPECTED_SUPABASE_PROJECT_REF"
           --password "$SUPABASE_DB_PASSWORD"
-          --include-all --skip-vault --yes
+          --include-all --yes
 
       - name: Verify learner report status projection is callable
         shell: bash

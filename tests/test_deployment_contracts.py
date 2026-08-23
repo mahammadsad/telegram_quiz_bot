@@ -229,8 +229,9 @@ def test_production_migration_workflow_is_manual_and_fail_closed() -> None:
 
     source = path.read_text(encoding="utf-8")
     assert "APPLY TRACKED MIGRATIONS TO {expected_ref}" in source
+    assert "supabase@2.77.0 link" in source
+    assert "--project-ref \"$EXPECTED_SUPABASE_PROJECT_REF\"" in source
     assert "--dry-run" in source
-    assert "--skip-vault" in source
     assert "get_my_question_report_statuses" in source
     assert "schedule:" not in source
     assert "push:" not in source
