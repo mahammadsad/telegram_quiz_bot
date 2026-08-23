@@ -76,7 +76,7 @@ def test_practice_ui_keeps_answers_hidden_until_authenticated_post():
     assert '"/api/me/wrong-questions?limit=100"' in PRACTICE
     assert '"/api/me/reviews/due?limit=100"' in PRACTICE
     assert '"/api/me/practice/"' in PRACTICE
-    post = PRACTICE.split('fetch(api("/api/me/practice/"', 1)[1]
+    post = PRACTICE.split('miniappFetch(api("/api/me/practice/"', 1)[1]
     assert "selectedIndex:selected" in post
     assert "result.correctIndex" in post
     assert "rows[index].correctIndex" not in PRACTICE
@@ -138,13 +138,21 @@ def test_only_a_complete_locale_is_advertised() -> None:
 def test_pwa_cache_is_fail_closed_for_answer_material() -> None:
     for source in (INDEX, DASHBOARD, PRACTICE, SETTINGS, MOCK):
         assert 'rel="manifest" href="manifest.webmanifest"' in source
-        assert 'src="miniapp-shell.js" defer' in source
+        assert 'src="miniapp-shell.js"' in source
     assert 'X-Answer-Free-Payload' in WORKER
     assert 'response.headers.get("X-Answer-Free-Payload") === "1"' in WORKER
     assert 'path.startsWith("/api/")' in WORKER
     for sensitive in ("attempt", "submit", "leaderboard", "correctIndex", "explanation"):
         assert sensitive not in WORKER.split("const SHELL_URLS", 1)[1].split("];", 1)[0]
     assert 'fetchWithTimeout(request, {cache: "no-store"})' in WORKER
+
+
+def test_authenticated_learning_pages_bound_stalled_network_requests() -> None:
+    assert "window.miniappFetch = fetchWithTimeout" in SHELL
+    assert "window.AbortController" in SHELL
+    for source in (PRACTICE, DASHBOARD, SETTINGS, MOCK):
+        assert "miniappFetch(api(" in source
+        assert 'src="miniapp-shell.js"></script>' in source
 
 
 def test_missing_quiz_message_is_user_facing_not_an_operator_instruction() -> None:

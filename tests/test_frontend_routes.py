@@ -64,7 +64,7 @@ def test_browser_quiz_preview_does_not_claim_to_save_an_unauthenticated_attempt(
 def test_mock_page_without_uuid_opens_catalog_instead_of_dead_end() -> None:
     html = CLIENT.get("/mock.html").text
     assert 'id="screen-catalog"' in html
-    assert 'fetch(api("/api/tests/catalog?limit=100"))' in html
+    assert 'miniappFetch(api("/api/tests/catalog?limit=100"))' in html
     assert "if(!validTestId(testId)){loadCatalog();return}" in html
 
 

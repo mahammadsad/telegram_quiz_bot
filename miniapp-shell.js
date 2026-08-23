@@ -45,6 +45,23 @@
     });
   }
 
+  function fetchWithTimeout(resource, options, timeoutMs) {
+    var requestOptions = Object.assign({}, options || {});
+    if (typeof window.AbortController !== "function") return window.fetch(resource, requestOptions);
+    var controller = new window.AbortController();
+    var originalSignal = requestOptions.signal;
+    requestOptions.signal = controller.signal;
+    if (originalSignal) {
+      if (originalSignal.aborted) controller.abort();
+      else originalSignal.addEventListener("abort", function () { controller.abort(); }, {once: true});
+    }
+    var timeout = typeof timeoutMs === "number"
+      ? timeoutMs
+      : (String(requestOptions.method || "GET").toUpperCase() === "GET" ? 15000 : 30000);
+    var timer = window.setTimeout(function () { controller.abort(); }, timeout);
+    return window.fetch(resource, requestOptions).finally(function () { window.clearTimeout(timer); });
+  }
+
   function ready() {
     installSkipLink();
     announceNetworkState();
@@ -62,4 +79,7 @@
     shellVersion: "8.6.0-ui2",
     basePath: new URL("./", document.baseURI).pathname,
   });
+  // All Mini App pages use this for bounded network waits. A stalled mobile
+  // connection must show a retry state rather than leave the learner spinning.
+  window.miniappFetch = fetchWithTimeout;
 })();

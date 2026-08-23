@@ -10,7 +10,7 @@
 <link rel="icon" href="pwa-icon.svg" type="image/svg+xml" />
 <link rel="stylesheet" href="miniapp-shell.css" />
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="miniapp-shell.js" defer></script>
+<script src="miniapp-shell.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
@@ -161,7 +161,7 @@
   function loadPreferences(){
     el("settings").classList.add("hidden");el("settings-state").classList.remove("hidden");el("settings-loader").classList.remove("hidden");
     el("settings-state-copy").textContent="সেটিংস লোড হচ্ছে...";el("settings-retry-wrap").classList.add("hidden");el("settings-retry").disabled=true;
-    fetch(api("/api/me/preferences"),{headers:{"X-Telegram-Init-Data":initData}}).then(check).then(function(prefs){
+    miniappFetch(api("/api/me/preferences"),{headers:{"X-Telegram-Init-Data":initData}}).then(check).then(function(prefs){
       fillPreferences(prefs);el("settings-state").classList.add("hidden");el("settings").classList.remove("hidden");
     }).catch(function(){showState("সেটিংস এখন লোড করা যাচ্ছে না। ইন্টারনেট দেখে আবার চেষ্টা করুন।",true)}).finally(function(){el("settings-retry").disabled=false});
   }
@@ -177,7 +177,7 @@
     try{var AudioCtor=window.AudioContext||window.webkitAudioContext;if(!AudioCtor)throw new Error("unsupported");var context=new AudioCtor(),now=context.currentTime,oscillator=context.createOscillator(),gain=context.createGain();oscillator.type="sine";oscillator.frequency.setValueAtTime(220,now);oscillator.frequency.exponentialRampToValueAtTime(150,now+.16);gain.gain.setValueAtTime(.0001,now);gain.gain.exponentialRampToValueAtTime(.09,now+.018);gain.gain.exponentialRampToValueAtTime(.0001,now+.17);oscillator.connect(gain);gain.connect(context.destination);oscillator.start(now);oscillator.stop(now+.18);oscillator.onended=function(){context.close();message.textContent="পরীক্ষার শব্দ বাজানো হয়েছে।"}}catch(error){message.textContent="এই ডিভাইসে শব্দ চালু করা যায়নি।"}
   }
 
-  function privacyAction(path){return fetch(api(path),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:initData})}).then(check)}
+  function privacyAction(path){return miniappFetch(api(path),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:initData})}).then(check)}
   function exportData(){var message=el("privacy-message");message.textContent="ডেটা প্রস্তুত হচ্ছে...";privacyAction("/api/me/data-export").then(function(data){var blob=new Blob([JSON.stringify(data,null,2)],{type:"application/json"}),link=document.createElement("a");link.href=URL.createObjectURL(blob);link.download="quiz-platform-data-export.json";link.click();URL.revokeObjectURL(link.href);message.textContent="ডেটা এক্সপোর্ট তৈরি হয়েছে।"}).catch(function(){message.textContent="ডেটা এক্সপোর্ট করা যায়নি। Mini App আবার খুলে চেষ্টা করুন।"})}
   function requestDeletion(){var message=el("privacy-message");if(!window.confirm("৭ দিন পরে আপনার অ্যাকাউন্ট ও শেখার ডেটা স্থায়ীভাবে মুছে যাবে। অনুরোধটি রাখবেন?"))return;privacyAction("/api/me/account-deletion").then(function(result){message.textContent="অনুরোধ রাখা হয়েছে। "+result.gracePeriodDays+" দিনের মধ্যে চাইলে বাতিল করুন।"}).catch(function(){message.textContent="মুছে ফেলার অনুরোধ রাখা যায়নি।"})}
   function cancelDeletion(){var message=el("privacy-message");privacyAction("/api/me/account-deletion/cancel").then(function(result){message.textContent=result.cancelled?"মুছে ফেলার অনুরোধ বাতিল হয়েছে।":"কোনো সক্রিয় অনুরোধ পাওয়া যায়নি।"}).catch(function(){message.textContent="অনুরোধ বাতিল করা যায়নি।"})}
@@ -185,7 +185,7 @@
   function savePreferences(event){
     event.preventDefault();var message=el("settings-message"),button=el("settings-submit");button.disabled=true;message.textContent="সংরক্ষণ হচ্ছে...";
     var sound=el("revision-sound").checked,vibration=el("revision-vibration").checked;
-    fetch(api("/api/me/preferences"),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:initData,targetExams:checked("exam-checks"),preferredSubjects:checked("subject-checks"),dailyQuestionTarget:+el("daily-target").value,preferredLanguage:el("language").value,difficultyPreference:el("difficulty").value,quizMode:el("quiz-mode").value,leaderboardVisible:el("leaderboard-visible").checked,publicDisplayName:el("display-name").value.trim()||null,usernameVisible:el("username-visible").checked,dailyReminderEnabled:false,revisionSoundEnabled:sound,revisionVibrationEnabled:vibration})})
+    miniappFetch(api("/api/me/preferences"),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:initData,targetExams:checked("exam-checks"),preferredSubjects:checked("subject-checks"),dailyQuestionTarget:+el("daily-target").value,preferredLanguage:el("language").value,difficultyPreference:el("difficulty").value,quizMode:el("quiz-mode").value,leaderboardVisible:el("leaderboard-visible").checked,publicDisplayName:el("display-name").value.trim()||null,usernameVisible:el("username-visible").checked,dailyReminderEnabled:false,revisionSoundEnabled:sound,revisionVibrationEnabled:vibration})})
       .then(check).then(function(){localPreference("revisionSoundEnabled",sound);localPreference("revisionVibrationEnabled",vibration);message.textContent="সেটিং সংরক্ষিত হয়েছে।"}).catch(function(){message.textContent="সেটিং সংরক্ষণ করা যায়নি।"}).finally(function(){button.disabled=false});
   }
 })();
