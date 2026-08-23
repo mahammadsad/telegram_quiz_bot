@@ -215,6 +215,9 @@ def main() -> int:
         "rssItems": stats.rss_items,
         "accepted": stats.accepted,
         "skipped": stats.skipped,
+        "sourceDomains": dict(sorted(Counter(
+            str(row["source_domain"]) for row in clean_rows
+        ).items())),
         "coverage": coverage,
         "imported": imported_count,
         "approved": args.approve,
