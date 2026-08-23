@@ -1,7 +1,7 @@
 "use strict";
 
-const SHELL_CACHE = "quiz-miniapp-shell-v8.6.0-ui6";
-const ANSWER_FREE_CACHE = "quiz-answer-free-v8.6.0-ui6";
+const SHELL_CACHE = "quiz-miniapp-shell-v8.6.0-ui7";
+const ANSWER_FREE_CACHE = "quiz-answer-free-v8.6.0-ui7";
 const NETWORK_TIMEOUT_MS = 8000;
 const BASE_URL = new URL("./", self.location.href);
 const BASE_PATH = BASE_URL.pathname;
@@ -13,6 +13,7 @@ const SHELL_URLS = [
   "settings.html",
   "mock.html",
   "mock.css",
+  "mock.js",
   "index.css",
   "index.js",
   "miniapp-shell.css",

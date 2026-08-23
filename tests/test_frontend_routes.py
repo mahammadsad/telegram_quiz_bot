@@ -29,6 +29,7 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
         "/index.css": "text/css",
         "/index.js": "text/javascript",
         "/mock.css": "text/css",
+        "/mock.js": "text/javascript",
         "/miniapp-shell.js": "text/javascript",
         "/service-worker.js": "text/javascript",
         "/manifest.webmanifest": "application/manifest+json",
@@ -45,6 +46,7 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert CLIENT.get("/index.css").headers["cache-control"] == "public, max-age=300"
     assert CLIENT.get("/index.js").headers["cache-control"] == "public, max-age=3600"
     assert CLIENT.get("/mock.css").headers["cache-control"] == "public, max-age=300"
+    assert CLIENT.get("/mock.js").headers["cache-control"] == "public, max-age=3600"
     source = worker.text
     assert "NETWORK_TIMEOUT_MS = 8000" in source
     assert "new AbortController()" in source
@@ -71,8 +73,9 @@ def test_browser_quiz_preview_does_not_claim_to_save_an_unauthenticated_attempt(
 def test_mock_page_without_uuid_opens_catalog_instead_of_dead_end() -> None:
     html = CLIENT.get("/mock.html").text
     assert 'id="screen-catalog"' in html
-    assert 'miniappFetch(api("/api/tests/catalog?limit=100"))' in html
-    assert "if(!validTestId(testId)){loadCatalog();return}" in html
+    script = CLIENT.get("/mock.js").text
+    assert 'miniappFetch(api("/api/tests/catalog?limit=100"))' in script
+    assert "if(!validTestId(testId)){loadCatalog();return}" in script
 
 
 def test_only_answer_free_pre_submission_projections_are_cache_eligible(monkeypatch) -> None:

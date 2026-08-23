@@ -455,6 +455,15 @@ def mock_styles() -> FileResponse:
     )
 
 
+@app.get("/mock.js")
+def mock_script() -> FileResponse:
+    return FileResponse(
+        ROOT / "mock.js",
+        media_type="text/javascript",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
+
+
 @app.get("/service-worker.js")
 def service_worker() -> FileResponse:
     return FileResponse(

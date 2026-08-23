@@ -9,7 +9,10 @@ INDEX = (
 PRACTICE = (ROOT / "practice.html").read_text(encoding="utf-8")
 DASHBOARD = (ROOT / "dashboard.html").read_text(encoding="utf-8")
 SETTINGS = (ROOT / "settings.html").read_text(encoding="utf-8")
-MOCK = (ROOT / "mock.html").read_text(encoding="utf-8")
+MOCK = (
+    (ROOT / "mock.html").read_text(encoding="utf-8")
+    + (ROOT / "mock.js").read_text(encoding="utf-8")
+)
 SHELL = (ROOT / "miniapp-shell.js").read_text(encoding="utf-8")
 WORKER = (ROOT / "service-worker.js").read_text(encoding="utf-8")
 
@@ -171,6 +174,8 @@ def test_mock_styles_are_externalized_for_the_csp_migration() -> None:
     assert '<link rel="stylesheet" href="mock.css" />' in MOCK
     assert "<style>" not in MOCK
     assert "mock.css" in WORKER
+    assert '<script src="mock.js"></script>' in MOCK
+    assert "mock.js" in WORKER
 
 
 def test_missing_quiz_message_is_user_facing_not_an_operator_instruction() -> None:
