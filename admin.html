@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="bn">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="quiz-api-base" content="" />
+<meta name="theme-color" content="#0f766e" />
+<title>অপারেশন ও মান নিয়ন্ত্রণ</title>
+<link rel="icon" href="pwa-icon.svg" type="image/svg+xml" />
+<link rel="stylesheet" href="miniapp-shell.css" />
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="miniapp-shell.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Bengali:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="admin.css" />
+</head>
+<body>
+<a class="skip-link" href="#main">মূল অংশে যান</a>
+<main class="app" id="main">
+  <header class="top"><div><p class="eyebrow">Citizen Affairs · সুরক্ষিত অ্যাডমিন</p><h1>অপারেশন ও মান নিয়ন্ত্রণ</h1><p>কুইজ প্রকাশ, শেখার রিসোর্স এবং প্রশ্ন-রিপোর্টের এক জায়গার অবস্থা।</p></div><a href="./">কুইজ হাব</a></header>
+  <section id="state" class="panel state" role="status" aria-live="polite">Telegram পরিচয় যাচাই হচ্ছে…</section>
+  <div id="workspace" class="hidden">
+    <section class="panel"><div class="section-head"><div><p class="eyebrow">লাইভ অবস্থা</p><h2>প্ল্যাটফর্ম স্বাস্থ্য</h2></div><button id="refresh" type="button">রিফ্রেশ</button></div><dl id="metrics" class="metrics"></dl></section>
+    <section class="panel"><div class="section-head"><div><p class="eyebrow">রিসোর্স</p><h2>পর্যালোচনার অপেক্ষায়</h2></div><span id="resource-count" class="count"></span></div><div id="resource-list" class="review-list"></div></section>
+    <section class="panel"><div class="section-head"><div><p class="eyebrow">প্রশ্নের মান</p><h2>লার্নার রিপোর্ট ও কেস</h2></div><span id="question-count" class="count"></span></div><div id="question-list" class="review-list"></div></section>
+  </div>
+</main>
+<script src="admin.js"></script>
+</body>
+</html>

@@ -36,6 +36,8 @@ def build_static_router(root: Path) -> APIRouter:
         ("/terms.html", "terms.html"),
         ("/mock", "mock.html"),
         ("/mock.html", "mock.html"),
+        ("/admin", "admin.html"),
+        ("/admin.html", "admin.html"),
     ):
         router.add_api_route(path, lambda filename=filename: page(filename), methods=["GET"])
 
@@ -53,6 +55,8 @@ def build_static_router(root: Path) -> APIRouter:
         ("/settings.css", "settings.css", "text/css", "public, max-age=300"),
         ("/settings.js", "settings.js", "text/javascript", "public, max-age=3600"),
         ("/legal.css", "legal.css", "text/css", "public, max-age=300"),
+        ("/admin.css", "admin.css", "text/css", "public, max-age=300"),
+        ("/admin.js", "admin.js", "text/javascript", "public, max-age=3600"),
         ("/manifest.webmanifest", "manifest.webmanifest", "application/manifest+json", "public, max-age=3600"),
         ("/pwa-icon.svg", "pwa-icon.svg", "image/svg+xml", "public, max-age=86400"),
     ):

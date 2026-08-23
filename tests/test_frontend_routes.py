@@ -17,6 +17,7 @@ def test_frontend_routes_include_index_alias_for_cached_mini_apps() -> None:
         "/mock.html",
         "/privacy.html",
         "/terms.html",
+        "/admin.html",
     ):
         response = CLIENT.get(path)
         assert response.status_code == 200
@@ -37,6 +38,8 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
         "/settings.css": "text/css",
         "/settings.js": "text/javascript",
         "/legal.css": "text/css",
+        "/admin.css": "text/css",
+        "/admin.js": "text/javascript",
         "/miniapp-shell.js": "text/javascript",
         "/service-worker.js": "text/javascript",
         "/manifest.webmanifest": "application/manifest+json",
@@ -61,6 +64,8 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert CLIENT.get("/settings.css").headers["cache-control"] == "public, max-age=300"
     assert CLIENT.get("/settings.js").headers["cache-control"] == "public, max-age=3600"
     assert CLIENT.get("/legal.css").headers["cache-control"] == "public, max-age=300"
+    assert CLIENT.get("/admin.css").headers["cache-control"] == "public, max-age=300"
+    assert CLIENT.get("/admin.js").headers["cache-control"] == "public, max-age=3600"
     source = worker.text
     assert "NETWORK_TIMEOUT_MS = 8000" in source
     assert "new AbortController()" in source
@@ -77,6 +82,18 @@ def test_csp_blocks_inline_scripts_and_styles_after_frontend_extraction() -> Non
     assert "style-src 'self' 'unsafe-inline'" not in csp
     for path in ("/index.js", "/practice.js", "/dashboard.js"):
         assert ".style." not in CLIENT.get(path).text
+
+
+def test_admin_console_is_external_asset_only_and_uses_protected_apis() -> None:
+    html = CLIENT.get("/admin.html").text
+    script = CLIENT.get("/admin.js").text
+    assert '<script src="admin.js"></script>' in html
+    assert "<script>" not in html
+    assert 'request("/api/admin/operations")' in script
+    assert 'request("/api/admin/resources/reviews?limit=50")' in script
+    assert 'request("/api/admin/questions/reviews?limit=50")' in script
+    assert '"X-Telegram-Init-Data":initData' in script
+    assert "innerHTML" not in script
 
 
 def test_quiz_intro_uses_citizen_affairs_identity_and_parent_site_cta() -> None:
