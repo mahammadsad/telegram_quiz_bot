@@ -104,7 +104,13 @@ def test_workflows_have_minimum_permissions_timeouts_and_environment_guards() ->
     assert main["permissions"] == {"contents": "read"}
     assert main["jobs"]["resolve_job"]["timeout-minutes"] == 5
     run_bot = main["jobs"]["run-bot"]
-    assert run_bot["permissions"] == {"contents": "write"}
+    assert run_bot["permissions"] == {"contents": "read"}
+    archive = next(
+        step for step in run_bot["steps"] if step.get("name") == "Archive answer-free fallback snapshot"
+    )
+    assert archive["uses"].startswith("actions/upload-artifact@")
+    assert archive["with"]["retention-days"] == 30
+    assert "git push" not in (WORKFLOW_DIR / "main.yml").read_text(encoding="utf-8")
     assert run_bot["timeout-minutes"] == 45
     assert run_bot["environment"] == "production"
     assert run_bot["concurrency"]["cancel-in-progress"] is False

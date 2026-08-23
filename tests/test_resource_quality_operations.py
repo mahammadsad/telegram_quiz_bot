@@ -256,6 +256,9 @@ def test_resource_feedback_ui_and_maintenance_workflows_are_bounded():
     assert 'cron: "30 1-13 * * *"' not in schedule_workflow
     assert "python bot.py --mode export-static-fallbacks" in schedule_workflow
     assert "if: always() && needs.resolve_job.outputs.commit_fallbacks == 'true'" in schedule_workflow
+    assert "Archive answer-free fallback snapshot" in schedule_workflow
+    assert "actions/upload-artifact@" in schedule_workflow
+    assert "git push" not in schedule_workflow
     assert 'python bot.py "${args[@]}" || status=$?' in schedule_workflow
     assert "dispatch-due-jobs" in schedule_workflow
     assert "daily-completeness" in schedule_workflow
