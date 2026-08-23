@@ -1101,6 +1101,24 @@ def my_learning_dashboard(
         raise HTTPException(status_code=503, detail="ব্যক্তিগত ড্যাশবোর্ড এখন খোলা যাচ্ছে না।") from exc
 
 
+@app.get("/api/me/question-reports")
+def my_question_report_statuses(
+    limit: int = 50,
+    offset: int = 0,
+    init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+) -> dict:
+    try:
+        return question_moderation_service.my_report_statuses(
+            _telegram_user_from_init_data(init_data), limit=limit, offset=offset
+        )
+    except TelegramAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=_value_error_status(exc), detail=str(exc)) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="রিপোর্টের অবস্থা এখন লোড করা যাচ্ছে না।") from exc
+
+
 @app.get("/api/me/reviews/due")
 def my_due_reviews(
     limit: int = 20,

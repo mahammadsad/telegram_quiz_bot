@@ -31,7 +31,7 @@ Status meanings:
 | P2-01 | P2 | No reviewed corpus expansion was fabricated during remediation. | **Open** | Existing source inventory reports. | Content owner must approve blueprint-level inventory and provenance targets, then build reviewed reserves. |
 | P2-02 | P2 | Existing collision and semantic-near checks remain; no full corpus cleanup/backfill was performed. | **Partial** | Existing validation/inventory services; regression suite passes. | Run a reviewed deduplication/backfill and enforce the audit target of <0.5% 30-day repeated exposure with zero same-test duplicate stems. |
 | P2-03 | P2 | Authored difficulty remains; no statistically valid production sample was available. | **Open** | Existing attempt analytics only. | Data/learning-science owner must define minimum sample sizes, facility/discrimination/distractor metrics, retirement policy and mastery correction rules. |
-| P2-04 | P2 | Learner reporting already exists after daily and practice answers with reason/details, authenticated APIs, moderation thresholds and tests. | **No longer applicable / partial enhancement** | `index.html`, `practice.html`, report APIs/repositories and question-quality tests. | Reporter-visible status, evidence upload and correction notification/log remain useful enhancements. |
+| P2-04 | P2 | Learner reporting exists after daily and practice answers with reason/details, authenticated APIs and moderation thresholds. An additive, service-role-only reporter-status projection is now prepared; it returns only a learner's own report/case status and closed-case resolution, never question text, options or answers. | **Partial** | `20260823065257_learner_report_status_projection.sql`, `app.py`, moderation/report repositories and focused contract/API tests. | Apply the migration through the Supabase migration workflow before releasing the endpoint; add a learner dashboard surface, evidence upload and correction notifications only with product/privacy approval. |
 | P2-05 | P2 | Reminder/retention scheduling was not enabled and no real-user notifications were sent. | **Open** | Existing preference model. | Product owner must define consent, quiet hours, unsubscribe, scheduler and effectiveness metrics. |
 | P2-06 | P2 | The product remains Bengali-only in the visible UI; translation catalogs were not introduced. | **Open** | Shared shell/settings. | Do not advertise Hindi/English until UI, content, search normalization and QA are end-to-end complete. |
 | P2-07 | P2 | Anonymous web users remain preview-only. | **Open** | Existing Telegram auth boundary. | A guest/linking design requires identity, abuse, privacy and attempt-integrity review. Do not weaken Telegram HMAC validation. |
@@ -45,7 +45,7 @@ Status meanings:
 
 - `ruff check .`: pass.
 - `mypy`: success, 79 configured production source files.
-- `pytest -q`: **478 passed, 33 skipped**, one upstream Starlette/httpx deprecation warning.
+- `pytest -q`: **481 passed, 33 skipped**, one upstream Starlette/httpx deprecation warning.
 - `pip-audit -r requirements.lock`: no known vulnerabilities.
 - `bandit -r . -lll`: no high-severity findings.
 - `npm audit`: zero vulnerabilities at lock refresh.

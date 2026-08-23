@@ -6,6 +6,16 @@ from database.client import get_client
 from errors import DatabaseIntegrityError
 
 
+def list_for_user(*, user_id: str, limit: int, offset: int) -> dict:
+    result = get_client().rpc(
+        "get_my_question_report_statuses",
+        {"p_user_id": user_id, "p_limit": limit, "p_offset": offset},
+    ).execute()
+    if not isinstance(result.data, dict):
+        raise DatabaseIntegrityError("Question report status RPC returned an invalid result.")
+    return result.data
+
+
 def submit(
     *,
     question_id: str,

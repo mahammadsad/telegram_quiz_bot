@@ -4,8 +4,9 @@ from __future__ import annotations
 
 import hashlib
 
+from models.user import User
 from services.resource_quality_service import is_admin
-from storage import question_moderation_repo
+from storage import question_moderation_repo, question_reports_repo, users_repo
 
 CASE_STATUSES = {
     "open",
@@ -102,6 +103,13 @@ def authoritative_quarantine(
         actor=_actor(telegram_user),
         reason=clean_reason,
         superseding_question_id=superseding_question_id,
+    )
+
+
+def my_report_statuses(telegram_user: dict, *, limit: int, offset: int) -> dict:
+    user = users_repo.upsert_user(User.from_telegram(telegram_user))
+    return question_reports_repo.list_for_user(
+        user_id=str(user["id"]), limit=max(1, min(limit, 100)), offset=max(0, offset)
     )
 
 

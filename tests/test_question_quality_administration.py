@@ -19,6 +19,9 @@ CLIENT = TestClient(api_module.app)
 CASE_ID = "11111111-1111-4111-8111-111111111111"
 QUESTION_ID = "22222222-2222-4222-8222-222222222222"
 REPLACEMENT_ID = "33333333-3333-4333-8333-333333333333"
+REPORT_STATUS_MIGRATION = (
+    ROOT / "supabase/migrations/20260823065257_learner_report_status_projection.sql"
+)
 
 
 def test_phase_e4_migration_has_complete_quality_contract() -> None:
@@ -63,6 +66,20 @@ def test_phase_e4_migration_has_complete_quality_contract() -> None:
     assert "reporter_" in sql
     assert "administrator_only" in sql
     assert "drop table" not in sql
+
+
+def test_report_status_projection_is_service_role_only_and_answer_free() -> None:
+    sql = REPORT_STATUS_MIGRATION.read_text(encoding="utf-8").casefold()
+    assert "function public.get_my_question_report_statuses" in sql
+    assert "security definer" in sql
+    assert "set search_path = ''" in sql
+    assert "where report.user_id = p_user_id" in sql
+    assert "revoke execute on function public.get_my_question_report_statuses" in sql
+    assert "from public, anon, authenticated" in sql
+    assert "grant execute on function public.get_my_question_report_statuses" in sql
+    assert "to service_role" in sql
+    for forbidden_field in ("question_text", "correct_answer", "options", "explanation"):
+        assert forbidden_field not in sql
 
 
 def test_new_report_reasons_are_accepted_by_all_api_models() -> None:
@@ -151,6 +168,46 @@ def test_protected_admin_queue_and_review_routes(monkeypatch) -> None:
     )
     assert review.status_code == 200
     assert captured["superseding_question_id"] == REPLACEMENT_ID
+
+
+def test_authenticated_report_status_route_projects_only_the_current_user(monkeypatch) -> None:
+    monkeypatch.setattr(api_module, "verify_init_data", lambda *args, **kwargs: {"id": 99})
+    captured: dict = {}
+    monkeypatch.setattr(
+        api_module.question_moderation_service,
+        "my_report_statuses",
+        lambda user, **kwargs: captured.update(user=user, **kwargs)
+        or {"items": [], "total": 0, "limit": kwargs["limit"], "offset": kwargs["offset"]},
+    )
+    response = CLIENT.get(
+        "/api/me/question-reports?limit=5&offset=3",
+        headers={"X-Telegram-Init-Data": "signed"},
+    )
+    assert response.status_code == 200
+    assert captured == {"user": {"id": 99}, "limit": 5, "offset": 3}
+
+
+def test_report_status_service_upserts_a_typed_telegram_user(monkeypatch) -> None:
+    captured: dict = {}
+    monkeypatch.setattr(
+        question_moderation_service.users_repo,
+        "upsert_user",
+        lambda user: captured.update(user=user) or {"id": QUESTION_ID},
+    )
+    monkeypatch.setattr(
+        question_moderation_service.question_reports_repo,
+        "list_for_user",
+        lambda **kwargs: captured.update(kwargs) or {"items": [], "total": 0},
+    )
+    result = question_moderation_service.my_report_statuses(
+        {"id": 99, "first_name": "Learner"}, limit=1000, offset=-4
+    )
+    assert result == {"items": [], "total": 0}
+    assert captured["user"].telegram_id == 99
+    assert captured["user"].first_name == "Learner"
+    assert captured["user_id"] == QUESTION_ID
+    assert captured["limit"] == 100
+    assert captured["offset"] == 0
 
 
 def test_admin_routes_reject_non_admin(monkeypatch) -> None:

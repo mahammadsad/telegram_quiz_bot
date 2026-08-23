@@ -4,6 +4,7 @@ from pathlib import Path
 
 from database.contract import (
     LATEST_MIGRATION_VERSION,
+    LEARNER_REPORT_STATUS_PROJECTION_MIGRATION_VERSION,
     PLATFORM_CONTRACT_KEY,
     PLATFORM_CONTRACT_MIGRATION_VERSION,
     PLATFORM_CONTRACT_REQUIRED_CHECKS,
@@ -31,9 +32,10 @@ def _ready_contract() -> dict:
     }
 
 
-def test_platform_contract_is_the_latest_timestamped_migration() -> None:
+def test_platform_contract_remains_the_scheduler_gate_after_additive_migrations() -> None:
     assert MIGRATION.is_file()
-    assert LATEST_MIGRATION_VERSION == PLATFORM_CONTRACT_MIGRATION_VERSION
+    assert LATEST_MIGRATION_VERSION == LEARNER_REPORT_STATUS_PROJECTION_MIGRATION_VERSION
+    assert PLATFORM_CONTRACT_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
 
     source = MIGRATION.read_text(encoding="utf-8")
     assert "create or replace function public.get_platform_contract_v1()" in source
