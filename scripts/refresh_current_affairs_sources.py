@@ -54,7 +54,11 @@ PIB_ALL_RELEASES_URL = (
     "https://www.pib.gov.in/AllRelease.aspx?MenuId=3&lang=1&reg=3"
 )
 RBI_PRESS_RELEASES_RSS_URL = "https://rbi.org.in/pressreleases_rss.xml"
-USER_AGENT = "telegram-quiz-source-refresh/1.0 (+official-PIB-only)"
+PIB_USER_AGENT = "telegram-quiz-source-refresh/1.0 (+official-PIB-only)"
+RBI_USER_AGENT = (
+    "Mozilla/5.0 (compatible; CitizenAffairsQuizBot/1.0; "
+    "+https://citizenaffairs.in/bn/)"
+)
 MAX_RESPONSE_BYTES = 5_000_000
 MAX_FACT_SUMMARY_CHARS = 3_600
 DEFAULT_MAX_ITEMS = 80
@@ -358,10 +362,11 @@ def fetch_text(url: str) -> str:
     requested_domain = (urlparse(url).hostname or "").lower().removeprefix("www.")
     if requested_domain not in {"pib.gov.in", "rbi.org.in"}:
         raise CurrentAffairsRefreshError("Current-affairs source host is not approved.")
+    user_agent = RBI_USER_AGENT if requested_domain == "rbi.org.in" else PIB_USER_AGENT
     request = urllib.request.Request(
         url,
         headers={
-            "User-Agent": USER_AGENT,
+            "User-Agent": user_agent,
             "Accept": "application/rss+xml, application/xml, text/html;q=0.9",
         },
     )
