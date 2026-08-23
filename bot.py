@@ -145,7 +145,7 @@ _VALIDATION_REPAIR_HINTS = {
         "the correct option must not be the only numeric, Latin, Bengali, or mixed-script option."
     ),
     "options_materially_duplicate": (
-        "Replace label-only or punctuation-only variants with four genuinely different option values."
+        "Replace label-only, punctuation-only, Bengali-versus-Arabic-digit, or unit-only variants with four genuinely different option values. For numerical questions, verify that all four options represent different mathematical values after normalization."
     ),
     "bengali_explanation": (
         "Every explanation and detailed_explanation must contain clear Bengali script, "
@@ -187,7 +187,7 @@ Rules:
 11. Include canonical_claim, knowledge_entity, knowledge_relation, knowledge_answer_value, and knowledge_time_scope for stable fact identity. These fields must describe the tested relationship, not the wording of the question.
 12. Do not repeat or paraphrase any recent question above, including the same entity-relation-answer expressed with inverse wording.
 13. Use at least {bundle.required_topic_diversity} distinct micro_topic_key values and distribute the ten questions as evenly as possible.
-14. Within each question, make all four options use the same visible answer type and script pattern. The correct option must not be the only numeric, Latin, Bengali, or mixed-script option. Options must remain genuinely different after labels and punctuation are removed.
+14. Within each question, make all four options use the same visible answer type and script pattern. The correct option must not be the only numeric, Latin, Bengali, or mixed-script option. Before returning, privately remove option labels, whitespace, punctuation, and script-only number formatting from every option: all four normalized values must be non-empty and pairwise different. For numerical questions, each option must represent a different mathematical value; do not restate one value using Bengali versus Arabic digits, a unit-only variant, or a label-only variant.
 """
     if bundle.source_required:
         return shared + f"""
