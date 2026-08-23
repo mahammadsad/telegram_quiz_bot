@@ -1,4 +1,5 @@
 const { test, expect } = require("@playwright/test");
+const AxeBuilder = require("@axe-core/playwright").default;
 
 const {
   assertBottomNavigationDoesNotCoverContent,
@@ -11,6 +12,13 @@ const TEST_ID = "11111111-1111-4111-8111-111111111111";
 const ATTEMPT_ID = "22222222-2222-4222-8222-222222222222";
 const SECTION_ONE = "33333333-3333-4333-8333-333333333331";
 const SECTION_TWO = "33333333-3333-4333-8333-333333333332";
+
+async function expectWcag22Aa(page) {
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(results.violations).toEqual([]);
+}
 
 function question(id, order, text) {
   return {
@@ -178,6 +186,7 @@ test("timed multi-section mock persists, resumes, advances, and renders analysis
   await expect(page.locator("#section-analysis .analysis-row")).toHaveCount(2);
   await expect(page.locator("#topic-analysis")).toContainText("সংখ্যা");
   expect(api.submits).toEqual([{ initData: "deterministic-browser-test", autoSubmit: false }]);
+  await expectWcag22Aa(page);
 
   await assertNoHorizontalOverflow(page);
   await assertVisibleTouchTargets(page);
