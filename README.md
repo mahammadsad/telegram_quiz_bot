@@ -30,8 +30,8 @@ an administrator approves it.
 
 | Component | Responsibility |
 |---|---|
-| `bot.py` | Claims a date/subject run, selects a chapter, generates/validates a pack, posts once, and recovers missed work |
-| `app.py` | Public quiz/health reads plus authenticated learning, feedback, and administrator APIs |
+| `bot.py` | Composes one date/subject generation and posting run; scheduled dispatch/recovery lives in a focused service |
+| `app.py` | Composes security/authentication boundaries and the focused API routers under `routes/` |
 | `services/` | Chapter rotation, source grounding, independent verification, Gemini failover, validation, and quiz-pack rules |
 | `storage/` | Small Supabase repositories; atomic writes use RPCs |
 | `supabase/migrations/` | Current timestamped PostgreSQL migrations and security grants |
