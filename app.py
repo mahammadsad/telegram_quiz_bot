@@ -12,7 +12,7 @@ from typing import Any
 
 from fastapi import FastAPI, Header, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
 from api_models import (
@@ -32,6 +32,7 @@ from config.settings import (
 from config.subjects import SUBJECTS
 from database.contract import APPLICATION_VERSION, REQUIRED_MIGRATION_VERSION
 from models.user import User
+from routes.static_pages import build_static_router
 from services import (
     exam_config_service,
     leaderboard_privacy,
@@ -320,183 +321,7 @@ class AuthoritativeQuarantineRequest(BaseModel):
 def _value_error_status(exc: ValueError) -> int:
     return 429 if "rate limit" in str(exc).casefold() else 400
 
-
-@app.get("/")
-@app.get("/index.html")
-def index() -> FileResponse:
-    return FileResponse(ROOT / "index.html")
-
-
-@app.get("/dashboard")
-@app.get("/dashboard.html")
-def dashboard() -> FileResponse:
-    return FileResponse(ROOT / "dashboard.html")
-
-
-@app.get("/practice")
-@app.get("/practice.html")
-def practice() -> FileResponse:
-    return FileResponse(ROOT / "practice.html")
-
-
-@app.get("/settings")
-@app.get("/settings.html")
-def settings() -> FileResponse:
-    return FileResponse(ROOT / "settings.html")
-
-
-@app.get("/privacy")
-@app.get("/privacy.html")
-def privacy() -> FileResponse:
-    return FileResponse(ROOT / "privacy.html")
-
-
-@app.get("/terms")
-@app.get("/terms.html")
-def terms() -> FileResponse:
-    return FileResponse(ROOT / "terms.html")
-
-
-@app.get("/mock")
-@app.get("/mock.html")
-def mock_test() -> FileResponse:
-    return FileResponse(ROOT / "mock.html")
-
-
-@app.get("/miniapp-shell.js")
-def miniapp_shell() -> FileResponse:
-    return FileResponse(
-        ROOT / "miniapp-shell.js",
-        media_type="text/javascript",
-        headers={"Cache-Control": "public, max-age=3600"},
-    )
-
-
-@app.get("/miniapp-shell.css")
-def miniapp_shell_styles() -> FileResponse:
-    return FileResponse(
-        ROOT / "miniapp-shell.css",
-        media_type="text/css",
-        headers={"Cache-Control": "public, max-age=300"},
-    )
-
-
-@app.get("/index.css")
-def index_styles() -> FileResponse:
-    return FileResponse(
-        ROOT / "index.css",
-        media_type="text/css",
-        headers={"Cache-Control": "public, max-age=300"},
-    )
-
-
-@app.get("/index.js")
-def index_script() -> FileResponse:
-    return FileResponse(
-        ROOT / "index.js",
-        media_type="text/javascript",
-        headers={"Cache-Control": "public, max-age=3600"},
-    )
-
-
-@app.get("/mock.css")
-def mock_styles() -> FileResponse:
-    return FileResponse(
-        ROOT / "mock.css",
-        media_type="text/css",
-        headers={"Cache-Control": "public, max-age=300"},
-    )
-
-
-@app.get("/mock.js")
-def mock_script() -> FileResponse:
-    return FileResponse(
-        ROOT / "mock.js",
-        media_type="text/javascript",
-        headers={"Cache-Control": "public, max-age=3600"},
-    )
-
-
-@app.get("/practice.css")
-def practice_styles() -> FileResponse:
-    return FileResponse(
-        ROOT / "practice.css",
-        media_type="text/css",
-        headers={"Cache-Control": "public, max-age=300"},
-    )
-
-
-@app.get("/practice.js")
-def practice_script() -> FileResponse:
-    return FileResponse(
-        ROOT / "practice.js",
-        media_type="text/javascript",
-        headers={"Cache-Control": "public, max-age=3600"},
-    )
-
-
-@app.get("/dashboard.css")
-def dashboard_styles() -> FileResponse:
-    return FileResponse(
-        ROOT / "dashboard.css",
-        media_type="text/css",
-        headers={"Cache-Control": "public, max-age=300"},
-    )
-
-
-@app.get("/dashboard.js")
-def dashboard_script() -> FileResponse:
-    return FileResponse(
-        ROOT / "dashboard.js",
-        media_type="text/javascript",
-        headers={"Cache-Control": "public, max-age=3600"},
-    )
-
-
-@app.get("/settings.css")
-def settings_styles() -> FileResponse:
-    return FileResponse(ROOT / "settings.css", media_type="text/css", headers={"Cache-Control": "public, max-age=300"})
-
-
-@app.get("/settings.js")
-def settings_script() -> FileResponse:
-    return FileResponse(
-        ROOT / "settings.js",
-        media_type="text/javascript",
-        headers={"Cache-Control": "public, max-age=3600"},
-    )
-
-
-@app.get("/legal.css")
-def legal_styles() -> FileResponse:
-    return FileResponse(ROOT / "legal.css", media_type="text/css", headers={"Cache-Control": "public, max-age=300"})
-
-
-@app.get("/service-worker.js")
-def service_worker() -> FileResponse:
-    return FileResponse(
-        ROOT / "service-worker.js",
-        media_type="text/javascript",
-        headers={"Cache-Control": "no-cache, max-age=0", "Service-Worker-Allowed": "/"},
-    )
-
-
-@app.get("/manifest.webmanifest")
-def web_manifest() -> FileResponse:
-    return FileResponse(
-        ROOT / "manifest.webmanifest",
-        media_type="application/manifest+json",
-        headers={"Cache-Control": "public, max-age=3600"},
-    )
-
-
-@app.get("/pwa-icon.svg")
-def pwa_icon() -> FileResponse:
-    return FileResponse(
-        ROOT / "pwa-icon.svg",
-        media_type="image/svg+xml",
-        headers={"Cache-Control": "public, max-age=86400"},
-    )
+app.include_router(build_static_router(ROOT))
 
 
 @app.get("/quizzes/{quiz_file}")
