@@ -6,7 +6,7 @@ import hashlib
 import json
 import os
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date
 from pathlib import Path
 from typing import Any
 
@@ -33,6 +33,7 @@ from config.subjects import SUBJECTS
 from database.contract import APPLICATION_VERSION, REQUIRED_MIGRATION_VERSION
 from models.user import User
 from routes.static_pages import build_static_router
+from routes.system import build_system_router
 from services import (
     exam_config_service,
     leaderboard_privacy,
@@ -335,34 +336,6 @@ def legacy_quiz_file(quiz_file: str) -> JSONResponse:
     return JSONResponse(payload)
 
 
-@app.get("/health/live")
-def health_live() -> dict:
-    """Process-only liveness probe; it deliberately performs no network I/O."""
-    return {
-        "ok": True,
-        "status": "live",
-        "applicationVersion": app.version,
-        "commitSha": _release_value("RENDER_GIT_COMMIT", "GITHUB_SHA", default="unknown"),
-        "environment": _release_value("APP_ENVIRONMENT", "RENDER_SERVICE_NAME", default="local"),
-        "buildTime": _release_value("BUILD_TIME", default="unknown"),
-        "timezone": APP_TIMEZONE,
-        "productionConfigVersion": readiness_service.PRODUCTION_CONFIG_VERSION,
-        "productionConfigHash": readiness_service.PRODUCTION_CONFIG_HASH,
-    }
-
-
-@app.get("/version")
-def release_version() -> dict:
-    """Safe immutable release identity used by deploy and rollback smoke tests."""
-    return {
-        "applicationVersion": app.version,
-        "commitSha": _release_value("RENDER_GIT_COMMIT", "GITHUB_SHA", default="unknown"),
-        "environment": _release_value("APP_ENVIRONMENT", "RENDER_SERVICE_NAME", default="local"),
-        "buildTime": _release_value("BUILD_TIME", default="unknown"),
-        "serverTime": datetime.now(timezone.utc).isoformat(),
-    }
-
-
 def _release_value(*names: str, default: str) -> str:
     for name in names:
         value = os.environ.get(name, "").strip()
@@ -371,19 +344,16 @@ def _release_value(*names: str, default: str) -> str:
     return default
 
 
-@app.get("/health/ready")
-def health_ready() -> JSONResponse:
-    readiness = readiness_service.assess()
-    return JSONResponse(
-        readiness.public_payload(),
-        status_code=200 if readiness.ready else 503,
+app.include_router(
+    build_system_router(
+        application_version=app.version,
+        app_timezone=APP_TIMEZONE,
+        release_value=_release_value,
+        readiness_assess=readiness_service.assess,
+        production_config_version=readiness_service.PRODUCTION_CONFIG_VERSION,
+        production_config_hash=readiness_service.PRODUCTION_CONFIG_HASH,
     )
-
-
-@app.get("/api/health")
-def health() -> JSONResponse:
-    """Compatibility alias with the same strict semantics as readiness."""
-    return health_ready()
+)
 
 
 @app.get("/api/exams")
