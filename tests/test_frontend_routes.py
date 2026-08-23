@@ -36,6 +36,7 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
         "/dashboard.js": "text/javascript",
         "/settings.css": "text/css",
         "/settings.js": "text/javascript",
+        "/legal.css": "text/css",
         "/miniapp-shell.js": "text/javascript",
         "/service-worker.js": "text/javascript",
         "/manifest.webmanifest": "application/manifest+json",
@@ -59,11 +60,19 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert CLIENT.get("/dashboard.js").headers["cache-control"] == "public, max-age=3600"
     assert CLIENT.get("/settings.css").headers["cache-control"] == "public, max-age=300"
     assert CLIENT.get("/settings.js").headers["cache-control"] == "public, max-age=3600"
+    assert CLIENT.get("/legal.css").headers["cache-control"] == "public, max-age=300"
     source = worker.text
     assert "NETWORK_TIMEOUT_MS = 8000" in source
     assert "new AbortController()" in source
     assert "cache.match(pathname)" in source
     assert "response.status >= 500" in source
+
+
+def test_csp_blocks_inline_scripts_after_frontend_extraction() -> None:
+    csp = CLIENT.get("/settings.html").headers["content-security-policy"]
+
+    assert "script-src 'self' https://telegram.org" in csp
+    assert "script-src 'self' 'unsafe-inline'" not in csp
 
 
 def test_quiz_intro_uses_citizen_affairs_identity_and_parent_site_cta() -> None:

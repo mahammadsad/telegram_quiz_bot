@@ -66,7 +66,7 @@ async def security_and_privacy_headers(request: Request, call_next):
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=(), payment=()"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://telegram.org; "
+        "script-src 'self' https://telegram.org; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' data: https://fonts.gstatic.com; "
         "img-src 'self' data: https:; "
@@ -512,6 +512,11 @@ def settings_script() -> FileResponse:
         media_type="text/javascript",
         headers={"Cache-Control": "public, max-age=3600"},
     )
+
+
+@app.get("/legal.css")
+def legal_styles() -> FileResponse:
+    return FileResponse(ROOT / "legal.css", media_type="text/css", headers={"Cache-Control": "public, max-age=300"})
 
 
 @app.get("/service-worker.js")

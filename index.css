@@ -74,7 +74,7 @@
     overflow:hidden;
   }
   .section{padding:18px}
-  .hidden{display:none!important}
+  .hidden{display:none!important}.spaced-action{margin-top:14px}
   .muted{color:var(--muted)}
   .center{text-align:center}
   .num{font-variant-numeric:tabular-nums}
