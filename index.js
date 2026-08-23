@@ -653,7 +653,9 @@
     byId("q-index").textContent = "প্রশ্ন " + bn(current + 1) + " / " + bn(quiz.qs.length);
     byId("answered-count").textContent = "উত্তর " + bn(answers.filter(function(v){ return v !== null; }).length);
     byId("q-text").textContent = q.q;
-    byId("progress-fill").style.width = ((current + 1) / quiz.qs.length * 100) + "%";
+    var progress = byId("progress-fill");
+    progress.max = quiz.qs.length;
+    progress.value = current + 1;
 
     var wrap = byId("options-wrap");
     wrap.innerHTML = "";
@@ -878,7 +880,7 @@
     var duration = durationValue === null || durationValue === undefined
       ? Math.max(0, Math.round((Date.now() - startedAt) / 1000))
       : durationValue;
-    byId("score-ring").style.setProperty("--score-deg", (netPct * 3.6) + "deg");
+    byId("score-ring").setAttribute("stroke-dasharray", netPct + " 100");
     byId("score-text").textContent = bn(formatScore(netScore)) + "/" + bn(result.total);
     byId("result-title").textContent = resultTitle(pct);
     byId("result-subtitle").textContent =

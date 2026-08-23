@@ -104,7 +104,7 @@
     el("feedback").classList.add("hidden");el("next-wrap").classList.add("hidden");el("submit").parentElement.classList.remove("hidden");
     el("submit").disabled=false;el("submit").textContent=answerFrozen?"একই উত্তর আবার পাঠান":"উত্তর যাচাই করুন";
     el("position").textContent="প্রশ্ন "+bn(index+1)+" / "+bn(rows.length);el("topic").textContent=rows[index].chapter||rows[index].subjectKey||"";
-    el("question").textContent=rows[index].q;el("bar").style.width=((index+1)/rows.length*100)+"%";
+    el("question").textContent=rows[index].q;el("bar").max=rows.length;el("bar").value=index+1;
     el("next").textContent=index===rows.length-1?(queueMode==="revision"?"পুনরাবৃত্তি শেষ করুন":"অনুশীলন শেষ করুন"):"পরবর্তী প্রশ্ন";
     renderOptions();
   }

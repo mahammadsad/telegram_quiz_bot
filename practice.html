@@ -27,7 +27,7 @@
     <div id="empty" class="state hidden"><p id="empty-message">এই তালিকায় এখন কোনো প্রশ্ন নেই। নতুন কুইজ শেষ করলে এখানে প্রশ্ন যোগ হবে।</p><div class="actions"><a class="btn primary" href="dashboard.html">ড্যাশবোর্ডে ফিরুন</a><a class="btn" id="empty-quiz-link" href="./">কুইজ খুলুন</a></div></div>
     <div id="error" class="state hidden">অনুশীলন খুলতে Telegram-এর কুইজ বাটন ব্যবহার করুন, অথবা পরে আবার চেষ্টা করুন।<div class="actions"><button class="btn" id="retry" type="button">আবার চেষ্টা করুন</button></div></div>
     <div id="practice" class="hidden">
-      <div class="progress" aria-hidden="true"><span id="bar"></span></div>
+      <progress class="progress" id="bar" max="1" value="0" aria-label="অনুশীলনের অগ্রগতি">0%</progress>
       <div class="kicker"><span id="position"></span><span id="topic"></span></div>
       <p class="question" id="question"></p>
       <div class="options" id="options" role="group" aria-label="উত্তরের বিকল্প"></div>

@@ -68,11 +68,15 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert "response.status >= 500" in source
 
 
-def test_csp_blocks_inline_scripts_after_frontend_extraction() -> None:
+def test_csp_blocks_inline_scripts_and_styles_after_frontend_extraction() -> None:
     csp = CLIENT.get("/settings.html").headers["content-security-policy"]
 
     assert "script-src 'self' https://telegram.org" in csp
     assert "script-src 'self' 'unsafe-inline'" not in csp
+    assert "style-src 'self' https://fonts.googleapis.com" in csp
+    assert "style-src 'self' 'unsafe-inline'" not in csp
+    for path in ("/index.js", "/practice.js", "/dashboard.js"):
+        assert ".style." not in CLIENT.get(path).text
 
 
 def test_quiz_intro_uses_citizen_affairs_identity_and_parent_site_cta() -> None:

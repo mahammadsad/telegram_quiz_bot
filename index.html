@@ -103,7 +103,7 @@
       <div class="timer num" id="timer">--:--</div>
     </div>
     <div class="progress-wrap">
-      <div class="progress-line"><div class="progress-fill" id="progress-fill"></div></div>
+      <div class="progress-line"><progress class="progress-fill" id="progress-fill" max="10" value="0">0%</progress></div>
     </div>
     <nav class="navigator" id="question-navigator" aria-label="প্রশ্ন নেভিগেটর"></nav>
     <div class="question-wrap">
@@ -123,7 +123,8 @@
 
   <section id="screen-result" class="surface section hidden">
     <div class="score-band">
-      <div class="score-ring" id="score-ring">
+      <div class="score-ring" aria-label="নেট স্কোর">
+        <svg aria-hidden="true" viewBox="0 0 100 100"><circle class="score-track" cx="50" cy="50" r="42" pathLength="100"></circle><circle class="score-value" id="score-ring" cx="50" cy="50" r="42" pathLength="100" stroke-dasharray="0 100"></circle></svg>
         <strong class="num" id="score-text">০/০</strong>
       </div>
       <div class="result-copy">

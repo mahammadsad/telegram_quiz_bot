@@ -84,14 +84,14 @@
     var due=data.revisionDueToday===undefined?(data.dueReviews||0):data.revisionDueToday;
     el("goal-copy").textContent=bn(today)+" / "+bn(target);
     el("goal-note").textContent=pct>=100?"আজকের লক্ষ্য পূর্ণ হয়েছে—এখন পুনরাবৃত্তি করুন।":"আর "+bn(Math.max(0,target-today))+"টি প্রশ্ন বাকি।";
-    el("goal-bar").style.width=pct+"%";
+    el("goal-bar").value=pct;
     el("m-accuracy").textContent=bn(data.accuracy||0)+"%";el("m-answered").textContent=bn(data.totalAnswered||0);el("m-due").textContent=bn(due);
     el("m-streak").textContent=bn(data.currentStreak||0)+" দিন";el("m-longest").textContent=bn(data.longestStreak||0)+" দিন";el("m-improvement").textContent=bn(data.averageImprovement||0)+"%";
     dashboardData=data;buildPerformanceChapters();applyPerformanceFilters();
     var weakSubject=data.weakestSubject&&data.weakestSubject.subjectKey;
     el("weak-practice").href=weakSubject?"practice.html?source=weak_topic&subject="+encodeURIComponent(weakSubject):"practice.html?source=wrong";
     el("mastery-copy").textContent=bn(data.revisionMastered||0)+" / "+bn(data.revisionTotal||0)+"টি প্রশ্ন আয়ত্ত হয়েছে";
-    el("mastery-bar").style.width=Math.min(100,data.revisionCompletion||0)+"%";
+    el("mastery-bar").value=Math.min(100,data.revisionCompletion||0);
     el("r-due").textContent=bn(due);el("r-overdue").textContent=bn(data.overdueQuestions||0);el("r-weak").textContent=bn(data.weakQuestions||0);el("r-mastered").textContent=bn(data.recentlyMastered||0);
     renderRevisionSubjects(data.subjectRevisionCounts||[]);
     el("x-response").textContent=data.averageResponseTimeSeconds===null||data.averageResponseTimeSeconds===undefined?"—":bn(Math.round(data.averageResponseTimeSeconds))+" সেকেন্ড";
@@ -149,16 +149,16 @@
   function renderActivity(rows){
     var box=el("activity"),max=Math.max.apply(null,[1].concat(rows.map(function(row){return row.answered||0})));box.textContent="";box.className="activity";
     if(!rows.length){box.textContent="এখনও দৈনিক অগ্রগতির তথ্য নেই।";box.className="muted";return}
-    rows.forEach(function(row){var bar=document.createElement("span");bar.className="day";bar.tabIndex=0;bar.style.height=Math.max(3,(row.answered||0)/max*100)+"%";bar.dataset.label=row.date+": "+bn(row.answered||0)+"টি";box.appendChild(bar)});
+    rows.forEach(function(row){var bar=document.createElement("progress");bar.className="day";bar.max=max;bar.value=row.answered||0;bar.tabIndex=0;bar.dataset.label=row.date+": "+bn(row.answered||0)+"টি";box.appendChild(bar)});
   }
 
   function renderBars(id,rows,label,value){
     var box=el(id);box.textContent="";box.className="bars";
     if(!rows.length){box.textContent="এখনও যথেষ্ট তথ্য নেই।";box.className="muted";return}
-    rows.slice(0,8).forEach(function(item){var row=document.createElement("div"),name=document.createElement("b"),bar=document.createElement("div"),fill=document.createElement("span"),number=document.createElement("span");row.className="bar-row";name.textContent=label(item);bar.className="bar";fill.style.width=Math.min(100,item[value]||0)+"%";bar.appendChild(fill);number.textContent=bn(item[value]||0)+"%";row.append(name,bar,number);box.appendChild(row)});
+    rows.slice(0,8).forEach(function(item){var row=document.createElement("div"),name=document.createElement("b"),bar=document.createElement("progress"),number=document.createElement("span");row.className="bar-row";name.textContent=label(item);bar.className="bar";bar.max=100;bar.value=Math.min(100,item[value]||0);number.textContent=bn(item[value]||0)+"%";row.append(name,bar,number);box.appendChild(row)});
   }
 
-  function renderRevisionSubjects(rows){var box=el("revision-subjects");box.textContent="";if(!rows.length){box.textContent="বিষয়ভিত্তিক বাকি প্রশ্ন নেই।";box.className="muted";return}box.className="bars";var max=Math.max.apply(null,rows.map(function(row){return row.due||0}));rows.forEach(function(item){var row=document.createElement("div"),name=document.createElement("b"),bar=document.createElement("div"),fill=document.createElement("span"),number=document.createElement("span");row.className="bar-row";name.textContent=subjects[item.subjectKey]||item.subjectKey;bar.className="bar";fill.style.width=Math.max(4,(item.due||0)/Math.max(1,max)*100)+"%";bar.appendChild(fill);number.textContent=bn(item.due||0)+"টি";row.append(name,bar,number);box.appendChild(row)})}
+  function renderRevisionSubjects(rows){var box=el("revision-subjects");box.textContent="";if(!rows.length){box.textContent="বিষয়ভিত্তিক বাকি প্রশ্ন নেই।";box.className="muted";return}box.className="bars";var max=Math.max.apply(null,rows.map(function(row){return row.due||0}));rows.forEach(function(item){var row=document.createElement("div"),name=document.createElement("b"),bar=document.createElement("progress"),number=document.createElement("span");row.className="bar-row";name.textContent=subjects[item.subjectKey]||item.subjectKey;bar.className="bar";bar.max=Math.max(1,max);bar.value=item.due||0;number.textContent=bn(item.due||0)+"টি";row.append(name,bar,number);box.appendChild(row)})}
 
   function renderRecentQuizzes(rows){var box=el("recent-quizzes");box.textContent="";if(!rows.length){box.textContent="এখনও কোনো সম্পন্ন কুইজ নেই। প্রথম কুইজটি শেষ করলে এখানে ফল দেখা যাবে।";box.className="muted";return}box.className="recent-list";rows.forEach(function(item){var link=document.createElement("a"),copy=document.createElement("div"),title=document.createElement("b"),meta=document.createElement("small"),score=document.createElement("div"),net=item.netScore===undefined?item.score:item.netScore;link.className="recent-item";link.href="dashboard.html?quiz="+encodeURIComponent(item.quizId);title.textContent=quizLabel(item.quizId);meta.textContent=formatDate(item.completedAt)+" · চেষ্টা "+bn(item.attemptNumber||1)+" · "+formatDuration(item.durationSeconds);score.className="recent-score";score.textContent=bn(net||0)+"/"+bn(item.total||10);copy.append(title,meta);link.append(copy,score);box.appendChild(link)})}
 
