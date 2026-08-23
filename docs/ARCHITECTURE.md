@@ -28,11 +28,11 @@ flowchart TD
 
 | Area | Responsibility |
 |---|---|
-| `app.py` | HTTP routes, headers, authentication boundary, static frontend delivery and public projections. |
+| `app.py` | FastAPI composition, security headers, authentication boundary and shared request guards. Focused HTTP surfaces live under `routes/`. |
 | `services/` | Use cases, validation, verification, dispatch, readiness and privacy orchestration. |
 | `storage/` | Supabase/PostgreSQL RPC adapters and result validation. |
 | `supabase/migrations/` | Forward-only schema, RLS, function, permission and integrity contracts. |
-| `bot.py` | Telegram delivery entry point using dispatcher/services. |
+| `bot.py` | Subject generation/posting and CLI composition entry point. Scheduled-job health, dispatch and recovery orchestration lives in `services/quiz_dispatch_runtime.py`. |
 | `scripts/` | Operator validation, source refresh, migration and deployed smoke tools. |
 | HTML/shared shell/worker | Mobile learner UI and base-aware PWA behavior. |
 
