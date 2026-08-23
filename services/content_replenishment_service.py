@@ -48,18 +48,36 @@ CANDIDATE_JSON_SCHEMA = {
             "proof_evidence_values": {"type": "ARRAY", "items": {"type": "STRING"}},
         },
         "required": [
-            "question", "options", "correct_index", "explanation",
-            "detailed_explanation", "difficulty", "subject_key", "chapter",
-            "micro_topic_key", "source_document_id", "canonical_claim",
-            "knowledge_entity", "knowledge_relation", "knowledge_answer_value",
-            "knowledge_time_scope", "language_question_form",
-            "language_verification_json", "proof_family", "proof_parameters_json",
-            "proof_option_values", "proof_option_units", "proof_explanation_values",
+            "question",
+            "options",
+            "correct_index",
+            "explanation",
+            "detailed_explanation",
+            "difficulty",
+            "subject_key",
+            "chapter",
+            "micro_topic_key",
+            "source_document_id",
+            "canonical_claim",
+            "knowledge_entity",
+            "knowledge_relation",
+            "knowledge_answer_value",
+            "knowledge_time_scope",
+            "language_question_form",
+            "language_verification_json",
+            "proof_family",
+            "proof_parameters_json",
+            "proof_option_values",
+            "proof_option_units",
+            "proof_explanation_values",
             "proof_explanation_conclusion",
             "proof_evidence_values",
         ],
     },
 }
+
+_CANDIDATE_REPAIR_LIMIT = 1
+_CANDIDATE_REPAIR_TARGET = 3
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,9 +129,7 @@ def process_due_replenishment_jobs(
                 pool,
                 batch_size=int(job.get("generation_batch_size") or 5),
             )
-            rejection_codes = sorted({
-                str(item.get("code") or "content_invalid") for item in result.rejected
-            })
+            rejection_codes = sorted({str(item.get("code") or "content_invalid") for item in result.rejected})
             completed = content_inventory_repo.complete_replenishment_batch(
                 job_id=job_id,
                 worker_id=worker_id,
@@ -147,56 +163,82 @@ def generate_and_store_candidate_batch(
     if batch_size not in range(3, 6):
         raise ValueError("candidate batch size must be between 3 and 5")
     prompt = _candidate_prompt(subject_key, chapter, bundle, batch_size)
-    started = datetime.now(timezone.utc)
-    raw_text, generation = pool.generate_subject_quiz(
-        prompt=prompt,
-        response_schema=CANDIDATE_JSON_SCHEMA,
-    )
-    latency_ms = int((datetime.now(timezone.utc) - started).total_seconds() * 1000)
-    try:
-        raw = json.loads(raw_text)
-    except (TypeError, json.JSONDecodeError):
-        raw = []
-    if not isinstance(raw, list) or len(raw) != batch_size:
-        raise ValueError("generator returned an invalid candidate batch")
-    enriched = _enrich(raw, subject_key, chapter, bundle)
-    structural, rejected = validate_question_candidates(
-        enriched,
-        subject_key,
-        chapter,
-        allowed_source_ids=bundle.source_ids,
-        allowed_source_topics=bundle.source_topics,
-        require_verification=False,
-        require_deterministic_proof=DETERMINISTIC_PROOF_REQUIRED,
-    )
-    verified, verification = question_verification.verify_question_candidates(
-        structural,
-        bundle,
-        pool,
-        generator_metadata=generation,
-    )
-    accepted: list[dict[str, Any]] = []
-    for candidate in verified:
-        clean_rows, identity_rejections = validate_question_candidates(
-            [candidate],
+    active_prompt = prompt
+    accepted_by_identity: dict[str, dict[str, Any]] = {}
+    rejected: list[dict[str, Any]] = []
+    generation_history: list[dict[str, Any]] = []
+    candidate_count = 0
+    latency_ms = 0
+
+    for repair_number in range(_CANDIDATE_REPAIR_LIMIT + 1):
+        started = datetime.now(timezone.utc)
+        raw_text, generation = pool.generate_subject_quiz(
+            prompt=active_prompt,
+            response_schema=CANDIDATE_JSON_SCHEMA,
+        )
+        latency_ms += int((datetime.now(timezone.utc) - started).total_seconds() * 1000)
+        generation_history.append(generation)
+        try:
+            raw = json.loads(raw_text)
+        except (TypeError, json.JSONDecodeError):
+            raw = []
+        if not isinstance(raw, list) or len(raw) != batch_size:
+            if repair_number < _CANDIDATE_REPAIR_LIMIT:
+                rejected.append({"code": "invalid_candidate_batch"})
+                active_prompt = _candidate_repair_prompt(prompt, {"invalid_candidate_batch"})
+                continue
+            raise ValueError("generator returned an invalid candidate batch")
+
+        candidate_count += len(raw)
+        structural, pass_rejections = validate_question_candidates(
+            _enrich(raw, subject_key, chapter, bundle),
             subject_key,
             chapter,
             allowed_source_ids=bundle.source_ids,
             allowed_source_topics=bundle.source_topics,
-            require_verification=True,
+            require_verification=False,
             require_deterministic_proof=DETERMINISTIC_PROOF_REQUIRED,
         )
-        if identity_rejections:
-            rejected.extend(identity_rejections)
-            continue
-        try:
-            accepted.append(attach_candidate_identities(clean_rows[0]))
-        except ValueError as exc:
-            rejected.append({"code": "identity_invalid", "message": str(exc)})
-    rejected.extend(
-        {"code": "verification_failed", "message": reason}
-        for reason in verification.get("rejection_reasons", [])
-    )
+        rejected.extend(pass_rejections)
+        verification: dict[str, Any] = {"rejection_reasons": []}
+        if structural:
+            verified, verification = question_verification.verify_question_candidates(
+                structural,
+                bundle,
+                pool,
+                generator_metadata=generation,
+            )
+            for candidate in verified:
+                clean_rows, identity_rejections = validate_question_candidates(
+                    [candidate],
+                    subject_key,
+                    chapter,
+                    allowed_source_ids=bundle.source_ids,
+                    allowed_source_topics=bundle.source_topics,
+                    require_verification=True,
+                    require_deterministic_proof=DETERMINISTIC_PROOF_REQUIRED,
+                )
+                if identity_rejections:
+                    rejected.extend(identity_rejections)
+                    continue
+                try:
+                    identified = attach_candidate_identities(clean_rows[0])
+                except ValueError as exc:
+                    rejected.append({"code": "identity_invalid", "message": str(exc)})
+                    continue
+                accepted_by_identity.setdefault(str(identified["variant_fingerprint"]), identified)
+        rejected.extend(
+            {"code": "verification_failed", "message": reason} for reason in verification.get("rejection_reasons", [])
+        )
+
+        accepted_target = min(batch_size, _CANDIDATE_REPAIR_TARGET)
+        if len(accepted_by_identity) >= accepted_target or repair_number >= _CANDIDATE_REPAIR_LIMIT:
+            break
+        repair_codes = {str(item.get("code") or "content_invalid") for item in rejected}
+        active_prompt = _candidate_repair_prompt(prompt, repair_codes)
+
+    accepted = list(accepted_by_identity.values())[:batch_size]
+    generation = _aggregate_generation_metadata(generation_history)
     rows = [
         {
             **quiz_pack_service.question_row_from_validated_candidate(
@@ -220,11 +262,14 @@ def generate_and_store_candidate_batch(
         "provider": generation.get("provider") or "unknown",
         "model": generation.get("model") or "unknown",
         "latency_ms": generation.get("latency_ms") or latency_ms,
+        "attempts": generation.get("attempts") or len(generation_history),
+        "providers_attempted": generation.get("providers_attempted") or [],
         "input_tokens": generation.get("input_tokens"),
         "output_tokens": generation.get("output_tokens"),
         "source_document_ids": sorted(bundle.source_ids),
-        "candidate_count": len(raw),
+        "candidate_count": candidate_count,
         "accepted_count": len(rows),
+        "repair_attempted": len(generation_history) > 1,
         "rejection_codes": sorted({str(item.get("code")) for item in rejected}),
         "novelty_metrics": {"stable_identity_version": 1},
     }
@@ -234,6 +279,37 @@ def generate_and_store_candidate_batch(
         else {"accepted_count": 0, "question_ids": []}
     )
     return ReplenishmentBatchResult(accepted, rejected, context, persistence)
+
+
+def _aggregate_generation_metadata(history: list[dict[str, Any]]) -> dict[str, Any]:
+    if not history:
+        return {}
+    merged = dict(history[-1])
+    merged["attempts"] = sum(max(0, int(row.get("attempts") or 0)) for row in history)
+    merged["providers_attempted"] = list(
+        dict.fromkeys(
+            str(provider)
+            for row in history
+            for provider in (row.get("providers_attempted") or [row.get("provider")])
+            if provider
+        )
+    )
+    for field in ("latency_ms", "input_tokens", "output_tokens"):
+        values = [row.get(field) for row in history]
+        numeric = [int(value) for value in values if isinstance(value, (int, float)) and not isinstance(value, bool)]
+        if numeric:
+            merged[field] = sum(numeric)
+    return merged
+
+
+def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
+    codes = ", ".join(sorted(rejection_codes)) or "content_invalid"
+    return (
+        prompt
+        + "\nThe previous candidate batch was rejected by deterministic or independent checks with codes: "
+        + codes
+        + ". Generate a completely new replacement batch. Re-solve every question, ensure exactly one evidence-supported answer, make all normalized options materially distinct, and make every proof/translation artifact exactly match the displayed question. Do not relax, reinterpret, or bypass any validation rule."
+    )
 
 
 def _candidate_prompt(
@@ -246,7 +322,7 @@ def _candidate_prompt(
     return f"""Create exactly {batch_size} independent Bengali MCQ candidates for verified inventory.
 Subject key: {subject.key}
 Chapter: {chapter}
-Verified facts: {json.dumps(bundle.prompt_facts(), ensure_ascii=False, separators=(',', ':'))}
+Verified facts: {json.dumps(bundle.prompt_facts(), ensure_ascii=False, separators=(",", ":"))}
 
 Return only one JSON array. Every candidate must cite one supplied source_document_id,
 use only its explicit fact, contain four unique options, one correct_index, Bengali
@@ -348,26 +424,28 @@ def _enrich(
             enriched.append(item)
             continue
         source = source_by_id.get(str(item.get("source_document_id") or "").strip())
-        enriched.append({
-            **item,
-            "subject_key": subject_key,
-            "chapter": chapter,
-            "micro_topic_id": source.micro_topic_id if source else bundle.micro_topic_id,
-            "micro_topic_key": source.micro_topic_key if source else bundle.micro_topic_key,
-            "source_url": source.url if source else "",
-            "source_title": source.title if source else "",
-            "source_domain": source.domain if source else "",
-            "source_kind": source.kind if source else "",
-            "source_published_at": source.published_at if source else None,
-            "source_accessed_at": source.accessed_at if source else None,
-            "source_expires_at": source.expires_at if source else None,
-            "evidence_summary": source.fact_summary if source else "",
-            "fact_version": source.fact_version if source else "",
-            "language": item.get("language") or ("bn-en" if subject_key == "english" else "bn"),
-            "language_question_form": item.get("language_question_form"),
-            "language_verification": _json_object(item.get("language_verification_json")),
-            "deterministic_proof": _proof_from_item(item),
-        })
+        enriched.append(
+            {
+                **item,
+                "subject_key": subject_key,
+                "chapter": chapter,
+                "micro_topic_id": source.micro_topic_id if source else bundle.micro_topic_id,
+                "micro_topic_key": source.micro_topic_key if source else bundle.micro_topic_key,
+                "source_url": source.url if source else "",
+                "source_title": source.title if source else "",
+                "source_domain": source.domain if source else "",
+                "source_kind": source.kind if source else "",
+                "source_published_at": source.published_at if source else None,
+                "source_accessed_at": source.accessed_at if source else None,
+                "source_expires_at": source.expires_at if source else None,
+                "evidence_summary": source.fact_summary if source else "",
+                "fact_version": source.fact_version if source else "",
+                "language": item.get("language") or ("bn-en" if subject_key == "english" else "bn"),
+                "language_question_form": item.get("language_question_form"),
+                "language_verification": _json_object(item.get("language_verification_json")),
+                "deterministic_proof": _proof_from_item(item),
+            }
+        )
     return enriched
 
 
