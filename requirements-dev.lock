@@ -79,7 +79,7 @@ google-auth==2.56.3
     # via
     #   -c requirements.lock
     #   google-genai
-google-genai==2.18.1
+google-genai==2.19.0
     # via
     #   -c requirements.lock
     #   -r requirements.txt

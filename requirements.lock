@@ -42,7 +42,7 @@ fastapi==0.141.1
     # via -r requirements.txt
 google-auth==2.56.3
     # via google-genai
-google-genai==2.18.1
+google-genai==2.19.0
     # via -r requirements.txt
 h11==0.16.0
     # via
