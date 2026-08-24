@@ -58,6 +58,7 @@ PRODUCTION_LEDGER_SOURCE_MD5: dict[str, tuple[str, str]] = {
     "reconcile_unknown_quiz_post": ("20260821101000", "a0009b52c69e3ede8913ec70a696e670"),
     "platform_contract_v1": ("20260822190025", "7f02d50664b19d8ae9391a009a9e8653"),
     "learner_report_status_projection": ("20260823065257", "e4de3dc550bf911651011134e6d9a463"),
+    "durable_reminder_consent_delivery": ("20260824033823", "ea17591b8070d6ef1708acac43ef74cf"),
 }
 
 
