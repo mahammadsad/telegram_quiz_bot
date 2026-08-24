@@ -1,10 +1,11 @@
-"""Source-equivalent production migration identities recovered from Supabase.
+"""Immutable source identities for every migration recorded in production.
 
-These hashes are MD5 only because Supabase stores and reports migration statement
-MD5s; they are integrity identifiers, not security primitives. Every entry was
-matched to the production ``schema_migrations`` row by name and exact statement
-bytes on 2026-08-24. New migrations must not be added here until they are applied
-and independently re-read from the production ledger.
+These hashes are MD5 only to retain the original Supabase ledger-audit format;
+they are integrity identifiers, not security primitives. The 37 historical
+sources were matched to production statement bytes. Later sources were matched
+by version/name after production-schema equivalence checks and then pinned from
+the applied release. Every entry was independently re-read from the production
+ledger on 2026-08-24. New migrations must not be added until that process repeats.
 """
 
 from __future__ import annotations
@@ -47,6 +48,16 @@ PRODUCTION_LEDGER_SOURCE_MD5: dict[str, tuple[str, str]] = {
     "source_optional_timeless_quiz_generation": ("20260808160554", "a7c1d0040cc20b374017e3331332e8d6"),
     "bound_cached_source_resource_titles": ("20260808184535", "09c78f77388a73e953eef22809dace80"),
     "current_affairs_claim_hash_parity": ("20260808190716", "32703f999e62dcc8ae3e3be37c2d328f"),
+    "server_timed_daily_attempts": ("20260820090000", "84d5327542c6944bc2d17b7e2be3c9de"),
+    "question_verification_independence": ("20260820100000", "75bb8ce7e28aaa640a94919c2e55c710"),
+    "learning_test_catalog": ("20260820110000", "4cd4301181ae174c7980f8f03c3c4b70"),
+    "privacy_rights": ("20260820120000", "2ed80725129098eb22e3241e7ad559db"),
+    "job_subject_fk_indexes": ("20260821090000", "d0b3c65c6232e9a73d6dcb62519074ab"),
+    "harden_pg_trgm_extension": ("20260821091000", "a1f3ae33e373b14787f9b8943d3d3955"),
+    "restore_chapter_history_uniqueness": ("20260821100000", "7e755cf7e1db7835cb0987508f12dd7b"),
+    "reconcile_unknown_quiz_post": ("20260821101000", "a0009b52c69e3ede8913ec70a696e670"),
+    "platform_contract_v1": ("20260822190025", "7f02d50664b19d8ae9391a009a9e8653"),
+    "learner_report_status_projection": ("20260823065257", "e4de3dc550bf911651011134e6d9a463"),
 }
 
 

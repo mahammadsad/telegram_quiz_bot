@@ -96,6 +96,8 @@ jobs:
           python - <<'PY'
           import json
           import os
+          import time
+          from urllib.error import HTTPError
           from urllib.request import Request, urlopen
 
           url = os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1/rpc/get_my_question_report_statuses"
@@ -113,8 +115,16 @@ jobs:
               },
               method="POST",
           )
-          with urlopen(request, timeout=15) as response:
-              payload = json.loads(response.read().decode("utf-8"))
+          payload = None
+          for attempt in range(6):
+              try:
+                  with urlopen(request, timeout=15) as response:
+                      payload = json.loads(response.read().decode("utf-8"))
+                  break
+              except HTTPError as error:
+                  if error.code != 404 or attempt == 5:
+                      raise
+                  time.sleep(5)
           if not isinstance(payload, dict) or not {"items", "total", "limit", "offset"} <= payload.keys():
               raise SystemExit("Migration verification returned an unexpected projection payload.")
           print("Learner report status projection is callable.")
