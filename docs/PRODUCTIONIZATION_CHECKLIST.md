@@ -105,7 +105,7 @@ staging test has passed. Source-code inspection alone is not sufficient.
 
 ## Final release evidence
 
-- [x] Local Python suite: 593 passed, 35 skipped; the skips are the expected
+- [x] Local Python suite: 594 passed, 36 skipped; the skips are the expected
   database cases without `TEST_DATABASE_URL`.
 - [x] Local Ruff, configured mypy (90 source files), full-history scanner,
   browser JavaScript execution, and whitespace gates pass.
@@ -121,10 +121,16 @@ staging test has passed. Source-code inspection alone is not sufficient.
 - [x] Rollback-only staging database lifecycle passed exact-ten checksum
   readback, UUID retry/retake, current-user leaderboard, revision scheduling,
   and revision-report checks without leaving test rows.
+- [x] Replenishment fairness migration passed the disposable PostgreSQL build,
+  a rollback-only six-subject staging probe, production dry-run `32693707165`,
+  deployment `32693756799`, and a rollback-only ten-claim production probe.
 
 - [x] Final branch CI passes from a clean checkout: GitHub Actions Tests run #84
   completed 242 PostgreSQL-backed tests, 6 migration-security tests,
   full-history scanning, and 48 browser tests across four projects.
+- [x] Fair-claim release `a6a42ee` passed Tests run `32693496205` (including
+  every migration on disposable PostgreSQL and 140 mobile-browser checks) and
+  Security run `32693496198`.
 - [x] Current production release `6970fbe` passed Tests run `32692689055`,
   Security run `32692689022`, strict readiness and canonical answer-free smoke
   run `32692761154` on `https://telegram-quiz-bot-h7p1.onrender.com`.
