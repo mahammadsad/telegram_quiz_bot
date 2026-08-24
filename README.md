@@ -48,8 +48,9 @@ use the service role against RLS-protected tables and explicitly granted RPCs.
 
 ## Reliable data flow
 
-1. A GitHub schedule is mapped to one canonical subject from
-   `config/schedule.py`; server wall-clock guessing is not used.
+1. A 15-minute GitHub heartbeat invokes the durable dispatcher from
+   `config/schedule.py`; PostgreSQL due times, leases, retries and terminal
+   states decide which canonical subject jobs are actionable.
 2. The worker claims `YYYYMMDD-subject-key` with an expiring database lease.
    Another worker cannot generate or post the same logical run concurrently;
    stale leases can be recovered.
@@ -122,10 +123,11 @@ The canonical subjects run hourly from 07:00 through 19:00 IST in this order:
 `polity`, `geography`, `science`, `economics`, `history`, `environment`, and
 `current-affairs`. Recovery runs at 20:30 IST. `general` is announcement-only.
 
-GitHub invokes thirteen exact subject crons, and every normal run resolves to
-one immutable subject. A separate 20:30 IST recovery catches genuinely missed
-subjects and exports every checksum-valid pack in one public-fallback batch.
-The schedule and subject identities live in
+GitHub invokes one 15-minute heartbeat that ensures the complete 13-job daily
+ledger, claims every due retryable job with a lease, and reports all global due
+states even when nothing is claimable. A separate 20:30 IST completeness run
+alerts the private operator channel and exports every checksum-valid pack in one
+answer-free fallback artifact. The schedule and subject identities live in
 `config/schedule.py` and `config/subjects.py`; the complete curriculum lives in
 `config/syllabus_catalog.py`. Workflow concurrency uses the logical date and
 subject, waits instead of cancelling an active run, and has no run-ID component.

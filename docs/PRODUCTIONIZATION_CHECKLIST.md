@@ -105,12 +105,12 @@ staging test has passed. Source-code inspection alone is not sufficient.
 
 ## Final release evidence
 
-- [x] Local Python suite: 227 passed, 15 skipped; the skips are the expected
+- [x] Local Python suite: 593 passed, 35 skipped; the skips are the expected
   database cases without `TEST_DATABASE_URL`.
-- [x] Local Ruff, configured mypy (58 source files), full-history scanner,
+- [x] Local Ruff, configured mypy (90 source files), full-history scanner,
   browser JavaScript execution, and whitespace gates pass.
-- [x] Local Playwright suite: 48 passed across all four required Android
-  viewports with 44 screenshot attachments and an HTML report.
+- [x] Local Playwright suite: 140 passed across all four required Android
+  viewports, including automated WCAG checks and screenshot evidence.
 - [x] GitHub Actions run #84 uploaded
   `mobile-browser-evidence-1` (artifact `8610726968`, 19.3 MB), retained through
   2026-08-23.
@@ -125,6 +125,9 @@ staging test has passed. Source-code inspection alone is not sufficient.
 - [x] Final branch CI passes from a clean checkout: GitHub Actions Tests run #84
   completed 242 PostgreSQL-backed tests, 6 migration-security tests,
   full-history scanning, and 48 browser tests across four projects.
+- [x] Current production release `6970fbe` passed Tests run `32692689055`,
+  Security run `32692689022`, strict readiness and canonical answer-free smoke
+  run `32692761154` on `https://telegram-quiz-bot-h7p1.onrender.com`.
 - [x] Staging required migration `20260724212939` and contract `2.2.0` are exact;
   all contract failure arrays are empty.
 - [x] Staging application 8.6.0 at exact commit `2bd1086b` returned HTTP 200 from
