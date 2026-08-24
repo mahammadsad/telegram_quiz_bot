@@ -603,5 +603,7 @@ def test_service_validates_preferences_and_never_exposes_private_fields(monkeypa
         service.save_preferences({"id": 123}, {**payload, "preferred_language": "en"})
     with pytest.raises(ValueError, match="not fully supported"):
         service.save_preferences({"id": 123}, {**payload, "preferred_language": "hi"})
+    with pytest.raises(ValueError, match="reminders are not available"):
+        service.save_preferences({"id": 123}, {**payload, "daily_reminder_enabled": True})
     with pytest.raises(ValueError, match="private field"):
         service._safe({"telegram_id": 123})

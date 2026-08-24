@@ -245,6 +245,8 @@ def save_preferences(telegram_user: dict, payload: dict[str, Any]) -> dict:
     display_name = str(payload.get("public_display_name") or "").strip() or None
     if display_name and not 2 <= len(display_name) <= 40:
         raise ValueError("Public display name must contain 2 to 40 characters.")
+    if bool(payload.get("daily_reminder_enabled")):
+        raise ValueError("Daily reminders are not available until consented delivery is complete.")
     clean = {
         "target_exams": target_exams,
         "preferred_subjects": preferred_subjects,
@@ -255,7 +257,7 @@ def save_preferences(telegram_user: dict, payload: dict[str, Any]) -> dict:
         "leaderboard_visible": bool(payload.get("leaderboard_visible")),
         "public_display_name": display_name,
         "username_visible": bool(payload.get("username_visible")),
-        "daily_reminder_enabled": bool(payload.get("daily_reminder_enabled")),
+        "daily_reminder_enabled": False,
         "revision_sound_enabled": bool(payload.get("revision_sound_enabled", True)),
         "revision_vibration_enabled": bool(payload.get("revision_vibration_enabled", False)),
     }
