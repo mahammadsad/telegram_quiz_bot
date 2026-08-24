@@ -495,6 +495,80 @@ async function installApiMocks(page, options = {}) {
       });
     }
 
+    if (path === "/api/syllabus" && method === "GET") {
+      return json({
+        version: 2,
+        exams: [
+          { key: "WBCS", name: "WBCS" },
+          { key: "SSC", name: "SSC" },
+        ],
+        summary: {
+          subjectCount: 2,
+          chapterCount: 3,
+          microTopicCount: 12,
+          availableChapterCount: 2,
+        },
+        subjects: [
+          {
+            key: "history",
+            name: "ইতিহাস",
+            examKeys: ["WBCS", "SSC"],
+            chapterCount: 2,
+            microTopicCount: 8,
+            availableChapterCount: 1,
+            chapters: [
+              {
+                key: "history:modern-india",
+                name: "আধুনিক ভারত",
+                priority: 3,
+                availableInDailyRotation: true,
+                microTopics: [
+                  { key: "history:modern-india:t01", name: "জাতীয় আন্দোলন" },
+                  { key: "history:modern-india:t02", name: "স্বদেশি আন্দোলন" },
+                  { key: "history:modern-india:t03", name: "গান্ধী যুগ" },
+                  { key: "history:modern-india:t04", name: "স্বাধীনতা ও দেশভাগ" },
+                ],
+              },
+              {
+                key: "history:world-history",
+                name: "বিশ্ব ইতিহাসের ভিত্তি",
+                priority: 2,
+                availableInDailyRotation: false,
+                microTopics: [
+                  { key: "history:world-history:t01", name: "রেনেসাঁ" },
+                  { key: "history:world-history:t02", name: "ফরাসি বিপ্লব" },
+                  { key: "history:world-history:t03", name: "শিল্পবিপ্লব" },
+                  { key: "history:world-history:t04", name: "বিশ্বযুদ্ধ" },
+                ],
+              },
+            ],
+          },
+          {
+            key: "geography",
+            name: "ভূগোল",
+            examKeys: ["WBCS"],
+            chapterCount: 1,
+            microTopicCount: 4,
+            availableChapterCount: 1,
+            chapters: [
+              {
+                key: "geography:india",
+                name: "ভারতের ভূগোল",
+                priority: 3,
+                availableInDailyRotation: true,
+                microTopics: [
+                  { key: "geography:india:t01", name: "ভারতের অবস্থান" },
+                  { key: "geography:india:t02", name: "ভূপ্রকৃতি" },
+                  { key: "geography:india:t03", name: "নদনদী" },
+                  { key: "geography:india:t04", name: "জলবায়ু" },
+                ],
+              },
+            ],
+          },
+        ],
+      });
+    }
+
     if (path === `/api/quiz/${QUIZ_ID}` && method === "GET") {
       if (options.quizLoadDelayMs) {
         await new Promise((resolve) => setTimeout(resolve, options.quizLoadDelayMs));

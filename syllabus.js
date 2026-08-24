@@ -1,0 +1,36 @@
+(function(){
+  "use strict";
+  var apiBase=(document.querySelector('meta[name="quiz-api-base"]')||{}).content||"";
+  var fetcher=window.miniappFetch||window.fetch.bind(window);
+  var payload=null;
+  var requestedExam=(new URLSearchParams(location.search).get("exam")||"").trim().toUpperCase();
+  function el(id){return document.getElementById(id)}
+  function api(path){return apiBase.replace(/\/$/,"")+path}
+  function check(response){if(!response.ok){var error=new Error("request failed");error.status=response.status;throw error}return response.json()}
+  function show(id){["loading","error","empty","catalog"].forEach(function(name){el(name).classList.toggle("hidden",name!==id)})}
+  function option(value,label){var node=document.createElement("option");node.value=value;node.textContent=label;return node}
+  function load(){show("loading");fetcher(api("/api/syllabus"),{cache:"no-store"}).then(check).then(function(data){payload=data;buildFilters();render()}).catch(function(){show("error")})}
+  function buildFilters(){
+    var exam=el("exam-filter"),subject=el("subject-filter");exam.length=1;subject.length=1;
+    (payload.exams||[]).forEach(function(item){exam.appendChild(option(item.key,item.name))});
+    (payload.subjects||[]).forEach(function(item){subject.appendChild(option(item.key,item.name))});
+    if((payload.exams||[]).some(function(item){return item.key===requestedExam}))exam.value=requestedExam;
+  }
+  function metric(value,label){var node=document.createElement("span"),strong=document.createElement("b");strong.textContent=bn(value);node.append(strong,document.createTextNode(label));return node}
+  function bn(value){return Number(value||0).toLocaleString("bn-IN")}
+  function renderSummary(subjects){
+    var chapterCount=0,topicCount=0,available=0,box=el("summary");subjects.forEach(function(subject){chapterCount+=subject.chapterCount||0;topicCount+=subject.microTopicCount||0;available+=subject.availableChapterCount||0});box.textContent="";box.append(metric(subjects.length,"টি বিষয়"),metric(chapterCount,"টি অধ্যায়"),metric(topicCount,"টি মাইক্রো-টপিক"),metric(available,"টি দৈনিক রোটেশনে"));
+  }
+  function matchesChapter(chapter,query){if(!query)return true;return [chapter.name].concat((chapter.microTopics||[]).map(function(topic){return topic.name})).join(" ").toLowerCase().includes(query)}
+  function render(){
+    var exam=el("exam-filter").value,subjectKey=el("subject-filter").value,query=el("topic-search").value.trim().toLowerCase(),rows=(payload.subjects||[]).filter(function(subject){return(!exam||subject.examKeys.includes(exam))&&(!subjectKey||subject.key===subjectKey)}).map(function(subject){var copy=Object.assign({},subject);copy.chapters=(subject.chapters||[]).filter(function(chapter){return matchesChapter(chapter,query)});copy.chapterCount=copy.chapters.length;copy.microTopicCount=copy.chapters.reduce(function(total,chapter){return total+(chapter.microTopics||[]).length},0);copy.availableChapterCount=copy.chapters.filter(function(chapter){return chapter.availableInDailyRotation}).length;return copy}).filter(function(subject){return subject.chapters.length});
+    renderSummary(rows);var catalog=el("catalog");catalog.textContent="";if(!rows.length){show("empty");return}rows.forEach(function(subject){catalog.appendChild(subjectCard(subject,query))});show("catalog");
+  }
+  function subjectCard(subject,query){
+    var card=document.createElement("article"),head=document.createElement("div"),copy=document.createElement("div"),title=document.createElement("h2"),meta=document.createElement("p"),actions=document.createElement("div"),quiz=document.createElement("a"),practice=document.createElement("a"),chapters=document.createElement("div");card.className="subject-card";head.className="subject-head";title.textContent=subject.name;meta.textContent=bn(subject.chapterCount)+" অধ্যায় · "+bn(subject.microTopicCount)+" মাইক্রো-টপিক";copy.append(title,meta);actions.className="subject-actions";quiz.className="btn primary";quiz.href="./?subject="+encodeURIComponent(subject.key);quiz.textContent="এই বিষয়ের কুইজ";practice.className="btn";practice.href="practice.html?source=weak_topic&subject="+encodeURIComponent(subject.key);practice.textContent="দুর্বল টপিক";actions.append(quiz,practice);head.append(copy,actions);chapters.className="chapter-list";(subject.chapters||[]).forEach(function(chapter){chapters.appendChild(chapterRow(chapter,query))});card.append(head,chapters);return card;
+  }
+  function chapterRow(chapter,query){
+    var details=document.createElement("details"),summary=document.createElement("summary"),name=document.createElement("span"),meta=document.createElement("span"),topics=document.createElement("ol");details.className="chapter";name.textContent=chapter.name;meta.className="chapter-meta "+(chapter.availableInDailyRotation?"rotation":"planned");meta.textContent=chapter.availableInDailyRotation?"দৈনিক কুইজে আছে":"সিলেবাসে আছে";summary.append(name,meta);topics.className="topics";(chapter.microTopics||[]).forEach(function(topic){var item=document.createElement("li");item.textContent=topic.name;if(query&&topic.name.toLowerCase().includes(query))item.className="match-mark";topics.appendChild(item)});details.open=Boolean(query);details.append(summary,topics);return details;
+  }
+  ["exam-filter","subject-filter"].forEach(function(id){el(id).addEventListener("change",render)});el("topic-search").addEventListener("input",render);el("clear-filters").addEventListener("click",function(){el("exam-filter").value="";el("subject-filter").value="";el("topic-search").value="";render()});el("retry").addEventListener("click",load);load();
+})();

@@ -36,6 +36,8 @@ def build_static_router(root: Path) -> APIRouter:
         ("/terms.html", "terms.html"),
         ("/mock", "mock.html"),
         ("/mock.html", "mock.html"),
+        ("/syllabus", "syllabus.html"),
+        ("/syllabus.html", "syllabus.html"),
         ("/admin", "admin.html"),
         ("/admin.html", "admin.html"),
     ):
@@ -48,6 +50,8 @@ def build_static_router(root: Path) -> APIRouter:
         ("/index.js", "index.js", "text/javascript", "public, max-age=3600"),
         ("/mock.css", "mock.css", "text/css", "public, max-age=300"),
         ("/mock.js", "mock.js", "text/javascript", "public, max-age=3600"),
+        ("/syllabus.css", "syllabus.css", "text/css", "public, max-age=300"),
+        ("/syllabus.js", "syllabus.js", "text/javascript", "public, max-age=3600"),
         ("/practice.css", "practice.css", "text/css", "public, max-age=300"),
         ("/practice.js", "practice.js", "text/javascript", "public, max-age=3600"),
         ("/dashboard.css", "dashboard.css", "text/css", "public, max-age=300"),

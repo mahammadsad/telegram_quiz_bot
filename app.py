@@ -58,6 +58,7 @@ from services import (
     rate_limit,
     readiness_service,
     resource_quality_service,
+    syllabus_catalog_service,
     test_attempts_service,
 )
 from storage import stats_repo, users_repo
@@ -170,6 +171,7 @@ app.include_router(
         exam_service=exam_config_service,
         quiz_service=quiz_pack_service,
         attempts_service=test_attempts_service,
+        syllabus_service=syllabus_catalog_service,
         mark_answer_free=_mark_answer_free,
     )
 )

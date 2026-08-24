@@ -15,9 +15,25 @@ def build_catalog_router(
     exam_service: Any,
     quiz_service: Any,
     attempts_service: Any,
+    syllabus_service: Any,
     mark_answer_free: Callable[[Response, object], None],
 ) -> APIRouter:
     router = APIRouter()
+
+    @router.get("/api/syllabus")
+    def syllabus(
+        response: Response,
+        exam: str | None = None,
+        subject: str | None = None,
+    ) -> dict:
+        try:
+            payload = syllabus_service.syllabus_catalog(exam_key=exam, subject_key=subject)
+            mark_answer_free(response, payload)
+            return payload
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail="Syllabus catalog is temporarily unavailable.") from exc
 
     @router.get("/api/exams")
     def exams(as_of: date | None = None, exam: str | None = None, limit: int = 20, offset: int = 0) -> dict:

@@ -50,6 +50,15 @@ test("settings satisfies automated WCAG 2.2 AA checks", async ({ page }) => {
   await expectWcag22Aa(page);
 });
 
+test("syllabus map satisfies automated WCAG 2.2 AA checks", async ({ page }) => {
+  await installTelegramMock(page);
+  await installApiMocks(page);
+  await page.goto("/syllabus.html");
+
+  await expect(page.locator("#catalog")).toBeVisible();
+  await expectWcag22Aa(page);
+});
+
 test("revision practice satisfies automated WCAG 2.2 AA checks", async ({ page }) => {
   await installTelegramMock(page);
   await installApiMocks(page, { practiceSource: "due" });

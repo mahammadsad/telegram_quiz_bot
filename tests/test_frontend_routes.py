@@ -15,6 +15,7 @@ def test_frontend_routes_include_index_alias_for_cached_mini_apps() -> None:
         "/practice.html",
         "/settings.html",
         "/mock.html",
+        "/syllabus.html",
         "/privacy.html",
         "/terms.html",
         "/admin.html",
@@ -31,6 +32,8 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
         "/index.js": "text/javascript",
         "/mock.css": "text/css",
         "/mock.js": "text/javascript",
+        "/syllabus.css": "text/css",
+        "/syllabus.js": "text/javascript",
         "/practice.css": "text/css",
         "/practice.js": "text/javascript",
         "/dashboard.css": "text/css",
@@ -57,6 +60,8 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert CLIENT.get("/index.js").headers["cache-control"] == "public, max-age=3600"
     assert CLIENT.get("/mock.css").headers["cache-control"] == "public, max-age=300"
     assert CLIENT.get("/mock.js").headers["cache-control"] == "public, max-age=3600"
+    assert CLIENT.get("/syllabus.css").headers["cache-control"] == "public, max-age=300"
+    assert CLIENT.get("/syllabus.js").headers["cache-control"] == "public, max-age=3600"
     assert CLIENT.get("/practice.css").headers["cache-control"] == "public, max-age=300"
     assert CLIENT.get("/practice.js").headers["cache-control"] == "public, max-age=3600"
     assert CLIENT.get("/dashboard.css").headers["cache-control"] == "public, max-age=300"
@@ -118,6 +123,26 @@ def test_mock_page_without_uuid_opens_catalog_instead_of_dead_end() -> None:
     script = CLIENT.get("/mock.js").text
     assert 'miniappFetch(api("/api/tests/catalog?limit=100"))' in script
     assert "if(!validTestId(testId)){loadCatalog();return}" in script
+
+
+def test_syllabus_map_is_external_asset_only_and_linked_from_learning_surfaces() -> None:
+    html = CLIENT.get("/syllabus.html").text
+    script = CLIENT.get("/syllabus.js").text
+    assert '<script src="syllabus.js"></script>' in html
+    assert "<script>" not in html
+    assert 'fetcher(api("/api/syllabus")' in script
+    assert "innerHTML" not in script
+    assert "syllabus.html" in CLIENT.get("/dashboard.html").text
+    assert "syllabus.html" in CLIENT.get("/mock.html").text
+
+
+def test_public_syllabus_projection_is_answer_free_and_cacheable() -> None:
+    response = CLIENT.get("/api/syllabus?exam=WBCS&subject=history")
+    assert response.status_code == 200
+    assert response.headers["x-answer-free-payload"] == "1"
+    assert response.headers["cache-control"].startswith("public, max-age=300")
+    assert response.json()["summary"]["subjectCount"] == 1
+    assert "correctIndex" not in response.text
 
 
 def test_only_answer_free_pre_submission_projections_are_cache_eligible(monkeypatch) -> None:
