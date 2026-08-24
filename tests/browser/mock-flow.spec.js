@@ -318,6 +318,15 @@ test("authenticated catalog shows server attempt state and resumes across device
   await expect(page.locator("#pyq-hierarchy")).toContainText("বছর: 2025");
   await expect(page.locator("#pyq-hierarchy")).toContainText("শিফট: সকাল");
   await expect(page.locator("#pyq-hierarchy")).not.toContainText("correctIndex");
+  await page.locator("#pyq-hierarchy details").evaluateAll((nodes) => {
+    nodes.forEach((node) => {
+      node.open = true;
+    });
+  });
+  await expectWcag22Aa(page);
+  await assertNoHorizontalOverflow(page);
+  await assertVisibleTouchTargets(page);
+  await assertBottomNavigationDoesNotCoverContent(page);
   const resume = page.getByRole("link", { name: "চালিয়ে যান" });
   await expect(resume).toHaveAttribute("href", new RegExp(`test=${TEST_ID}.*clientAttempt=${ATTEMPT_ID}`));
   await resume.click();
