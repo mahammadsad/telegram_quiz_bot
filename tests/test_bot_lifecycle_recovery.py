@@ -950,6 +950,16 @@ def test_generation_prompt_requires_normalized_option_values_to_be_distinct():
     assert "Bengali versus Arabic digits" in prompt
     repaired = bot._repair_generation_prompt("base", "options_materially_duplicate")
     assert "different mathematical values after normalization" in repaired
+    basic_repair = bot._repair_generation_prompt("base", "duplicate_options")
+    assert "audit all 40 options" in basic_repair
+
+
+def test_generation_repair_has_specific_batch_wide_duplicate_and_balance_guidance():
+    duplicate = bot._repair_generation_prompt("base", "duplicate_question")
+    balance = bot._repair_generation_prompt("base", "answer_position_balance")
+
+    assert "ten distinct relationships" in duplicate
+    assert "Recalculate every correct_index" in balance
 
 
 def _ready_phase_e3_contract() -> dict:

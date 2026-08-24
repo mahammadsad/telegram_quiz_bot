@@ -156,6 +156,15 @@ _VALIDATION_REASON_CODES = (
 )
 
 _VALIDATION_REPAIR_HINTS = {
+    "duplicate_options": (
+        "For every question, rewrite all four options as four distinct answers after removing "
+        "labels, punctuation, whitespace, units, and Bengali-versus-Arabic digit formatting. "
+        "Do not repair only the first failing question; audit all 40 options before returning."
+    ),
+    "duplicate_question": (
+        "Replace every repeated or paraphrased stem and repeated entity-relation-answer tuple. "
+        "The ten questions must test ten distinct relationships, not ten wordings of fewer facts."
+    ),
     "option_pattern_leakage": (
         "Make all four options use the same visible answer type and script pattern; "
         "the correct option must not be the only numeric, Latin, Bengali, or mixed-script option."
@@ -166,6 +175,10 @@ _VALIDATION_REPAIR_HINTS = {
     "bengali_explanation": (
         "Every explanation and detailed_explanation must contain clear Bengali script, "
         "including for English-language questions."
+    ),
+    "answer_position_balance": (
+        "Keep every question and answer unchanged, then reorder options so two correct_index "
+        "positions occur twice and two occur three times. Recalculate every correct_index."
     ),
 }
 
