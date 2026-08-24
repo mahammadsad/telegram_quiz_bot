@@ -330,7 +330,8 @@ def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
             "family list in this prompt; never invent a geometry, theorem, or other unsupported "
             "family. If the source fact cannot produce a question using one listed family, use a "
             "different supplied fact. Every listed family, including gcd_lcm, exact_square_root, "
-            "compound_interest, direct_proportion, weighted_average, and partnership_share, is "
+            "compound_interest, direct_proportion, weighted_average, partnership_share, "
+            "percentage_change, simple_probability, and rectangle_measure, is "
             "valid only with the exact parameter contract listed in the base prompt."
         )
     if rejection_codes & {
@@ -408,7 +409,8 @@ Use proof_option_units for all four options when the family has a unit; otherwis
 four empty strings. Supported mathematics families are arithmetic_expression,
 percentage_of, average, ratio_share, simple_interest, algebra_linear, time_work,
 speed_distance, profit_loss, rounded_division, gcd_lcm, exact_square_root, and
-compound_interest, direct_proportion, weighted_average, and partnership_share.
+compound_interest, direct_proportion, weighted_average, partnership_share,
+percentage_change, simple_probability, and rectangle_measure.
 Supported reasoning families are
 arithmetic_series_next, ordering_rank, odd_one_out_tag, coding_shift, direction_path,
 ordering_constraints, syllogism_finite_sets, and analogy_mapping. Unsupported or
@@ -430,6 +432,13 @@ unit rate then result; weighted_average has equally sized values and positive we
 with a trace of weighted total, total weight, then result; partnership_share has equally
 sized positive capitals and durations, non-negative total_profit, and a zero-based
 requested_index, with a trace of total capital-time share then result and currency units.
+percentage_change has positive original and non-negative updated, with a trace of
+difference then percentage result and percent units; simple_probability has positive
+integer favorable and total counts with favorable no greater than total, with the exact
+fraction result as its trace and probability units; rectangle_measure has positive
+length and width, length_unit centimetre/metre/kilometre, and requested area or
+perimeter. Area traces the result and uses square_<length_unit>; perimeter traces side
+sum then result and uses the length unit.
 arithmetic_series_next has sequence; ordering_rank has values,
 target, and direction (ascending or descending); odd_one_out_tag has exactly four tags,
 three equal and one different; coding_shift has source, shift, and encode/decode

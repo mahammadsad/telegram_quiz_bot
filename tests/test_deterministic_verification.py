@@ -406,6 +406,91 @@ def test_more_math_families_reject_invalid_parameters(
     assert raised.value.code == "math_proof_invalid"
 
 
+@pytest.mark.parametrize(
+    ("family", "parameters", "options", "option_values", "trace", "units", "correct"),
+    [
+        (
+            "percentage_change",
+            {"original": 80, "updated": 100},
+            ["২০%", "২৫%", "৩০%", "৩৫%"],
+            [20, 25, 30, 35],
+            [20, 25],
+            ["percent"] * 4,
+            1,
+        ),
+        (
+            "simple_probability",
+            {"favorable": 2, "total": 6},
+            ["১/৬", "১/৩", "১/২", "২/৩"],
+            ["1/6", "1/3", "1/2", "2/3"],
+            ["1/3"],
+            ["probability"] * 4,
+            1,
+        ),
+        (
+            "rectangle_measure",
+            {"length": 12, "width": 5, "requested": "perimeter", "length_unit": "metre"},
+            ["২৪", "৩০", "৩৪", "৬০"],
+            [24, 30, 34, 60],
+            [17, 34],
+            ["metre"] * 4,
+            2,
+        ),
+    ],
+)
+def test_broader_competitive_exam_math_families_are_solved(
+    family: str,
+    parameters: dict,
+    options: list[str],
+    option_values: list,
+    trace: list,
+    units: list[str],
+    correct: int,
+) -> None:
+    candidate = mathematics_candidate()
+    candidate["options"] = options
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": option_values,
+        "option_units": units,
+        "explanation_values": trace,
+        "explanation_conclusion": options[correct],
+    }
+    assert verify_candidate(candidate).family == family
+
+
+@pytest.mark.parametrize(
+    ("family", "parameters"),
+    [
+        ("percentage_change", {"original": 0, "updated": 10}),
+        ("simple_probability", {"favorable": 7, "total": 6}),
+        (
+            "rectangle_measure",
+            {"length": 12, "width": -1, "requested": "area", "length_unit": "metre"},
+        ),
+    ],
+)
+def test_broader_math_families_reject_invalid_parameters(
+    family: str, parameters: dict
+) -> None:
+    candidate = mathematics_candidate()
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": [10, 20, 25, 30],
+        "option_units": ["percent"] * 4,
+        "explanation_values": [25],
+        "explanation_conclusion": "২৫",
+    }
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+    assert raised.value.code == "math_proof_invalid"
+
+
 def test_exact_square_root_rejects_non_perfect_square() -> None:
     candidate = mathematics_candidate()
     candidate["deterministic_proof"] = {

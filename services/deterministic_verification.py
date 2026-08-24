@@ -595,6 +595,38 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             total_share = sum(shares, Fraction())
             result = total_profit * shares[requested_index] / total_share
             return _SolvedValue(result, (total_share, result), "currency")
+        if family == "percentage_change":
+            original = _fraction(params["original"])
+            updated = _fraction(params["updated"])
+            if original <= 0 or updated < 0:
+                raise ValueError
+            difference = updated - original
+            result = difference * 100 / original
+            return _SolvedValue(result, (difference, result), "percent")
+        if family == "simple_probability":
+            favorable = _positive_int(params.get("favorable"), maximum=10**9)
+            probability_total = _positive_int(params.get("total"), maximum=10**9)
+            if favorable > probability_total:
+                raise ValueError
+            result = Fraction(favorable, probability_total)
+            return _SolvedValue(result, (result,), "probability")
+        if family == "rectangle_measure":
+            length = _fraction(params["length"])
+            width = _fraction(params["width"])
+            requested = str(params.get("requested") or "")
+            length_unit = _required_unit(
+                params.get("length_unit"), {"centimetre", "metre", "kilometre"}
+            )
+            if length <= 0 or width <= 0:
+                raise ValueError
+            if requested == "area":
+                result = length * width
+                return _SolvedValue(result, (result,), f"square_{length_unit}")
+            if requested == "perimeter":
+                side_sum = length + width
+                result = 2 * side_sum
+                return _SolvedValue(result, (side_sum, result), length_unit)
+            raise ValueError
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         raise DeterministicVerificationError(
             "math_proof_invalid", "The mathematics proof parameters are invalid."
