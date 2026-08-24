@@ -599,5 +599,9 @@ def test_service_validates_preferences_and_never_exposes_private_fields(monkeypa
     assert saved["target_exams"] == ["SSC", "RAILWAY"]
     with pytest.raises(ValueError, match="Unknown target exam"):
         service.save_preferences({"id": 123}, {**payload, "target_exams": ["FAKE"]})
+    with pytest.raises(ValueError, match="not fully supported"):
+        service.save_preferences({"id": 123}, {**payload, "preferred_language": "en"})
+    with pytest.raises(ValueError, match="not fully supported"):
+        service.save_preferences({"id": 123}, {**payload, "preferred_language": "hi"})
     with pytest.raises(ValueError, match="private field"):
         service._safe({"telegram_id": 123})

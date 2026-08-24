@@ -25,7 +25,10 @@ EXAM_KEYS = {
     "RAILWAY",
     "BANKING",
 }
-LANGUAGES = {"bn", "hi", "en"}
+# The learner interface is Bengali-complete only. Content records and PYQ
+# filters may legitimately carry other languages, but a saved UI preference
+# must not claim a locale the application cannot render end to end.
+SUPPORTED_UI_LANGUAGES = {"bn"}
 DIFFICULTIES = {"adaptive", "easy", "medium", "hard"}
 QUIZ_MODES = {"timed", "practice"}
 BOOKMARK_TYPES = {"question", "resource"}
@@ -230,8 +233,8 @@ def save_preferences(telegram_user: dict, payload: dict[str, Any]) -> dict:
     language = str(payload.get("preferred_language") or "").strip()
     difficulty = str(payload.get("difficulty_preference") or "").strip()
     quiz_mode = str(payload.get("quiz_mode") or "").strip()
-    if language not in LANGUAGES:
-        raise ValueError("Invalid preferred language.")
+    if language not in SUPPORTED_UI_LANGUAGES:
+        raise ValueError("Preferred interface language is not fully supported.")
     if difficulty not in DIFFICULTIES:
         raise ValueError("Invalid difficulty preference.")
     if quiz_mode not in QUIZ_MODES:
