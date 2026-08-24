@@ -172,6 +172,7 @@ def verify_questions(
             raise QuizValidationError(
                 "Independent verification rejected the quiz: " + "; ".join(rejection_reasons),
                 retryable=True,
+                reason_code="independent_verification_rejected",
             )
         partial_metadata = {
             **metadata,

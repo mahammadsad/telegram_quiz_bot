@@ -190,6 +190,11 @@ _VALIDATION_REPAIR_HINTS = {
         "Changing names, numbers, option order, or wording does not make the same tested pattern new. "
         "Use different concepts and relationships from the allowed chapter and micro-topics."
     ),
+    "independent_verification_rejected": (
+        "Independently solve all ten replacement questions before choosing any correct_index. "
+        "Recompute every answer and rewrite each short and detailed explanation so both derive "
+        "the same unique option. Do not preserve a question merely because its format looks valid."
+    ),
 }
 
 
@@ -501,7 +506,36 @@ def generate_mcqs(
                 validation_error = exc
 
         if validation_error is None and generated is not None:
-            break
+            try:
+                generation = _aggregate_generation_metadata(generation_history)
+                verified, verification = question_verification.verify_questions(
+                    generated,
+                    grounding_bundle,
+                    pool,
+                    quiz_id=quiz_id,
+                    generator_metadata=generation,
+                )
+                clean = validate_questions(
+                    verified,
+                    subject_key,
+                    chapter,
+                    micro_topic_id=grounding_bundle.micro_topic_id,
+                    micro_topic_key=grounding_bundle.micro_topic_key,
+                    allowed_source_ids=grounding_bundle.source_ids,
+                    allowed_source_topics=grounding_bundle.source_topics,
+                    allowed_micro_topics=grounding_bundle.allowed_micro_topics,
+                    source_required=grounding_bundle.source_required,
+                    required_source_diversity=grounding_bundle.required_source_diversity,
+                    required_topic_diversity=grounding_bundle.required_topic_diversity,
+                    require_verification=True,
+                )
+                generation["verification_provider"] = verification.get("provider")
+                generation["verification_model"] = verification.get("model")
+                generation["verification_attempts"] = verification.get("attempts")
+                return clean, generation
+            except QuizValidationError as exc:
+                generated = None
+                validation_error = exc
         reason_code = (
             "malformed_json"
             if raw is None
@@ -533,33 +567,8 @@ def generate_mcqs(
         )
         raise final_error from validation_error
     if generated is None:
-        raise RuntimeError("Quiz generation completed without validated questions.")
-    generation = _aggregate_generation_metadata(generation_history)
-    verified, verification = question_verification.verify_questions(
-        generated,
-        grounding_bundle,
-        pool,
-        quiz_id=quiz_id,
-        generator_metadata=generation,
-    )
-    clean = validate_questions(
-        verified,
-        subject_key,
-        chapter,
-        micro_topic_id=grounding_bundle.micro_topic_id,
-        micro_topic_key=grounding_bundle.micro_topic_key,
-        allowed_source_ids=grounding_bundle.source_ids,
-        allowed_source_topics=grounding_bundle.source_topics,
-        allowed_micro_topics=grounding_bundle.allowed_micro_topics,
-        source_required=grounding_bundle.source_required,
-        required_source_diversity=grounding_bundle.required_source_diversity,
-        required_topic_diversity=grounding_bundle.required_topic_diversity,
-        require_verification=True,
-    )
-    generation["verification_provider"] = verification.get("provider")
-    generation["verification_model"] = verification.get("model")
-    generation["verification_attempts"] = verification.get("attempts")
-    return clean, generation
+        raise RuntimeError("Quiz generation completed without verified questions.")
+    raise RuntimeError("Quiz generation loop exited without returning a verified pack.")
 
 
 def valid_saved_pack(quiz_id: str, run: dict | None = None) -> dict | None:

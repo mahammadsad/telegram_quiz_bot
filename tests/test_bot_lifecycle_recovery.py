@@ -608,6 +608,56 @@ def test_historical_near_duplicate_gets_one_full_repair(monkeypatch, valid_quest
     assert metadata["semantic_repair_attempted"] is True
 
 
+def test_independent_verifier_rejection_gets_one_full_repair(valid_questions):
+    rejected_verification = verifier_rows()
+    rejected_verification[3] = {
+        **rejected_verification[3],
+        "verdict": "rejected",
+        "correct_answer_supported": False,
+        "explanation_supported": False,
+        "notes": "The claimed answer and explanation do not agree.",
+    }
+
+    class Pool:
+        fallback_model = "verifier"
+
+        def __init__(self):
+            self.calls = []
+
+        def generate_subject_quiz(self, **kwargs):
+            self.calls.append(kwargs)
+            call_number = len(self.calls)
+            if call_number in {1, 3}:
+                return json.dumps(valid_questions, ensure_ascii=False), {
+                    "provider": "primary",
+                    "model": "generator",
+                    "attempts": 1,
+                    "providers_attempted": ["primary"],
+                }
+            verification = rejected_verification if call_number == 2 else verifier_rows()
+            return json.dumps(verification), {
+                "provider": "secondary",
+                "model": "verifier",
+                "attempts": 1,
+                "providers_attempted": ["secondary"],
+            }
+
+    pool = Pool()
+    clean, metadata = bot.generate_mcqs(
+        "history",
+        "আধুনিক ভারত",
+        pool=pool,
+        grounding_bundle=grounding_bundle(),
+    )
+
+    assert len(clean) == 10
+    assert len(pool.calls) == 4
+    assert "independent_verification_rejected" in pool.calls[2]["prompt"]
+    assert "Independently solve all ten" in pool.calls[2]["prompt"]
+    assert metadata["semantic_repair_attempted"] is True
+    assert metadata["verification_model"] == "verifier"
+
+
 def test_unbalanced_answer_positions_are_randomized_without_model_repair(
     valid_questions,
 ):
