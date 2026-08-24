@@ -24,6 +24,7 @@
   var LETTERS = ["A","B","C","D"];
 
   var quizId = getQuizId();
+  prepareTelegramHandoffLinks();
   var requestedAttemptId = getResultAttemptId();
   var requestedHomeSubject = new URLSearchParams(location.search).get("subject") || "";
   var homeSubjects = ["history","geography","polity","economics","science","mathematics","reasoning","english","bengali","computer","current-affairs","environment","miscellaneous"];
@@ -177,6 +178,20 @@
     var params = new URLSearchParams(window.location.search);
     if (isTelegram && tg.initDataUnsafe && tg.initDataUnsafe.start_param) return tg.initDataUnsafe.start_param;
     return params.get("quiz") || params.get("id") || params.get("startapp") || "";
+  }
+
+  function prepareTelegramHandoffLinks(){
+    var configured = document.querySelector('meta[name="telegram-miniapp-url"]');
+    var base = configured ? configured.content.trim() : "";
+    if (!/^https:\/\/t\.me\/[A-Za-z0-9_]+\/[A-Za-z0-9_]+\/?$/.test(base)) return;
+    var home = byId("telegram-home-launch");
+    var direct = byId("telegram-quiz-launch");
+    if (home) home.href = base;
+    if (direct && quizId) {
+      var url = new URL(base);
+      url.searchParams.set("startapp", quizId);
+      direct.href = url.href;
+    }
   }
 
   function validAttemptId(value){

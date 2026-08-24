@@ -54,3 +54,34 @@ test("preference assignment opens only the requested recent subject", async ({ p
   await expect(page.locator("#quiz-catalogue")).toContainText("ভূগোল");
   await expect(page.locator("#quiz-catalogue")).not.toContainText("ইতিহাস");
 });
+
+test("anonymous browser preview gives an explicit, quiz-specific Telegram handoff", async ({ page }) => {
+  await installTelegramMock(page, { requireLaunchHash: true });
+  await installApiMocks(page);
+  await page.goto("/");
+
+  await expect(page.locator("#screen-home")).toBeVisible();
+  await expect(page.locator("#telegram-home-launch")).toBeVisible();
+  await expect(page.locator("#telegram-home-launch")).toHaveAttribute(
+    "href",
+    "https://t.me/dailyquizzerbot/quiz_master",
+  );
+  await page.goto(`/?quiz=${QUIZ_ID}`);
+
+  await expect(page.locator("#screen-intro")).toBeVisible();
+  await expect(page.locator("#telegram-quiz-launch")).toBeVisible();
+  await expect(page.locator("#telegram-quiz-launch")).toHaveAttribute(
+    "href",
+    `https://t.me/dailyquizzerbot/quiz_master?startapp=${QUIZ_ID}`,
+  );
+  await expect(page.locator("#btn-start")).toHaveText(/প্রশ্ন প্রিভিউ/);
+});
+
+test("authenticated Telegram launch does not show the browser handoff", async ({ page }) => {
+  await installTelegramMock(page);
+  await installApiMocks(page);
+  await page.goto("/");
+
+  await expect(page.locator("#screen-intro")).toBeVisible();
+  await expect(page.locator("#telegram-quiz-launch")).toBeHidden();
+});
