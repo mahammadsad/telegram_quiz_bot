@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from database.contract import (
+    FAIR_CONTENT_REPLENISHMENT_MIGRATION_VERSION,
     LATEST_MIGRATION_VERSION,
     PLATFORM_CONTRACT_KEY,
     PLATFORM_CONTRACT_MIGRATION_VERSION,
@@ -34,7 +35,8 @@ def _ready_contract() -> dict:
 
 def test_platform_contract_remains_the_scheduler_gate_after_additive_migrations() -> None:
     assert MIGRATION.is_file()
-    assert LATEST_MIGRATION_VERSION == REMINDER_DELIVERY_MIGRATION_VERSION
+    assert LATEST_MIGRATION_VERSION == FAIR_CONTENT_REPLENISHMENT_MIGRATION_VERSION
+    assert REMINDER_DELIVERY_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert PLATFORM_CONTRACT_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
 
     source = MIGRATION.read_text(encoding="utf-8")
