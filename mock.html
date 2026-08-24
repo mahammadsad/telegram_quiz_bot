@@ -41,7 +41,10 @@
       <div class="quiz-meta"><div><h2 id="section-title">বিভাগ</h2><p id="question-position">প্রশ্ন ১</p></div><div><div id="sync-status" class="sync" role="status" aria-live="polite">খসড়া প্রস্তুত</div><button id="btn-sync-retry" class="btn hidden" type="button">সিঙ্ক আবার করুন</button></div></div>
       <div id="question-text" class="question"></div>
       <div id="options" class="options" role="radiogroup" aria-label="উত্তরের বিকল্প"></div>
-      <label class="mark"><input id="mark-review" type="checkbox" /> রিভিউয়ের জন্য চিহ্নিত করুন</label>
+      <div class="question-tools">
+        <label class="mark"><input id="mark-review" type="checkbox" /> রিভিউয়ের জন্য চিহ্নিত করুন</label>
+        <button id="btn-bookmark" class="btn" type="button">☆ অনুশীলনের জন্য বুকমার্ক</button>
+      </div>
       <div class="actions"><button id="btn-previous" class="btn" type="button">আগের প্রশ্ন</button><button id="btn-next" class="btn primary" type="button">পরের প্রশ্ন</button></div>
     </div>
     <div class="card"><h2>প্রশ্ন প্যালেট</h2><div id="palette" class="palette" aria-label="বর্তমান বিভাগের প্রশ্ন প্যালেট"></div><div class="legend"><span class="answered">উত্তর দেওয়া</span><span class="marked">রিভিউ চিহ্ন</span><span>উত্তর বাকি</span></div><div class="actions"><button id="btn-section" class="btn primary hidden" type="button">পরের বিভাগ</button><button id="btn-submit" class="btn danger" type="button">পরীক্ষা সাবমিট করুন</button></div></div>

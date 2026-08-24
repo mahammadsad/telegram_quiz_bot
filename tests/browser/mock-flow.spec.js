@@ -71,12 +71,24 @@ function testInstance() {
 
 async function installMockAttemptApi(page, { failFirstProgress = false } = {}) {
   const state = {
+    bookmarks: [],
     starts: [],
     progress: [],
     submits: [],
     currentSection: SECTION_ONE,
     failFirstProgress,
   };
+  await page.route("**/api/me/bookmarks", async (route) => {
+    const request = route.request();
+    if (request.method() !== "POST") return route.fallback();
+    const body = request.postDataJSON();
+    state.bookmarks.push(body);
+    return route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ active: true }),
+    });
+  });
   await page.route("**/api/tests/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -183,6 +195,15 @@ test("timed multi-section mock persists, resumes, advances, and renders analysis
   await expect(page.locator("#screen-test")).toBeVisible();
   await expect(page.locator("#section-title")).toHaveText("গণিত");
   await expect(page.locator("#timer")).not.toHaveText("--:--");
+
+  await page.locator("#btn-bookmark").click();
+  await expect(page.locator("#btn-bookmark")).toContainText("অনুশীলনে যোগ হয়েছে");
+  expect(api.bookmarks).toEqual([{
+    initData: "deterministic-browser-test",
+    itemType: "question",
+    itemId: question(1, 1, "").questionId,
+    active: true,
+  }]);
 
   await page.locator(".option").nth(1).click();
   await page.locator("#mark-review").check();
