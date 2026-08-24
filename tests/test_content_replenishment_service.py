@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 
 from services import content_replenishment_service, question_verification
 from services.source_grounding import GroundingBundle, SourceDocument
@@ -86,6 +88,88 @@ def verifier_results():
         }
         for index in range(1, 6)
     ]
+
+
+def test_zero_yield_job_backs_off_without_weakening_rejections(monkeypatch) -> None:
+    now = datetime(2026, 8, 24, 8, 0, tzinfo=timezone.utc)
+    job = {
+        "id": "job-1",
+        "subject_key": "mathematics",
+        "micro_topic_id": "topic-1",
+        "generation_batch_size": 5,
+        "retry_count": 2,
+    }
+    completed: dict = {}
+
+    monkeypatch.setattr(
+        content_replenishment_service.content_inventory_repo,
+        "ensure_due_replenishment_jobs",
+        lambda **kwargs: [job],
+    )
+    monkeypatch.setattr(
+        content_replenishment_service.content_inventory_repo,
+        "claim_replenishment_jobs",
+        lambda **kwargs: [job],
+    )
+    monkeypatch.setattr(
+        content_replenishment_service.content_inventory_repo,
+        "get_replenishment_bundle",
+        lambda *args, **kwargs: [{"unused": True}],
+    )
+    monkeypatch.setattr(
+        content_replenishment_service,
+        "_bundle_from_rows",
+        lambda rows: SimpleNamespace(chapter="সরলীকরণ"),
+    )
+    monkeypatch.setattr(
+        content_replenishment_service,
+        "generate_and_store_candidate_batch",
+        lambda *args, **kwargs: content_replenishment_service.ReplenishmentBatchResult(
+            [],
+            [{"code": "math_family_unsupported"}] * 10,
+            {"repair_attempted": True},
+            {"accepted_count": 0},
+        ),
+    )
+
+    def complete(**kwargs):
+        completed.update(kwargs)
+        return {"status": "retry_wait"}
+
+    monkeypatch.setattr(
+        content_replenishment_service.content_inventory_repo,
+        "complete_replenishment_batch",
+        complete,
+    )
+
+    result = content_replenishment_service.process_due_replenishment_jobs(
+        object(), worker_id="worker", now=now, limit=1
+    )
+
+    assert result.outcomes == {"mathematics:topic-1": "retry_wait"}
+    assert completed["accepted_count"] == 0
+    assert completed["rejected_count"] == 10
+    assert completed["rejection_codes"] == ["math_family_unsupported"]
+    assert completed["error_code"] == "content_rejected"
+    assert completed["retry_at"] == now + timedelta(minutes=60)
+
+
+def test_replenishment_retry_backoff_is_capped() -> None:
+    now = datetime(2026, 8, 24, 8, 0, tzinfo=timezone.utc)
+
+    assert content_replenishment_service._replenishment_retry_at(now, 0) == now + timedelta(minutes=15)
+    assert content_replenishment_service._replenishment_retry_at(now, 20) == now + timedelta(hours=6)
+
+
+def test_repair_prompt_gives_static_code_specific_guidance() -> None:
+    prompt = content_replenishment_service._candidate_repair_prompt(
+        "base",
+        {"math_family_unsupported", "answer_not_unique", "option_pattern_leakage"},
+    )
+
+    assert "never invent a geometry" in prompt
+    assert "none of the three distractor values" in prompt
+    assert "one consistent visible representation" in prompt
 
 
 def test_replenishment_preserves_verified_candidates_and_logs_hash_only(monkeypatch, valid_questions):

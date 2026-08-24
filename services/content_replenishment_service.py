@@ -78,6 +78,8 @@ CANDIDATE_JSON_SCHEMA = {
 
 _CANDIDATE_REPAIR_LIMIT = 1
 _CANDIDATE_REPAIR_TARGET = 3
+_REPLENISHMENT_RETRY_BASE_MINUTES = 15
+_REPLENISHMENT_RETRY_MAX_MINUTES = 6 * 60
 
 
 @dataclass(frozen=True, slots=True)
@@ -130,12 +132,19 @@ def process_due_replenishment_jobs(
                 batch_size=int(job.get("generation_batch_size") or 5),
             )
             rejection_codes = sorted({str(item.get("code") or "content_invalid") for item in result.rejected})
+            no_safe_candidates = not result.accepted
             completed = content_inventory_repo.complete_replenishment_batch(
                 job_id=job_id,
                 worker_id=worker_id,
                 accepted_count=len(result.accepted),
                 rejected_count=len(result.rejected),
                 rejection_codes=rejection_codes,
+                error_code="content_rejected" if no_safe_candidates else None,
+                retry_at=(
+                    _replenishment_retry_at(current, int(job.get("retry_count") or 0))
+                    if no_safe_candidates
+                    else None
+                ),
             )
             outcomes[outcome_key] = str(completed.get("status") or "due")
         except Exception as exc:
@@ -146,10 +155,20 @@ def process_due_replenishment_jobs(
                 rejected_count=0,
                 rejection_codes=[],
                 error_code=type(exc).__name__,
-                retry_at=current + timedelta(minutes=15),
+                retry_at=_replenishment_retry_at(current, int(job.get("retry_count") or 0)),
             )
             outcomes[outcome_key] = f"retry_wait:{type(exc).__name__}"
     return ReplenishmentRunResult(len(ensured), len(jobs), outcomes)
+
+
+def _replenishment_retry_at(current: datetime, prior_retry_count: int) -> datetime:
+    """Back off zero-yield jobs so one unsupported topic cannot starve the queue."""
+    exponent = min(max(0, prior_retry_count), 8)
+    delay_minutes = min(
+        _REPLENISHMENT_RETRY_BASE_MINUTES * (2**exponent),
+        _REPLENISHMENT_RETRY_MAX_MINUTES,
+    )
+    return current + timedelta(minutes=delay_minutes)
 
 
 def generate_and_store_candidate_batch(
@@ -304,11 +323,45 @@ def _aggregate_generation_metadata(history: list[dict[str, Any]]) -> dict[str, A
 
 def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
     codes = ", ".join(sorted(rejection_codes)) or "content_invalid"
+    guidance: list[str] = []
+    if rejection_codes & {"math_family_unsupported", "proof_family_unsupported"}:
+        guidance.append(
+            "For mathematics, proof_family must be copied exactly from the supported mathematics "
+            "family list in this prompt; never invent a geometry, HCF/LCM, root, theorem, or other "
+            "family. If the source fact cannot produce a question using one listed family, use a "
+            "different supplied fact."
+        )
+    if rejection_codes & {
+        "math_proof_invalid",
+        "declared_answer_wrong",
+        "explanation_steps_invalid",
+        "explanation_contradiction",
+    }:
+        guidance.append(
+            "Recompute the machine-readable parameters first, solve them independently, then derive "
+            "correct_index, the exact trace values, and the displayed conclusion from that result."
+        )
+    if "answer_not_unique" in rejection_codes:
+        guidance.append(
+            "Ensure the atomic evidence and canonical claim contain the correct answer value but none "
+            "of the three distractor values, and ensure exactly one proof_option_value equals the solution."
+        )
+    if rejection_codes & {
+        "options_duplicate",
+        "options_materially_duplicate",
+        "option_pattern_leakage",
+    }:
+        guidance.append(
+            "Use four genuinely different options in one consistent visible representation and script; "
+            "do not mix numeric digits with number words or add labels to only some options."
+        )
+    tailored = " " + " ".join(guidance) if guidance else ""
     return (
         prompt
         + "\nThe previous candidate batch was rejected by deterministic or independent checks with codes: "
         + codes
         + ". Generate a completely new replacement batch. Re-solve every question, ensure exactly one evidence-supported answer, make all normalized options materially distinct, and make every proof/translation artifact exactly match the displayed question. Do not relax, reinterpret, or bypass any validation rule."
+        + tailored
     )
 
 
