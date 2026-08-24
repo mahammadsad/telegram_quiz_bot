@@ -20,7 +20,7 @@ CI, mobile-browser, and public readiness gates pass.
 
 ## Database
 
-Apply `20260808103500_phase_d_current_affairs_events.sql` after all earlier
+Apply `20260808140855_phase_d_current_affairs_events.sql` after all earlier
 migrations. The migration is additive, enables RLS on every new table, revokes
 browser-role access, and exposes only service-role RPCs.
 

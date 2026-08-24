@@ -3,7 +3,7 @@
 Application: `7.2.0`
 
 Migration:
-`supabase/migrations/20260728113750_quiz_quality_and_negative_marking.sql`
+`supabase/migrations/20260729105500_quiz_quality_and_negative_marking.sql`
 
 ## Deployment order
 

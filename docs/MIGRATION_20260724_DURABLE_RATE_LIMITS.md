@@ -1,11 +1,11 @@
 # Durable write-rate migration
 
-Required migration: `20260724212939_durable_write_rate_limits.sql`
+Required migration file: `20260727104755_durable_write_rate_limits.sql`
 
 Database contract: `2.2.0`
 
 Apply this forward migration only after
-`20260722120827_revision_reports_and_rankings.sql`. Do not edit either applied
+`20260727104740_revision_reports_and_rankings.sql`. Do not edit either applied
 file and never run `database/schema.sql` on a hosted project.
 
 ## Purpose
@@ -34,7 +34,7 @@ button presses; it is not the durable enforcement boundary.
    `telegram-quiz-bot-rollout-staging` / `prdrabmcivgbygzjnmko`.
 2. Record the migration ledger and preservation counts from
    `docs/PRODUCTION_ROLLBACK.md`.
-3. Apply only `20260724212939_durable_write_rate_limits.sql`.
+3. Apply only `20260727104755_durable_write_rate_limits.sql`.
 4. Call `get_application_schema_contract` as `service_role`. It must report:
 
    - `contract_version` = `2.2.0`;

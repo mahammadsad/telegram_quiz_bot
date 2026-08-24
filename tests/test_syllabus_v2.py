@@ -10,7 +10,7 @@ from config.syllabus_catalog import EXAM_TAGS
 from scripts.render_syllabus_v2_migration import render_sql
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase" / "migrations" / "20260718160722_syllabus_v2_catalogue.sql"
+MIGRATION = ROOT / "supabase" / "migrations" / "20260718163445_syllabus_v2_catalogue.sql"
 SOURCE_PILOT = ROOT / "sources" / "computer_education_pilot.json"
 
 

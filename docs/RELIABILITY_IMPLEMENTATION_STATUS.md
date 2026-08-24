@@ -34,7 +34,7 @@ Production is unchanged.
   integrity, count, and source-bundle checks.
 - Subject and recovery success share one outcome contract. Due-but-unposted,
   non-retryable, claimed, source-not-ready, and unknown-delivery states fail.
-- Migration `20260808063007_atomic_quiz_post_finalization.sql` adds persisted
+- Migration `20260808140812_atomic_quiz_post_finalization.sql` adds persisted
   post intent, atomic/idempotent acknowledgement finalization, explicit unknown
   reconciliation, usage/history updates, a readiness contract, and restricted
   grants.
@@ -44,14 +44,14 @@ Production is unchanged.
 - `config/production.toml` is the versioned non-secret policy source. Render,
   scheduled generation, source workflows, preflight, and readiness use or
   enforce the same source/schema intent and expose only its version/hash.
-- Migration `20260808071500_durable_quiz_jobs.sql` adds exactly 13 daily jobs,
+- Migration `20260808140819_durable_quiz_jobs.sql` adds exactly 13 daily jobs,
   append-only events, atomic lease claims with `SKIP LOCKED`, bounded durable
   retries, dead letters, explicit unknown-delivery quarantine/reconciliation,
   and service-role-only database access.
 - A 15-minute GitHub heartbeat now claims all due work from PostgreSQL. Subjects
   fail independently, expired safe stages are reclaimed, expired posting is
   quarantined, and the final daily completeness report is database-derived.
-- Migration `20260808084950_fix_leaderboard_privacy_contract_invoker.sql`
+- Migration `20260808140823_fix_leaderboard_privacy_contract_invoker.sql`
   removes an internal migration-table dependency from the invoker-safe privacy
   readiness RPC, preserving service-role-only execution without granting access
   to Supabase's internal migration schema.

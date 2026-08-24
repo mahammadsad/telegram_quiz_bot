@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase" / "migrations" / "20260718112044_question_provenance_reporting.sql"
+MIGRATION = ROOT / "supabase" / "migrations" / "20260718124214_question_provenance_reporting.sql"
 
 
 def test_migration_normalizes_taxonomy_and_provenance():

@@ -14,7 +14,7 @@ MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / "20260724212939_durable_write_rate_limits.sql"
+    / "20260727104755_durable_write_rate_limits.sql"
 )
 CLIENT = TestClient(api_module.app)
 RESOURCE_ID = "11111111-1111-4111-8111-111111111111"
@@ -24,7 +24,7 @@ ATTEMPT_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
 
 def test_forward_migration_durably_protects_every_required_write() -> None:
     sql = MIGRATION.read_text(encoding="utf-8").casefold()
-    assert MIGRATION.name.startswith("20260724212939_")
+    assert MIGRATION.name.startswith("20260727104755_")
     assert int(REQUIRED_MIGRATION_VERSION) >= 20260724212939
     assert "create table if not exists public.write_rate_limit_buckets" in sql
     assert "alter table public.write_rate_limit_buckets enable row level security" in sql

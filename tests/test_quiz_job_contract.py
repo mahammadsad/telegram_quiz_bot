@@ -2,7 +2,7 @@ from pathlib import Path
 
 SQL = (
     Path(__file__).parents[1]
-    / "supabase/migrations/20260808071500_durable_quiz_jobs.sql"
+    / "supabase/migrations/20260808140819_durable_quiz_jobs.sql"
 ).read_text()
 
 

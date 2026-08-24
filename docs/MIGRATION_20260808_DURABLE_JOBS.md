@@ -1,6 +1,6 @@
 # Durable quiz jobs rollout
 
-Migration: `20260808071500_durable_quiz_jobs.sql`
+Migration: `20260808140819_durable_quiz_jobs.sql`
 
 ## Purpose
 

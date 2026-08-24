@@ -14,7 +14,7 @@ MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / "20260808123000_phase_e_exam_configuration.sql"
+    / "20260808140917_phase_e_exam_configuration.sql"
 )
 client = TestClient(api_module.app)
 

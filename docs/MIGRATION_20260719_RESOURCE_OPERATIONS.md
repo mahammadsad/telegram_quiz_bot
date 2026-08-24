@@ -1,7 +1,7 @@
 # Resource quality operations migration
 
-Apply `20260718194113_resource_quality_operations.sql` after
-`20260718192558_canonical_subject_storage_compatibility.sql`.
+Apply `20260718200550_resource_quality_operations.sql` after
+`20260718193337_canonical_subject_storage_compatibility.sql`.
 
 ## Purpose
 

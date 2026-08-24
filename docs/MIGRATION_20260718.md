@@ -1,7 +1,7 @@
 # Atomic quiz integrity migration
 
 Canonical file:
-`supabase/migrations/20260718015054_atomic_quiz_integrity.sql`
+`supabase/migrations/20260718124105_atomic_quiz_integrity.sql`
 
 ## What it adds
 

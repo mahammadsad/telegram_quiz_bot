@@ -194,16 +194,16 @@ still checks cached links and queues missing coverage but skips discovery.
 disposable empty database. Never run it on staging or production. Hosted
 projects advance only through unapplied files in `supabase/migrations/`, in
 timestamp order. The authoritative required version is
-`20260724212939_durable_write_rate_limits.sql`, database contract `2.2.0`.
+`20260727104755_durable_write_rate_limits.sql`, database contract `2.2.0`.
 The v7.1 source rollout additionally requires
-`20260728040209_source_backed_rotation_v1.sql`; it is reported separately so
+`20260728080439_source_backed_rotation_v1.sql`; it is reported separately so
 the v7.0 contract remains compatible during the controlled cutover.
 The application never applies DDL during startup.
 The v7.2.3 privacy gate additionally requires
-`20260801045552_leaderboard_privacy_hotfix.sql`; readiness remains closed until
+`20260808140807_leaderboard_privacy_hotfix.sql`; readiness remains closed until
 its safe leaderboard definitions and service-role-only grants are verified.
 Atomic Telegram acknowledgement and post bookkeeping additionally require
-`20260808063007_atomic_quiz_post_finalization.sql`; readiness remains closed
+`20260808140812_atomic_quiz_post_finalization.sql`; readiness remains closed
 until its columns, RPCs, and service-role-only grants are verified.
 
 The migration is additive, rerunnable, backfills historical pack/attempt data,

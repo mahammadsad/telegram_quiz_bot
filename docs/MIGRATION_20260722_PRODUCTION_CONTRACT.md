@@ -1,12 +1,12 @@
 # Production integrity contract migrations
 
 Apply these forward migrations in timestamp order after
-`20260718203218_dedupe_source_resource_cache.sql`:
+`20260718203738_dedupe_source_resource_cache.sql`:
 
-1. `20260718220112_production_integrity_contract_v2.sql`
-2. `20260718222134_learning_and_leaderboard_contract_v2.sql`
-3. `20260722120827_revision_reports_and_rankings.sql`
-4. `20260724212939_durable_write_rate_limits.sql`
+1. `20260727104645_production_integrity_contract_v2.sql`
+2. `20260727104716_learning_and_leaderboard_contract_v2.sql`
+3. `20260727104740_revision_reports_and_rankings.sql`
+4. `20260727104755_durable_write_rate_limits.sql`
 
 The final required migration is `20260724212939`; the application database
 contract is `2.2.0`. `database/contract.py` is the only application source for

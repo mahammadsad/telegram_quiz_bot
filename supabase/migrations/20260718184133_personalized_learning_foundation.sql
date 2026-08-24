@@ -19,17 +19,9 @@ do $$
 begin
     if not exists (
         select 1
-        from pg_constraint c
-        where c.conrelid = 'public.personal_review_schedule'::regclass
-          and c.contype = 'u'
-          and array(
-              select a.attname
-              from unnest(c.conkey) with ordinality as key(attnum, position)
-              join pg_attribute a
-                on a.attrelid = c.conrelid
-               and a.attnum = key.attnum
-              order by key.position
-          ) = array['user_id', 'question_id']::name[]
+        from pg_constraint
+        where conrelid = 'public.personal_review_schedule'::regclass
+          and conname = 'personal_review_schedule_user_question_key'
     ) then
         alter table public.personal_review_schedule
             add constraint personal_review_schedule_user_question_key

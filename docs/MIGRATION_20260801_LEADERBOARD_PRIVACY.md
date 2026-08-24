@@ -3,7 +3,7 @@
 Application: `7.2.3`
 
 Migration:
-`supabase/migrations/20260801045552_leaderboard_privacy_hotfix.sql`
+`supabase/migrations/20260808140807_leaderboard_privacy_hotfix.sql`
 
 ## Deployment order
 

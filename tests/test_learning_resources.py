@@ -5,11 +5,11 @@ from pathlib import Path
 from services import learning_resources_service as service
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase" / "migrations" / "20260718171256_learning_resources_foundation.sql"
-INDEX_MIGRATION = ROOT / "supabase" / "migrations" / "20260718172756_learning_resources_fk_indexes.sql"
-LEGACY_MIGRATION = ROOT / "supabase" / "migrations" / "20260718174844_learning_resources_legacy_pack_compatibility.sql"
-CACHE_DEDUPE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718203218_dedupe_source_resource_cache.sql"
-TITLE_BOUND_MIGRATION = ROOT / "supabase" / "migrations" / "20260809003000_bound_cached_source_resource_titles.sql"
+MIGRATION = ROOT / "supabase" / "migrations" / "20260718174627_learning_resources_foundation.sql"
+INDEX_MIGRATION = ROOT / "supabase" / "migrations" / "20260718174639_learning_resources_fk_indexes.sql"
+LEGACY_MIGRATION = ROOT / "supabase" / "migrations" / "20260718180231_learning_resources_legacy_pack_compatibility.sql"
+CACHE_DEDUPE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718203738_dedupe_source_resource_cache.sql"
+TITLE_BOUND_MIGRATION = ROOT / "supabase" / "migrations" / "20260808184535_bound_cached_source_resource_titles.sql"
 INDEX = ROOT / "index.html"
 
 

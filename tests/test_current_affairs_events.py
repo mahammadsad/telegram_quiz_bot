@@ -23,13 +23,13 @@ MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / "20260808103500_phase_d_current_affairs_events.sql"
+    / "20260808140855_phase_d_current_affairs_events.sql"
 )
 CLAIM_PARITY_MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / "20260809010000_current_affairs_claim_hash_parity.sql"
+    / "20260808190716_current_affairs_claim_hash_parity.sql"
 )
 
 

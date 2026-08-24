@@ -10,7 +10,7 @@ MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / "20260808063007_atomic_quiz_post_finalization.sql"
+    / "20260808140812_atomic_quiz_post_finalization.sql"
 )
 RECOVERY_MIGRATION = (
     ROOT

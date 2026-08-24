@@ -68,6 +68,9 @@ jobs:
           print("Production identity, acknowledgement, credentials, and migration file gate passed.")
           PY
 
+      - name: Verify recovered production migration source equivalence
+        run: python scripts/check_migration_ledger_sources.py
+
       - name: Link the exact production project for this ephemeral runner
         run: >-
           npx --yes supabase@2.77.0 link

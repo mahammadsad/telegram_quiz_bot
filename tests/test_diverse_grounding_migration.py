@@ -7,7 +7,7 @@ MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / "20260728113750_quiz_quality_and_negative_marking.sql"
+    / "20260729105500_quiz_quality_and_negative_marking.sql"
 )
 
 

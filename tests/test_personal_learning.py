@@ -11,14 +11,14 @@ import app as api_module
 from services import personal_learning_service as service
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase" / "migrations" / "20260718181849_personalized_learning_foundation.sql"
-FK_MIGRATION = ROOT / "supabase" / "migrations" / "20260718183203_personalized_learning_fk_compatibility.sql"
-UNIQUE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718184505_remove_redundant_personal_review_unique.sql"
-ANALYTICS_MIGRATION = ROOT / "supabase" / "migrations" / "20260718185905_learning_analytics_leaderboards.sql"
-PRACTICE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718190639_personal_practice_answers.sql"
-SUBJECT_PROJECTION_MIGRATION = ROOT / "supabase" / "migrations" / "20260718192154_canonical_subject_learning_projections.sql"
-PROJECTION_HOTFIX_MIGRATION = ROOT / "supabase" / "migrations" / "20260729134221_personal_learning_projection_hotfix.sql"
-PHASE_E_MIGRATION = ROOT / "supabase" / "migrations" / "20260808113000_phase_e_personal_knowledge_mastery.sql"
+MIGRATION = ROOT / "supabase" / "migrations" / "20260718184133_personalized_learning_foundation.sql"
+FK_MIGRATION = ROOT / "supabase" / "migrations" / "20260718184138_personalized_learning_fk_compatibility.sql"
+UNIQUE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718185411_remove_redundant_personal_review_unique.sql"
+ANALYTICS_MIGRATION = ROOT / "supabase" / "migrations" / "20260718193324_learning_analytics_leaderboards.sql"
+PRACTICE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718193329_personal_practice_answers.sql"
+SUBJECT_PROJECTION_MIGRATION = ROOT / "supabase" / "migrations" / "20260718193333_canonical_subject_learning_projections.sql"
+PROJECTION_HOTFIX_MIGRATION = ROOT / "supabase" / "migrations" / "20260729140552_personal_learning_projection_hotfix.sql"
+PHASE_E_MIGRATION = ROOT / "supabase" / "migrations" / "20260808140909_phase_e_personal_knowledge_mastery.sql"
 client = TestClient(api_module.app)
 
 
@@ -74,8 +74,8 @@ def test_legacy_review_unique_constraint_is_not_duplicated():
     cleanup = UNIQUE_MIGRATION.read_text(encoding="utf-8").lower()
     assert "candidate.contype = 'u'" in cleanup
     assert "drop constraint if exists personal_review_schedule_user_question_key" in cleanup
-    assert "from pg_constraint c" in foundation
-    assert "array['user_id', 'question_id']::name[]" in foundation
+    assert "conname = 'personal_review_schedule_user_question_key'" in foundation
+    assert "array['user_id', 'question_id']::name[]" in cleanup
 
 
 def test_learning_analytics_stay_in_private_paginated_sql_rpcs():

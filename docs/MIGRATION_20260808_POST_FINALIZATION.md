@@ -1,6 +1,6 @@
 # Atomic post-finalization migration — 20260808063007
 
-Migration: `supabase/migrations/20260808063007_atomic_quiz_post_finalization.sql`
+Migration: `supabase/migrations/20260808140812_atomic_quiz_post_finalization.sql`
 
 ## Purpose
 

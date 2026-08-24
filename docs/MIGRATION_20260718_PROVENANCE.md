@@ -1,10 +1,10 @@
 # Question provenance and reporting migration
 
 Canonical file:
-`supabase/migrations/20260718112044_question_provenance_reporting.sql`
+`supabase/migrations/20260718124214_question_provenance_reporting.sql`
 
 This migration must be applied after
-`20260718015054_atomic_quiz_integrity.sql`. It has not been applied to
+`20260718124105_atomic_quiz_integrity.sql`. It has not been applied to
 production by this repository or application.
 
 ## What it adds

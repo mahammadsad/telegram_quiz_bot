@@ -5,7 +5,7 @@ from pathlib import Path
 from storage import quiz_runs_repo
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase" / "migrations" / "20260718015054_atomic_quiz_integrity.sql"
+MIGRATION = ROOT / "supabase" / "migrations" / "20260718124105_atomic_quiz_integrity.sql"
 
 
 def test_migration_contains_atomic_claim_and_stale_lease_recovery():
@@ -30,7 +30,7 @@ def test_migration_contains_transactional_pack_and_attempt_functions():
 def test_pgcrypto_calls_are_schema_qualified_for_empty_rpc_search_path():
     foundation = MIGRATION.read_text(encoding="utf-8").lower()
     provenance = (
-        ROOT / "supabase" / "migrations" / "20260718112044_question_provenance_reporting.sql"
+        ROOT / "supabase" / "migrations" / "20260718124214_question_provenance_reporting.sql"
     ).read_text(encoding="utf-8").lower()
     assert "extensions.digest(" in foundation
     assert "extensions.digest(" in provenance

@@ -8,19 +8,13 @@ from database.contract import (
     REQUIRED_MIGRATION_VERSION,
     SOURCE_ROLLOUT_MIGRATION_VERSION,
 )
+from database.migration_ledger import ledger_version
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = (
-    ROOT
-    / "supabase"
-    / "migrations"
-    / f"{SOURCE_ROLLOUT_MIGRATION_VERSION}_source_backed_rotation_v1.sql"
+    ROOT / "supabase" / "migrations" / f"{ledger_version('source_backed_rotation_v1')}_source_backed_rotation_v1.sql"
 )
-APPROVED_KEYS = {
-    key
-    for chapter_keys in ROTATION_CHAPTER_KEYS.values()
-    for key in chapter_keys
-}
+APPROVED_KEYS = {key for chapter_keys in ROTATION_CHAPTER_KEYS.values() for key in chapter_keys}
 
 
 def test_rotation_migration_uses_the_exact_source_approved_allowlist() -> None:
@@ -46,16 +40,10 @@ def test_rotation_migration_is_forward_only_and_keeps_the_v220_cutover_stable() 
         "drop schema",
     ):
         assert destructive not in sql
-    assert (
-        f"set required_migration_version = '{SOURCE_ROLLOUT_MIGRATION_VERSION}'"
-        not in sql
-    )
+    assert f"set required_migration_version = '{SOURCE_ROLLOUT_MIGRATION_VERSION}'" not in sql
     assert f"'required_migration_version', '{SOURCE_ROLLOUT_MIGRATION_VERSION}'" not in sql
     assert REQUIRED_MIGRATION_VERSION != SOURCE_ROLLOUT_MIGRATION_VERSION
-    assert (
-        f"'source_rollout_migration_version', '{SOURCE_ROLLOUT_MIGRATION_VERSION}'"
-        in sql
-    )
+    assert f"'source_rollout_migration_version', '{SOURCE_ROLLOUT_MIGRATION_VERSION}'" in sql
 
 
 def test_rotation_contract_and_grounding_rpc_remain_private_and_ist_aware() -> None:
@@ -65,13 +53,7 @@ def test_rotation_contract_and_grounding_rpc_remain_private_and_ist_aware() -> N
     assert "security invoker" in sql
     assert "set search_path = ''" in sql
     assert "at time zone 'asia/kolkata'" in sql
-    assert (
-        "revoke execute on function "
-        "public.get_grounding_bundle(text, text, date, integer)"
-    ) in sql
-    assert (
-        "grant execute on function "
-        "public.get_grounding_bundle(text, text, date, integer)"
-    ) in sql
+    assert ("revoke execute on function public.get_grounding_bundle(text, text, date, integer)") in sql
+    assert ("grant execute on function public.get_grounding_bundle(text, text, date, integer)") in sql
     assert "from public, anon, authenticated" in sql
     assert "to service_role" in sql

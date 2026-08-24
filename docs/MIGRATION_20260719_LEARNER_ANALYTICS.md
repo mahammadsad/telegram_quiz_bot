@@ -2,10 +2,10 @@
 
 Apply these files after the personalized-learning foundation:
 
-1. `20260718185905_learning_analytics_leaderboards.sql`
-2. `20260718190639_personal_practice_answers.sql`
-3. `20260718192154_canonical_subject_learning_projections.sql`
-4. `20260718192558_canonical_subject_storage_compatibility.sql`
+1. `20260718193324_learning_analytics_leaderboards.sql`
+2. `20260718193329_personal_practice_answers.sql`
+3. `20260718193333_canonical_subject_learning_projections.sql`
+4. `20260718193337_canonical_subject_storage_compatibility.sql`
 
 The changes are additive. They preserve quiz generation, Telegram posting,
 historical attempts, the existing quiz/global leaderboards, and emergency

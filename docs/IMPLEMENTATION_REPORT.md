@@ -70,7 +70,7 @@ passed on remote commit `dc05cce9814551b588c1b0510f01557c0fc7c2ea`:
 
 The verified staging project `telegram-quiz-bot-rollout-staging`
 (`prdrabmcivgbygzjnmko`) then received only
-`20260724212939_durable_write_rate_limits.sql` through the Supabase migration
+`20260727104755_durable_write_rate_limits.sql` through the Supabase migration
 interface. Its ledger recorded name `durable_write_rate_limits`; the contract
 now reports ready, contract `2.2.0`, required migration `20260724212939`,
 threshold `0.85`, and empty failure arrays.
@@ -206,10 +206,10 @@ Documentation:
 
 ## New forward migrations
 
-1. `20260718220112_production_integrity_contract_v2.sql`
-2. `20260718222134_learning_and_leaderboard_contract_v2.sql`
-3. `20260722120827_revision_reports_and_rankings.sql`
-4. `20260724212939_durable_write_rate_limits.sql`
+1. `20260727104645_production_integrity_contract_v2.sql`
+2. `20260727104716_learning_and_leaderboard_contract_v2.sql`
+3. `20260727104740_revision_reports_and_rankings.sql`
+4. `20260727104755_durable_write_rate_limits.sql`
 
 These are additive/corrective migrations. Do not edit already applied historical
 migrations, and never run `database/schema.sql` on an existing hosted project.
@@ -260,8 +260,8 @@ After the unrelated project was removed by its owner, Supabase restored
 and migration `20260718220112`; the two missing tracked forward migrations were
 then applied in order:
 
-1. `20260718222134_learning_and_leaderboard_contract_v2.sql`
-2. `20260722120827_revision_reports_and_rankings.sql`
+1. `20260727104716_learning_and_leaderboard_contract_v2.sql`
+2. `20260727104740_revision_reports_and_rankings.sql`
 
 The restored staging backup contained earlier rollout/reset ledger entries.
 During restoration, an early probe temporarily appeared empty and three legacy

@@ -13,7 +13,7 @@ MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / "20260808133000_phase_e_previous_year_and_mock_attempts.sql"
+    / "20260808140930_phase_e_previous_year_and_mock_attempts.sql"
 )
 CLIENT = TestClient(api_module.app)
 INSTANCE_ID = uuid.UUID("11111111-1111-4111-8111-111111111111")

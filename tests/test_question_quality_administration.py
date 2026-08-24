@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 import app as api_module
-from database.contract import PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION
+from database.migration_ledger import ledger_version
 from services import question_moderation_service, quiz_pack_service
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -13,15 +13,13 @@ MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / (PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION + "_phase_e_question_quality_administration.sql")
+    / (ledger_version("phase_e_question_quality_administration") + "_phase_e_question_quality_administration.sql")
 )
 CLIENT = TestClient(api_module.app)
 CASE_ID = "11111111-1111-4111-8111-111111111111"
 QUESTION_ID = "22222222-2222-4222-8222-222222222222"
 REPLACEMENT_ID = "33333333-3333-4333-8333-333333333333"
-REPORT_STATUS_MIGRATION = (
-    ROOT / "supabase/migrations/20260823065257_learner_report_status_projection.sql"
-)
+REPORT_STATUS_MIGRATION = ROOT / "supabase/migrations/20260823065257_learner_report_status_projection.sql"
 
 
 def test_phase_e4_migration_has_complete_quality_contract() -> None:
@@ -176,8 +174,10 @@ def test_authenticated_report_status_route_projects_only_the_current_user(monkey
     monkeypatch.setattr(
         api_module.question_moderation_service,
         "my_report_statuses",
-        lambda user, **kwargs: captured.update(user=user, **kwargs)
-        or {"items": [], "total": 0, "limit": kwargs["limit"], "offset": kwargs["offset"]},
+        lambda user, **kwargs: (
+            captured.update(user=user, **kwargs)
+            or {"items": [], "total": 0, "limit": kwargs["limit"], "offset": kwargs["offset"]}
+        ),
     )
     response = CLIENT.get(
         "/api/me/question-reports?limit=5&offset=3",
@@ -199,9 +199,7 @@ def test_report_status_service_upserts_a_typed_telegram_user(monkeypatch) -> Non
         "list_for_user",
         lambda **kwargs: captured.update(kwargs) or {"items": [], "total": 0},
     )
-    result = question_moderation_service.my_report_statuses(
-        {"id": 99, "first_name": "Learner"}, limit=1000, offset=-4
-    )
+    result = question_moderation_service.my_report_statuses({"id": 99, "first_name": "Learner"}, limit=1000, offset=-4)
     assert result == {"items": [], "total": 0}
     assert captured["user"].telegram_id == 99
     assert captured["user"].first_name == "Learner"

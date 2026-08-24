@@ -5,7 +5,7 @@ MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / "20260808084950_fix_leaderboard_privacy_contract_invoker.sql"
+    / "20260808140823_fix_leaderboard_privacy_contract_invoker.sql"
 )
 
 

@@ -13,7 +13,7 @@ from scripts import check_learning_resources, discover_learning_resources
 from services import resource_quality_service
 
 ROOT = Path(__file__).resolve().parents[1]
-MIGRATION = ROOT / "supabase" / "migrations" / "20260718194113_resource_quality_operations.sql"
+MIGRATION = ROOT / "supabase" / "migrations" / "20260718200550_resource_quality_operations.sql"
 RESOURCE_WORKFLOW = ROOT / ".github" / "workflows" / "resource-quality.yml"
 SCHEDULE_WORKFLOW = ROOT / ".github" / "workflows" / "main.yml"
 CLIENT = TestClient(api_module.app)

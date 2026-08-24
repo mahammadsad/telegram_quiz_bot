@@ -17,19 +17,19 @@ MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / "20260808093610_phase_c_content_identity_foundation.sql"
+    / "20260808140838_phase_c_content_identity_foundation.sql"
 )
 INVENTORY_MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / "20260808093621_phase_c_inventory_jobs_and_usage.sql"
+    / "20260808140843_phase_c_inventory_jobs_and_usage.sql"
 )
 CANDIDATE_MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / "20260808094602_phase_c_verified_candidate_persistence.sql"
+    / "20260808140850_phase_c_verified_candidate_persistence.sql"
 )
 
 

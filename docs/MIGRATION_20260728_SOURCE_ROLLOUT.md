@@ -18,7 +18,7 @@ row.
 5. Run **Current Affairs Sources** with `operation=validate`.
 6. Run it with `operation=refresh` only after the exact acknowledgement gate.
 7. Verify every selected chapter has a current verified source.
-8. Apply only `20260728040209_source_backed_rotation_v1.sql`.
+8. Apply only `20260728080439_source_backed_rotation_v1.sql`.
 9. Verify the contract reports:
    - `ready=true`;
    - `source_rollout_migration_applied=true`;

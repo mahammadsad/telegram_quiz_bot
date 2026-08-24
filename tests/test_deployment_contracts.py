@@ -17,9 +17,7 @@ from config.settings import (
 from database.contract import (
     APPLICATION_VERSION,
     LATEST_MIGRATION_VERSION,
-    LEADERBOARD_PRIVACY_MIGRATION_VERSION,
     LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
-    PERSONAL_LEARNING_MIGRATION_VERSION,
     PHASE_C_CANDIDATE_MIGRATION_VERSION,
     PHASE_C_IDENTITY_MIGRATION_VERSION,
     PHASE_C_INVENTORY_MIGRATION_VERSION,
@@ -32,10 +30,9 @@ from database.contract import (
     PLATFORM_CONTRACT_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
-    QUIZ_QUALITY_MIGRATION_VERSION,
-    REQUIRED_MIGRATION_VERSION,
     SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION,
 )
+from database.migration_ledger import ledger_version
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW_DIR = ROOT / ".github" / "workflows"
@@ -105,9 +102,7 @@ def test_workflows_have_minimum_permissions_timeouts_and_environment_guards() ->
     assert main["jobs"]["resolve_job"]["timeout-minutes"] == 5
     run_bot = main["jobs"]["run-bot"]
     assert run_bot["permissions"] == {"contents": "read"}
-    archive = next(
-        step for step in run_bot["steps"] if step.get("name") == "Archive answer-free fallback snapshot"
-    )
+    archive = next(step for step in run_bot["steps"] if step.get("name") == "Archive answer-free fallback snapshot")
     assert archive["uses"].startswith("actions/upload-artifact@")
     assert archive["with"]["retention-days"] == 30
     assert "git push" not in (WORKFLOW_DIR / "main.yml").read_text(encoding="utf-8")
@@ -236,7 +231,7 @@ def test_production_migration_workflow_is_manual_and_fail_closed() -> None:
     source = path.read_text(encoding="utf-8")
     assert "APPLY TRACKED MIGRATIONS TO {expected_ref}" in source
     assert "supabase@2.77.0 link" in source
-    assert "--project-ref \"$EXPECTED_SUPABASE_PROJECT_REF\"" in source
+    assert '--project-ref "$EXPECTED_SUPABASE_PROJECT_REF"' in source
     assert "--dry-run" in source
     assert "get_my_question_report_statuses" in source
     assert "schedule:" not in source
@@ -294,12 +289,15 @@ def test_authoritative_migration_version_is_latest_filename() -> None:
     migrations = sorted((ROOT / "supabase" / "migrations").glob("*.sql"))
     assert migrations
     assert migrations[-1].name.startswith(f"{LATEST_MIGRATION_VERSION}_")
-    assert any(path.name.startswith(f"{PHASE_C_IDENTITY_MIGRATION_VERSION}_") for path in migrations)
-    assert any(path.name.startswith(f"{POST_FINALIZATION_MIGRATION_VERSION}_") for path in migrations)
-    assert any(path.name.startswith(f"{LEADERBOARD_PRIVACY_MIGRATION_VERSION}_") for path in migrations)
-    assert any(path.name.startswith(f"{PERSONAL_LEARNING_MIGRATION_VERSION}_") for path in migrations)
-    assert any(path.name.startswith(f"{QUIZ_QUALITY_MIGRATION_VERSION}_") for path in migrations)
-    assert any(path.name.startswith(f"{REQUIRED_MIGRATION_VERSION}_") for path in migrations)
+    for name in (
+        "phase_c_content_identity_foundation",
+        "atomic_quiz_post_finalization",
+        "leaderboard_privacy_hotfix",
+        "personal_learning_projection_hotfix",
+        "quiz_quality_and_negative_marking",
+        "durable_write_rate_limits",
+    ):
+        assert (ROOT / "supabase" / "migrations" / f"{ledger_version(name)}_{name}.sql").is_file()
 
 
 def test_versioned_production_manifest_matches_deployment_intent() -> None:
@@ -321,10 +319,7 @@ def test_versioned_production_manifest_matches_deployment_intent() -> None:
     assert PRODUCTION_CONFIG["scheduler"]["dispatcher_max_retries"] == 8
     assert PRODUCTION_CONFIG["database"]["request_timeout_seconds"] == 8
     assert PRODUCTION_CONFIG["database"]["platform_contract_version"] == PLATFORM_CONTRACT_VERSION
-    assert (
-        PRODUCTION_CONFIG["database"]["platform_contract_migration_version"]
-        == PLATFORM_CONTRACT_MIGRATION_VERSION
-    )
+    assert PRODUCTION_CONFIG["database"]["platform_contract_migration_version"] == PLATFORM_CONTRACT_MIGRATION_VERSION
     assert PRODUCTION_CONFIG["database"]["post_finalization_migration_version"] == (POST_FINALIZATION_MIGRATION_VERSION)
     assert PRODUCTION_CONFIG["database"]["quiz_jobs_migration_version"] == (QUIZ_JOBS_MIGRATION_VERSION)
     assert (
