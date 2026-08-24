@@ -265,6 +265,23 @@ def test_delivery_slo_script_supports_the_documented_direct_invocation() -> None
     assert "sys.path.insert(0, str(ROOT))" in source
 
 
+def test_question_calibration_workflow_is_read_only_private_and_pinned() -> None:
+    path = WORKFLOW_DIR / "question-calibration.yml"
+    workflow = _load_yaml(path)
+    trigger = workflow.get("on") or workflow.get(True)
+
+    assert trigger["schedule"] == [{"cron": "0 16 * * 0"}]
+    assert "workflow_dispatch" in trigger
+    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["jobs"]["report"]["environment"] == "production"
+    source = path.read_text(encoding="utf-8")
+    assert "python -m scripts.report_question_calibration" in source
+    assert "SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}" in source
+    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in source
+    assert "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f" in source
+    assert "retention-days: 30" in source
+
+
 def test_production_migration_plan_is_manual_and_read_only() -> None:
     path = WORKFLOW_DIR / "supabase-migration-plan.yml"
     workflow = _load_yaml(path)

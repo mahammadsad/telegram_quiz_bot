@@ -46,5 +46,10 @@ Run this only in a protected server environment with `SUPABASE_URL`,
 PYTHONPATH=. python scripts/report_question_calibration.py
 ```
 
+The `Question Calibration Diagnostic` workflow runs the same read-only report
+weekly and on explicit dispatch. Its private production environment supplies
+the service credential, and the aggregate-only artifact expires after 30 days.
+The workflow never retires, edits, approves, or re-scores a question.
+
 The ownership guard fails closed if the URL does not match the expected project.
 Treat output as restricted operational analytics even though it is answer-free.

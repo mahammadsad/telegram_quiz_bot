@@ -1,0 +1,42 @@
+name: Question Calibration Diagnostic
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: "0 16 * * 0"
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install locked runtime dependencies
+        run: pip install -r requirements.lock
+
+      - name: Generate privacy-safe calibration report
+        env:
+          SUPABASE_URL: https://tizxodkcpglmxgtwepor.supabase.co
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          EXPECTED_SUPABASE_PROJECT_REF: tizxodkcpglmxgtwepor
+        run: |
+          mkdir -p reports
+          python -m scripts.report_question_calibration \
+            > reports/question-calibration.json
+
+      - name: Archive aggregate diagnostic
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: question-calibration-${{ github.run_id }}
+          path: reports/question-calibration.json
+          if-no-files-found: error
+          retention-days: 30
