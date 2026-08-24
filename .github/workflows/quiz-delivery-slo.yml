@@ -1,0 +1,49 @@
+name: Quiz Delivery SLO
+
+permissions:
+  contents: read
+
+on:
+  schedule:
+    - cron: "30 15 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: Reporting window (1-31 days)
+        required: true
+        default: "14"
+        type: string
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Install locked runtime dependencies
+        run: pip install -r requirements.lock
+
+      - name: Generate privacy-safe delivery report
+        env:
+          SUPABASE_URL: https://tizxodkcpglmxgtwepor.supabase.co
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          EXPECTED_SUPABASE_PROJECT_REF: tizxodkcpglmxgtwepor
+          REPORT_DAYS: ${{ inputs.days || '14' }}
+        run: |
+          mkdir -p reports
+          python scripts/report_quiz_delivery_slo.py --days "$REPORT_DAYS" \
+            > reports/quiz-delivery-slo.json
+
+      - name: Archive answer-free aggregate report
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: quiz-delivery-slo-${{ github.run_id }}
+          path: reports/quiz-delivery-slo.json
+          if-no-files-found: error
+          retention-days: 30

@@ -27,3 +27,7 @@ The diagnostic does not fail a release by default because formal availability
 targets have not been approved. Operators may use `--fail-on-terminal` for a
 deliberate incident check. External tracing and an independently monitored alert
 delivery path remain required before this is a complete observability system.
+
+The `Quiz Delivery SLO` workflow runs the same read-only report after the daily
+quiz window and retains the aggregate JSON artifact for 30 days. Its schedule is
+diagnostic redundancy, not the primary quiz-delivery control plane.

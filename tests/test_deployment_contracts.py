@@ -241,6 +241,22 @@ def test_production_migration_workflow_is_manual_and_fail_closed() -> None:
     assert "push:" not in source
 
 
+def test_delivery_slo_workflow_is_read_only_bounded_and_pinned() -> None:
+    path = WORKFLOW_DIR / "quiz-delivery-slo.yml"
+    workflow = _load_yaml(path)
+    trigger = workflow.get("on") or workflow.get(True)
+
+    assert trigger["schedule"] == [{"cron": "30 15 * * *"}]
+    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["jobs"]["report"]["environment"] == "production"
+    source = path.read_text(encoding="utf-8")
+    assert "scripts/report_quiz_delivery_slo.py" in source
+    assert "--fail-on-terminal" not in source
+    assert "SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}" in source
+    assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in source
+    assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in source
+
+
 def test_production_migration_plan_is_manual_and_read_only() -> None:
     path = WORKFLOW_DIR / "supabase-migration-plan.yml"
     workflow = _load_yaml(path)
