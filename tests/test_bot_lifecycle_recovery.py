@@ -608,6 +608,37 @@ def test_historical_near_duplicate_gets_one_full_repair(monkeypatch, valid_quest
     assert metadata["semantic_repair_attempted"] is True
 
 
+def test_repeated_historical_collision_is_classified_for_chapter_rotation(
+    monkeypatch, valid_questions
+):
+    monkeypatch.setattr(
+        bot.quiz_pack_service,
+        "has_historical_near_duplicate",
+        lambda *args, **kwargs: True,
+    )
+
+    class Pool:
+        def generate_subject_quiz(self, **kwargs):
+            return json.dumps(valid_questions, ensure_ascii=False), {
+                "provider": "primary",
+                "model": "generator",
+                "attempts": 1,
+                "providers_attempted": ["primary"],
+            }
+
+    with pytest.raises(bot.QuizValidationError) as raised:
+        bot.generate_mcqs(
+            "history",
+            "আধুনিক ভারত",
+            pool=Pool(),
+            grounding_bundle=grounding_bundle(),
+        )
+
+    assert raised.value.reason_code == "historical_near_duplicate"
+    assert raised.value.category == "quiz_content_collision"
+    assert raised.value.retryable is True
+
+
 def test_independent_verifier_rejection_gets_one_full_repair(valid_questions):
     rejected_verification = verifier_rows()
     rejected_verification[3] = {

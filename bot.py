@@ -564,6 +564,11 @@ def generate_mcqs(
             attempts=metadata.get("attempt_trace") or [],
             retryable=True,
             reason_code=reason_code,
+            category=(
+                "quiz_content_collision"
+                if reason_code == "historical_near_duplicate"
+                else "validation_failed"
+            ),
         )
         raise final_error from validation_error
     if generated is None:

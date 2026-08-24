@@ -47,9 +47,10 @@ class QuizValidationError(ValueError):
         attempts: list[dict[str, Any]] | None = None,
         retryable: bool = False,
         reason_code: str | None = None,
+        category: str = "validation_failed",
     ) -> None:
         super().__init__(message)
-        self.category = "validation_failed"
+        self.category = category
         self.attempts = attempts or []
         self.retryable = retryable
         self.reason_code = reason_code
