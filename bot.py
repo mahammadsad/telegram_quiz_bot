@@ -75,6 +75,7 @@ from services.quiz_lifecycle import (
     DailyHealthReport,
     RunOutcome,
     is_successful_outcome,
+    recovery_state,
 )
 from storage import questions_repo, quiz_jobs_repo, quiz_runs_repo, schema_contract_repo
 from telegram.routing import ForumRouter
@@ -961,6 +962,21 @@ def durable_daily_health_report(
     )
 
 
+def run_daily_completeness_check(*, now: datetime | None = None) -> DailyHealthReport:
+    current = now or datetime.now(ZoneInfo(APP_TIMEZONE))
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=ZoneInfo(APP_TIMEZONE))
+    localized = current.astimezone(ZoneInfo(APP_TIMEZONE))
+    report = durable_daily_health_report(
+        localized.date(), current_hhmm=localized.strftime("%H:%M")
+    )
+    LOG.info("DAILY_JOB_HEALTH %s", json.dumps(report.as_dict(), sort_keys=True))
+    LOG.info("DAILY_JOB_HEALTH_TEXT\n%s", report.as_text())
+    if not report.complete:
+        send_daily_health_alert(report)
+    return report
+
+
 def dispatch_due_quiz_jobs(*, now: datetime | None = None) -> quiz_dispatcher.DispatchResult:
     return quiz_dispatch_runtime.dispatch_due_jobs(
         dispatcher=quiz_dispatcher,
@@ -1030,6 +1046,44 @@ def send_failure_alert(
         telegram_api("sendMessage", payload)
     except Exception:
         LOG.warning("ADMIN_ALERT_FAILED subject=%s quiz_id=%s", subject_key, quiz_id)
+
+
+def send_daily_health_alert(report: DailyHealthReport) -> bool:
+    """Send one bounded private operational summary from the daily completeness gate."""
+    if not TELEGRAM_ADMIN_CHAT_ID:
+        LOG.warning(
+            "DAILY_HEALTH_ALERT_SKIPPED date=%s reason=admin_chat_not_configured",
+            report.logical_date.isoformat(),
+        )
+        return False
+    unresolved = [
+        (subject, outcome)
+        for subject, outcome in report.subjects.items()
+        if recovery_state(outcome) != "posted"
+    ]
+    lines = [
+        "⚠️ Daily quiz completeness is not green",
+        f"Date: {report.logical_date.isoformat()} IST",
+        f"Posted: {report.counts['posted']} / {report.counts['expected']}",
+        "",
+    ]
+    for subject, outcome in unresolved:
+        safe_outcome = " ".join(str(outcome).split())[:100]
+        lines.append(f"• {subject}: {safe_outcome}")
+    lines.append("")
+    lines.append("No incomplete or unverified quiz was force-posted.")
+    try:
+        telegram_api(
+            "sendMessage",
+            {"chat_id": TELEGRAM_ADMIN_CHAT_ID, "text": "\n".join(lines)[:4000]},
+        )
+    except Exception:
+        LOG.warning(
+            "DAILY_HEALTH_ALERT_FAILED date=%s", report.logical_date.isoformat()
+        )
+        return False
+    LOG.info("DAILY_HEALTH_ALERT_SENT date=%s", report.logical_date.isoformat())
+    return True
 
 
 def send_schedule_announcement() -> None:
@@ -1285,10 +1339,7 @@ def main() -> None:
             if dispatch.actionable_failures:
                 raise RuntimeError("Dispatcher found actionable blocked or unknown jobs.")
         elif args.mode == "daily-completeness":
-            current = datetime.now(ZoneInfo(APP_TIMEZONE))
-            report = durable_daily_health_report(current.date(), current_hhmm=current.strftime("%H:%M"))
-            LOG.info("DAILY_JOB_HEALTH %s", json.dumps(report.as_dict(), sort_keys=True))
-            LOG.info("DAILY_JOB_HEALTH_TEXT\n%s", report.as_text())
+            report = run_daily_completeness_check()
             if not report.complete:
                 raise RuntimeError("Daily durable-job completeness is not green.")
         elif args.mode == "announce":

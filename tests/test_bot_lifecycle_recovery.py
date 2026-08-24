@@ -795,6 +795,57 @@ def test_daily_health_report_uses_date_rows_and_includes_operational_detail(
     assert "computer: posted / posted / none / attempts=2" in report.as_text()
 
 
+def test_incomplete_daily_health_alert_is_private_bounded_and_answer_free(
+    monkeypatch,
+):
+    report = DailyHealthReport(
+        date(2026, 8, 24),
+        {
+            "history": "already_posted",
+            "computer": "blocked:content_rejected\nunsafe detail",
+        },
+    )
+    sent = []
+    monkeypatch.setattr(bot, "TELEGRAM_ADMIN_CHAT_ID", "-100-admin")
+    monkeypatch.setattr(
+        bot, "telegram_api", lambda method, payload: sent.append((method, payload))
+    )
+
+    assert bot.send_daily_health_alert(report) is True
+    assert sent[0][0] == "sendMessage"
+    assert sent[0][1]["chat_id"] == "-100-admin"
+    assert "computer: blocked:content_rejected unsafe detail" in sent[0][1]["text"]
+    assert "history" not in sent[0][1]["text"]
+    assert "answer" not in sent[0][1]["text"].lower()
+    assert len(sent[0][1]["text"]) <= 4000
+
+
+def test_daily_health_alert_never_falls_back_to_public_chat(monkeypatch):
+    report = DailyHealthReport(date(2026, 8, 24), {"computer": "missing"})
+    monkeypatch.setattr(bot, "TELEGRAM_ADMIN_CHAT_ID", "")
+    monkeypatch.setattr(
+        bot,
+        "telegram_api",
+        lambda *args, **kwargs: pytest.fail("Public Telegram chat was used"),
+    )
+
+    assert bot.send_daily_health_alert(report) is False
+
+
+def test_daily_completeness_check_alerts_once_for_incomplete_report(monkeypatch):
+    report = DailyHealthReport(date(2026, 8, 24), {"computer": "missing"})
+    alerts = []
+    monkeypatch.setattr(bot, "durable_daily_health_report", lambda *args, **kwargs: report)
+    monkeypatch.setattr(bot, "send_daily_health_alert", lambda value: alerts.append(value))
+
+    result = bot.run_daily_completeness_check(
+        now=datetime(2026, 8, 24, 20, 30, tzinfo=ZoneInfo("Asia/Kolkata"))
+    )
+
+    assert result is report
+    assert alerts == [report]
+
+
 @pytest.mark.parametrize(
     "outcome",
     [
