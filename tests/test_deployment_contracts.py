@@ -257,6 +257,14 @@ def test_delivery_slo_workflow_is_read_only_bounded_and_pinned() -> None:
     assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in source
 
 
+def test_delivery_slo_script_supports_the_documented_direct_invocation() -> None:
+    source = (ROOT / "scripts" / "report_quiz_delivery_slo.py").read_text(
+        encoding="utf-8"
+    )
+    assert 'Path(__file__).resolve().parents[1]' in source
+    assert "sys.path.insert(0, str(ROOT))" in source
+
+
 def test_production_migration_plan_is_manual_and_read_only() -> None:
     path = WORKFLOW_DIR / "supabase-migration-plan.yml"
     workflow = _load_yaml(path)

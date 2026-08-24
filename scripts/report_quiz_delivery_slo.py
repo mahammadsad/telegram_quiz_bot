@@ -4,11 +4,16 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from datetime import date, timedelta
+from pathlib import Path
 
-from config.settings import require_env, supabase_project_ref_matches
-from services.quiz_delivery_slo import quiz_delivery_slo_report
-from storage import quiz_jobs_repo
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT))
+
+from config.settings import require_env, supabase_project_ref_matches  # noqa: E402
+from services.quiz_delivery_slo import quiz_delivery_slo_report  # noqa: E402
+from storage import quiz_jobs_repo  # noqa: E402
 
 
 def main() -> int:
