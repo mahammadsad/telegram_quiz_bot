@@ -1,4 +1,4 @@
-"""Refresh expiring current-affairs facts from strict official PIB releases."""
+"""Refresh expiring current-affairs facts from strict official releases."""
 
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from email.utils import parsedate_to_datetime
 from html.parser import HTMLParser
 from pathlib import Path
 from urllib.error import HTTPError
-from urllib.parse import parse_qs, urljoin, urlparse
+from urllib.parse import parse_qs, unquote, urljoin, urlparse
 from zoneinfo import ZoneInfo
 
 from defusedxml import ElementTree as SafeET
@@ -54,7 +54,10 @@ PIB_ALL_RELEASES_URL = (
     "https://www.pib.gov.in/AllRelease.aspx?MenuId=3&lang=1&reg=3"
 )
 RBI_PRESS_RELEASES_RSS_URL = "https://rbi.org.in/pressreleases_rss.xml"
-PIB_USER_AGENT = "telegram-quiz-source-refresh/1.0 (+official-PIB-only)"
+ISRO_PRESS_RELEASES_URL = "https://www.isro.gov.in/Press.html"
+PIB_USER_AGENT = (
+    "CitizenAffairsQuizBot/1.0 (+https://citizenaffairs.in/bn/; official-sources-only)"
+)
 RBI_USER_AGENT = (
     "Mozilla/5.0 (compatible; CitizenAffairsQuizBot/1.0; "
     "+https://citizenaffairs.in/bn/)"
@@ -95,6 +98,7 @@ class RefreshStats:
     accepted: int
     skipped: int
     source_status: str = "available"
+    isro_source_status: str = "available"
 
 
 CLASSIFICATIONS: dict[str, tuple[str, str, str]] = {
@@ -186,7 +190,7 @@ def main() -> int:
     parser.add_argument(
         "--approve",
         action="store_true",
-        help="Import as verified under the reviewed PIB-only ingestion policy.",
+        help="Import as verified under the reviewed official-source ingestion policy.",
     )
     args = parser.parse_args()
     if args.max_items < 1 or args.max_items > 200:
@@ -223,7 +227,10 @@ def main() -> int:
         "sourceDomains": dict(sorted(Counter(
             str(row["source_domain"]) for row in clean_rows
         ).items())),
-        "sourceStatus": {"rbi": stats.source_status},
+        "sourceStatus": {
+            "isro": stats.isro_source_status,
+            "rbi": stats.source_status,
+        },
         "coverage": coverage,
         "imported": imported_count,
         "approved": args.approve,
@@ -253,11 +260,6 @@ def refresh_rows(
     if release_index_items:
         item_batches.append(release_index_items)
     items = _interleave_unique(item_batches)
-    if not items:
-        raise CurrentAffairsRefreshError(
-            "The official PIB endpoints returned no release items."
-        )
-
     candidates: list[tuple[str, str]] = []
     skipped = 0
     seen_prids: set[str] = set()
@@ -304,15 +306,23 @@ def refresh_rows(
     )
     rows.extend(rbi_rows)
     skipped += rbi_stats.skipped
+    isro_rows, isro_stats = refresh_isro_rows(
+        fetch_text=fetch_text,
+        now=now,
+        max_items=max_items,
+    )
+    rows.extend(isro_rows)
+    skipped += isro_stats.skipped
     if not rows:
         raise CurrentAffairsRefreshError(
-            "No current, complete PIB releases passed the source-safety checks."
+            "No current, complete official releases passed the source-safety checks."
         )
     return cluster_current_affairs_rows(rows), RefreshStats(
-        rss_items=len(items) + rbi_stats.rss_items,
+        rss_items=len(items) + rbi_stats.rss_items + isro_stats.rss_items,
         accepted=len(rows),
         skipped=skipped,
         source_status=rbi_stats.source_status,
+        isro_source_status=isro_stats.source_status,
     )
 
 
@@ -348,6 +358,44 @@ def refresh_rbi_rows(*, fetch_text, now: datetime, max_items: int) -> tuple[list
     return rows, RefreshStats(rss_items=len(raw_items), accepted=len(rows), skipped=skipped)
 
 
+def refresh_isro_rows(*, fetch_text, now: datetime, max_items: int) -> tuple[list[dict], RefreshStats]:
+    """Read current official ISRO press pages without PDFs or third-party text."""
+    try:
+        raw_items = parse_isro_press_items(fetch_text(ISRO_PRESS_RELEASES_URL))
+    except Exception:
+        return [], RefreshStats(
+            rss_items=0,
+            accepted=0,
+            skipped=0,
+            source_status="unavailable",
+        )
+    rows: list[dict] = []
+    skipped = 0
+    for raw_url in raw_items[:max_items]:
+        try:
+            release_url = canonical_isro_release_url(raw_url)
+            release = parse_isro_release(release_url, fetch_text(release_url))
+            if not release_is_current(release.published_at, now):
+                skipped += 1
+                # The official index is reverse chronological. Once it reaches
+                # an expired page, older pages cannot restore freshness.
+                if now - _as_utc(release.published_at) > timedelta(
+                    days=CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS
+                ):
+                    break
+                continue
+            rows.append(release_to_source_row(release, now))
+        except (CurrentAffairsRefreshError, ValueError):
+            skipped += 1
+    status = "available" if rows else "available_no_current_rows"
+    return rows, RefreshStats(
+        rss_items=len(raw_items),
+        accepted=len(rows),
+        skipped=skipped,
+        source_status=status,
+    )
+
+
 def _interleave_unique(batches: list[list[str]]) -> list[str]:
     """Mix official endpoint results so one feed cannot starve broad coverage."""
     items: list[str] = []
@@ -370,9 +418,11 @@ def _interleave_unique(batches: list[list[str]]) -> list[str]:
 
 def fetch_text(url: str) -> str:
     requested_domain = (urlparse(url).hostname or "").lower().removeprefix("www.")
-    if requested_domain not in {"pib.gov.in", "rbi.org.in"}:
+    if requested_domain not in {"isro.gov.in", "pib.gov.in", "rbi.org.in"}:
         raise CurrentAffairsRefreshError("Current-affairs source host is not approved.")
-    user_agent = RBI_USER_AGENT if requested_domain == "rbi.org.in" else PIB_USER_AGENT
+    user_agent = (
+        PIB_USER_AGENT if requested_domain == "pib.gov.in" else RBI_USER_AGENT
+    )
     request = urllib.request.Request(
         url,
         headers={
@@ -483,6 +533,137 @@ def rbi_item_to_release(item: dict[str, str]) -> Release:
         prid=f"rbi-{prid}", url=url, ministry="Reserve Bank of India",
         title=_clean_text(str(item["title"])), published_at=published_at.astimezone(timezone.utc), body=body,
     )
+
+
+def parse_isro_press_items(html_text: str) -> list[str]:
+    parser = _ISROPressIndexParser()
+    try:
+        parser.feed(html_text)
+        parser.close()
+    except Exception as exc:
+        raise CurrentAffairsRefreshError("The official ISRO press index was malformed.") from exc
+    return parser.links
+
+
+def canonical_isro_release_url(raw_url: str) -> str:
+    candidate = urljoin(ISRO_PRESS_RELEASES_URL, raw_url)
+    parsed = urlparse(candidate)
+    host = (parsed.hostname or "").lower().removeprefix("www.")
+    decoded_path = unquote(parsed.path)
+    if parsed.scheme != "https" or host != "isro.gov.in":
+        raise CurrentAffairsRefreshError("ISRO press item points outside the official host.")
+    if (
+        parsed.query
+        or parsed.fragment
+        or ".." in decoded_path
+        or decoded_path.count("/") != 1
+        or not re.fullmatch(r"/[A-Za-z0-9_(). -]{3,180}\.html", decoded_path)
+        or decoded_path.casefold() == "/press.html"
+    ):
+        raise CurrentAffairsRefreshError("ISRO press item is not a canonical release page.")
+    return f"https://www.isro.gov.in{parsed.path}"
+
+
+def parse_isro_release(url: str, html_text: str) -> Release:
+    canonical_url = canonical_isro_release_url(url)
+    parser = _ISROReleaseParser()
+    try:
+        parser.feed(html_text)
+        parser.close()
+    except Exception as exc:
+        raise CurrentAffairsRefreshError("ISRO press-release HTML could not be parsed.") from exc
+    title = _clean_text(" ".join(parser.title_parts))
+    paragraphs = [_clean_text(" ".join(parts)) for parts in parser.paragraphs]
+    paragraphs = [value for value in paragraphs if value]
+    date_index = next(
+        (
+            index
+            for index, value in enumerate(paragraphs)
+            if re.fullmatch(r"[A-Z][a-z]+ [0-3]?[0-9], [0-9]{4}", value)
+        ),
+        None,
+    )
+    if date_index is None:
+        raise CurrentAffairsRefreshError("ISRO release has no canonical publication date.")
+    try:
+        published_local = datetime.strptime(paragraphs[date_index], "%B %d, %Y").replace(
+            tzinfo=IST
+        )
+    except ValueError as exc:
+        raise CurrentAffairsRefreshError("ISRO release has an invalid publication date.") from exc
+    body = _clean_body(
+        [value for index, value in enumerate(paragraphs) if index != date_index]
+    )
+    if len(title) < 12 or len(body) < 250:
+        raise CurrentAffairsRefreshError("ISRO press release is missing sufficient official text.")
+    identity = hashlib.sha256(canonical_url.encode("utf-8")).hexdigest()[:12]
+    return Release(
+        prid=f"isro-{identity}",
+        url=canonical_url,
+        ministry="Indian Space Research Organisation",
+        title=title,
+        published_at=published_local.astimezone(timezone.utc),
+        body=body,
+    )
+
+
+class _ISROPressIndexParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.links: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag.lower() != "a":
+            return
+        href = next((value or "" for key, value in attrs if key.lower() == "href"), "")
+        if not href:
+            return
+        try:
+            candidate = canonical_isro_release_url(href)
+        except CurrentAffairsRefreshError:
+            return
+        if candidate not in self.links:
+            self.links.append(candidate)
+
+
+class _ISROReleaseParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.title_parts: list[str] = []
+        self.paragraphs: list[list[str]] = []
+        self._title_depth = 0
+        self._paragraph_depth = 0
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        lowered = tag.lower()
+        if lowered in {"script", "style", "noscript"}:
+            self._skip_depth += 1
+            return
+        attr_map = {key.lower(): (value or "") for key, value in attrs}
+        classes = set(attr_map.get("class", "").split())
+        if lowered == "title":
+            self._title_depth += 1
+        if lowered == "p" and "pageContent" in classes:
+            self._paragraph_depth += 1
+            self.paragraphs.append([])
+
+    def handle_endtag(self, tag: str) -> None:
+        lowered = tag.lower()
+        if lowered in {"script", "style", "noscript"}:
+            self._skip_depth = max(0, self._skip_depth - 1)
+        elif lowered == "title" and self._title_depth:
+            self._title_depth -= 1
+        elif lowered == "p" and self._paragraph_depth:
+            self._paragraph_depth -= 1
+
+    def handle_data(self, data: str) -> None:
+        if self._skip_depth:
+            return
+        if self._title_depth:
+            self.title_parts.append(data)
+        if self._paragraph_depth and self.paragraphs:
+            self.paragraphs[-1].append(data)
 
 
 class _RBITextParser(HTMLParser):
@@ -748,13 +929,23 @@ def release_to_source_row(release: Release, accessed_at: datetime) -> dict:
         accessed_at + timedelta(days=1),
     )
     event["expires_at"] = expires_at.isoformat()
-    for claim in event.get("claims") or []:
-        if datetime.fromisoformat(str(claim["expires_at"])) < expires_at:
-            claim["expires_at"] = expires_at.isoformat()
+    claims = event.get("claims")
+    if isinstance(claims, list):
+        for claim in claims:
+            if not isinstance(claim, dict):
+                continue
+            if datetime.fromisoformat(str(claim["expires_at"])) < expires_at:
+                claim["expires_at"] = expires_at.isoformat()
     body = _truncate_at_word(release.body, MAX_FACT_SUMMARY_CHARS - 300)
     source_domain = authoritative_source_domain(release.url)
-    source_label = "Official RBI press release" if source_domain == "rbi.org.in" else "Official PIB release"
-    source_prefix = "rbi" if source_domain == "rbi.org.in" else "pib"
+    source_identity = {
+        "isro.gov.in": ("Official ISRO press release", "isro"),
+        "rbi.org.in": ("Official RBI press release", "rbi"),
+    }
+    source_label, source_prefix = source_identity.get(
+        source_domain,
+        ("Official PIB release", "pib"),
+    )
     fact_summary = (
         f"{source_label} dated {published_at.astimezone(IST).date().isoformat()} "
         f"from {release.ministry}. Title: {release.title}. "
