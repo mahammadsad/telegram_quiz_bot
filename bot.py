@@ -185,6 +185,11 @@ _VALIDATION_REPAIR_HINTS = {
         "Keep every question and answer unchanged, then reorder options so two correct_index "
         "positions occur twice and two occur three times. Recalculate every correct_index."
     ),
+    "historical_near_duplicate": (
+        "Replace every question that is identical or semantically similar to any recent exclusion. "
+        "Changing names, numbers, option order, or wording does not make the same tested pattern new. "
+        "Use different concepts and relationships from the allowed chapter and micro-topics."
+    ),
 }
 
 
@@ -281,6 +286,23 @@ def _validation_reason_code(exc: QuizValidationError) -> str:
         if marker in message:
             return code
     return "semantic_contract"
+
+
+def _has_historical_near_duplicate(
+    questions: list[dict],
+    *,
+    subject_key: str,
+    chapter: str,
+) -> bool:
+    try:
+        return quiz_pack_service.has_historical_near_duplicate(
+            questions,
+            {"subject_key": subject_key, "chapter": chapter},
+        )
+    except ConfigurationError:
+        # Direct/offline generation tests may not configure the database. Live
+        # dispatch has already passed the strict database preflight.
+        return False
 
 
 def _repair_generation_prompt(prompt: str, reason_code: str) -> str:
@@ -465,6 +487,16 @@ def generate_mcqs(
                     subject_key,
                     quiz_id or "unassigned",
                 )
+                if _has_historical_near_duplicate(
+                    generated,
+                    subject_key=subject_key,
+                    chapter=chapter,
+                ):
+                    generated = None
+                    validation_error = QuizValidationError(
+                        "A generated question is semantically similar to durable history.",
+                        reason_code="historical_near_duplicate",
+                    )
             except QuizValidationError as exc:
                 validation_error = exc
 

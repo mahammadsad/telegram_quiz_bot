@@ -565,6 +565,49 @@ def test_semantically_invalid_json_gets_one_full_repair(valid_questions, caplog)
     assert metadata["semantic_repair_attempted"] is True
 
 
+def test_historical_near_duplicate_gets_one_full_repair(monkeypatch, valid_questions):
+    collision_checks = iter((True, False))
+    monkeypatch.setattr(
+        bot.quiz_pack_service,
+        "has_historical_near_duplicate",
+        lambda *args, **kwargs: next(collision_checks),
+    )
+
+    class Pool:
+        def __init__(self):
+            self.calls = []
+
+        def generate_subject_quiz(self, **kwargs):
+            self.calls.append(kwargs)
+            if len(self.calls) <= 2:
+                return json.dumps(valid_questions, ensure_ascii=False), {
+                    "provider": "primary",
+                    "model": "generator",
+                    "attempts": 1,
+                    "providers_attempted": ["primary"],
+                }
+            return json.dumps(verifier_rows()), {
+                "provider": "secondary",
+                "model": "verifier",
+                "attempts": 1,
+                "providers_attempted": ["secondary"],
+            }
+
+    pool = Pool()
+    clean, metadata = bot.generate_mcqs(
+        "history",
+        "আধুনিক ভারত",
+        pool=pool,
+        grounding_bundle=grounding_bundle(),
+    )
+
+    assert len(clean) == 10
+    assert len(pool.calls) == 3
+    assert "historical_near_duplicate" in pool.calls[1]["prompt"]
+    assert "semantically similar" in pool.calls[1]["prompt"]
+    assert metadata["semantic_repair_attempted"] is True
+
+
 def test_unbalanced_answer_positions_are_randomized_without_model_repair(
     valid_questions,
 ):

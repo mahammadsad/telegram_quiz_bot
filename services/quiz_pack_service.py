@@ -720,6 +720,32 @@ def question_row_from_validated_candidate(item: dict, meta: dict) -> dict:
     return _build_question("verified-inventory", item, meta).to_insert_dict()
 
 
+def has_historical_near_duplicate(raw_questions: list[dict], meta: dict) -> bool:
+    """Preflight a generated batch against the durable semantic-duplicate gate.
+
+    PostgreSQL remains authoritative during the atomic save. This earlier read-only
+    check lets the bounded generation repair replace a colliding batch before an
+    independent verifier call is spent. Exact immutable content and a new version
+    of the same stem retain the same reuse/version semantics as the save path.
+    """
+    for item in raw_questions:
+        question = _build_question("generation-preflight", item, meta)
+        if questions_repo.get_by_content_hash(question.content_hash or ""):
+            continue
+        if questions_repo.get_latest_by_stem(question.stem_hash or question.question_hash):
+            continue
+        if questions_repo.find_similar(
+            question.normalized_text,
+            bot_type=BOT_TYPE,
+            threshold=SIMILARITY_THRESHOLD,
+            limit=1,
+            subject=question.subject,
+            topic=question.topic,
+        ):
+            return True
+    return False
+
+
 def _question_row_for_atomic_save(quiz_id: str, item: dict, meta: dict) -> dict:
     """Reuse only byte-equivalent content; never substitute an unverified near-duplicate."""
     question = _build_question(quiz_id, item, meta)

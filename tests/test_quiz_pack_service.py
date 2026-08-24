@@ -397,6 +397,49 @@ def test_near_duplicate_is_rejected_instead_of_substituted(monkeypatch, valid_qu
         )
 
 
+def test_generation_preflight_finds_historical_near_duplicate(monkeypatch, valid_questions):
+    monkeypatch.setattr(service.questions_repo, "get_by_content_hash", lambda *args: None)
+    monkeypatch.setattr(service.questions_repo, "get_latest_by_stem", lambda *args: None)
+    calls = []
+
+    def find_similar(*args, **kwargs):
+        calls.append((args, kwargs))
+        return [{"id": "historical-question"}] if len(calls) == 3 else []
+
+    monkeypatch.setattr(service.questions_repo, "find_similar", find_similar)
+
+    assert service.has_historical_near_duplicate(
+        valid_questions,
+        {"subject_key": "history", "chapter": "আধুনিক ভারত"},
+    ) is True
+    assert len(calls) == 3
+    assert calls[-1][1]["subject"] == "history"
+    assert calls[-1][1]["topic"] == "আধুনিক ভারত"
+
+
+def test_generation_preflight_preserves_exact_content_reuse(monkeypatch, valid_questions):
+    monkeypatch.setattr(
+        service.questions_repo,
+        "get_by_content_hash",
+        lambda *args: {"id": "exact-question"},
+    )
+    monkeypatch.setattr(
+        service.questions_repo,
+        "get_latest_by_stem",
+        lambda *args: pytest.fail("stem lookup should be skipped for exact content"),
+    )
+    monkeypatch.setattr(
+        service.questions_repo,
+        "find_similar",
+        lambda *args, **kwargs: pytest.fail("similarity lookup should be skipped for exact content"),
+    )
+
+    assert service.has_historical_near_duplicate(
+        valid_questions,
+        {"subject_key": "history", "chapter": "আধুনিক ভারত"},
+    ) is False
+
+
 @pytest.mark.parametrize(
     "database_message",
     [
