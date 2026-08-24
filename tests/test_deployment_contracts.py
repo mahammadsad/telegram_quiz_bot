@@ -238,6 +238,34 @@ def test_production_migration_workflow_is_manual_and_fail_closed() -> None:
     assert "push:" not in source
 
 
+def test_production_migration_plan_is_manual_and_read_only() -> None:
+    path = WORKFLOW_DIR / "supabase-migration-plan.yml"
+    workflow = _load_yaml(path)
+    trigger = workflow.get("on") or workflow.get(True)
+    assert set(trigger) == {"workflow_dispatch"}
+    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["concurrency"] == {
+        "group": "production-supabase-migrations",
+        "cancel-in-progress": False,
+    }
+
+    job = workflow["jobs"]["plan-migrations"]
+    assert job["environment"] == "production"
+    assert job["timeout-minutes"] == 15
+    assert job["env"]["EXPECTED_SUPABASE_PROJECT_REF"] == PRODUCTION_PROJECT_REF
+    for name in ("SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_PASSWORD"):
+        assert job["env"][name] == f"${{{{ secrets.{name} }}}}"
+
+    source = path.read_text(encoding="utf-8")
+    assert "PLAN TRACKED MIGRATIONS FOR {expected_ref}" in source
+    assert "supabase@2.77.0 migration list" in source
+    assert "supabase@2.77.0 db push" in source
+    assert "--include-all --dry-run --yes" in source
+    assert "Apply tracked migrations" not in source
+    assert "schedule:" not in source
+    assert "push:" not in source
+
+
 def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> None:
     static_path = WORKFLOW_DIR / "source-rollout.yml"
     static = _load_yaml(static_path)

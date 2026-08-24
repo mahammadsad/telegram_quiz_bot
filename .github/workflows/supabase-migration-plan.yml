@@ -1,0 +1,73 @@
+name: Plan Production Supabase Migrations
+
+on:
+  workflow_dispatch:
+    inputs:
+      safety_ack:
+        description: Enter PLAN TRACKED MIGRATIONS FOR tizxodkcpglmxgtwepor
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-supabase-migrations
+  cancel-in-progress: false
+
+jobs:
+  plan-migrations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      EXPECTED_SUPABASE_PROJECT_REF: tizxodkcpglmxgtwepor
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      INPUT_SAFETY_ACK: ${{ inputs.safety_ack }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Fail-closed production identity and credential gate
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+
+          expected_ref = "tizxodkcpglmxgtwepor"
+          expected_ack = f"PLAN TRACKED MIGRATIONS FOR {expected_ref}"
+          if os.environ.get("EXPECTED_SUPABASE_PROJECT_REF") != expected_ref:
+              raise SystemExit("Refusing plan: production project ref is not exact.")
+          if os.environ.get("INPUT_SAFETY_ACK") != expected_ack:
+              raise SystemExit("Refusing plan: production acknowledgement is not exact.")
+          missing = [
+              name
+              for name in ("SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_PASSWORD")
+              if not os.environ.get(name)
+          ]
+          if missing:
+              raise SystemExit("Refusing plan: required production credentials are unavailable.")
+          print("Read-only production migration-plan gate passed.")
+          PY
+
+      - name: Verify recovered production migration source equivalence
+        run: python scripts/check_migration_ledger_sources.py
+
+      - name: Link the exact production project for this ephemeral runner
+        run: >-
+          npx --yes supabase@2.77.0 link
+          --project-ref "$EXPECTED_SUPABASE_PROJECT_REF"
+          --password "$SUPABASE_DB_PASSWORD"
+          --yes
+
+      - name: Compare local and production migration ledgers
+        run: >-
+          npx --yes supabase@2.77.0 migration list
+          --linked --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Show migration plan without changing production
+        run: >-
+          npx --yes supabase@2.77.0 db push
+          --password "$SUPABASE_DB_PASSWORD"
+          --include-all --dry-run --yes
