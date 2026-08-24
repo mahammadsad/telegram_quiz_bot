@@ -140,6 +140,20 @@ def list_for_date(logical_date: str) -> list[Row]:
     return as_rows(result.data, "quiz_jobs.list_for_date")
 
 
+def list_delivery_slo_window(start_date: str, end_date: str) -> list[Row]:
+    result = (
+        get_client()
+        .table("quiz_jobs")
+        .select("logical_date,subject_key,due_at,status,posted_at")
+        .gte("logical_date", start_date)
+        .lte("logical_date", end_date)
+        .order("logical_date")
+        .order("subject_key")
+        .execute()
+    )
+    return as_rows(result.data, "quiz_jobs.delivery_slo_window")
+
+
 def reconcile_unknown(
     *,
     job_id: str,
