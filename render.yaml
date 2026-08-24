@@ -4,6 +4,16 @@ services:
     runtime: python
     plan: free
     region: singapore
+    buildFilter:
+      ignoredPaths:
+        - .github/**
+        - docs/**
+        - tests/**
+        - "**/*.md"
+        - requirements-dev*.txt
+        - package.json
+        - package-lock.json
+        - playwright.config.js
     buildCommand: pip install --disable-pip-version-check -r requirements.lock
     startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
     # Keep the process alive while readiness reports a controlled dependency or

@@ -59,6 +59,11 @@ def test_render_blueprint_uses_process_liveness_and_ci_deploy_gating() -> None:
     assert service["healthCheckPath"] == "/health/live"
     assert service["autoDeployTrigger"] == "checksPass"
     assert "$PORT" in service["startCommand"]
+    ignored = set(service["buildFilter"]["ignoredPaths"])
+    assert {".github/**", "docs/**", "tests/**", "**/*.md"} <= ignored
+    assert "services/**" not in ignored
+    assert "routes/**" not in ignored
+    assert "*.py" not in ignored
 
     env = {item["key"]: item for item in service["envVars"]}
     assert env["EXPECTED_SUPABASE_PROJECT_REF"]["value"] == PRODUCTION_PROJECT_REF
