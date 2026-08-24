@@ -14,7 +14,7 @@ from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from fractions import Fraction
 from itertools import permutations
-from math import gcd, isqrt
+from math import comb, gcd, isqrt, perm
 from typing import Any, Mapping, Sequence
 
 from config.settings import DETERMINISTIC_PROOF_VERSION
@@ -690,6 +690,28 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
                 result = sum(sides, Fraction())
                 return _SolvedValue(result, (result,), length_unit)
             raise ValueError
+        if family == "permutation_combination":
+            item_count = _bounded_int(params.get("n"), minimum=0, maximum=100)
+            selection_count = _bounded_int(
+                params.get("r"), minimum=0, maximum=item_count
+            )
+            requested = str(params.get("requested") or "")
+            if requested == "permutation":
+                result = perm(item_count, selection_count)
+            elif requested == "combination":
+                result = comb(item_count, selection_count)
+            else:
+                raise ValueError
+            return _SolvedValue(result, (result,))
+        if family == "inverse_proportion":
+            known_quantity = _fraction(params["known_quantity"])
+            known_value = _fraction(params["known_value"])
+            target_quantity = _fraction(params["target_quantity"])
+            if known_quantity <= 0 or known_value < 0 or target_quantity <= 0:
+                raise ValueError
+            constant_product = known_quantity * known_value
+            result = constant_product / target_quantity
+            return _SolvedValue(result, (constant_product, result))
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         raise DeterministicVerificationError(
             "math_proof_invalid", "The mathematics proof parameters are invalid."
@@ -867,6 +889,46 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
                 (alphabet_positions[-1] - 1 + alphabet_steps[0]) % 26
             ) + 1
             return _SolvedValue(result, (alphabet_steps[0], result))
+        if family == "quadratic_series_next":
+            values = [_fraction(value) for value in _sequence(params.get("sequence"))]
+            if len(values) not in range(4, 10):
+                raise ValueError
+            differences = [
+                right - left
+                for left, right in zip(values, values[1:], strict=False)
+            ]
+            second_differences = [
+                right - left
+                for left, right in zip(differences, differences[1:], strict=False)
+            ]
+            if len(set(second_differences)) != 1 or not second_differences[0]:
+                raise ValueError
+            next_difference = differences[-1] + second_differences[0]
+            result = values[-1] + next_difference
+            return _SolvedValue(
+                result, (second_differences[0], next_difference, result)
+            )
+        if family == "alternating_arithmetic_series_next":
+            values = [_fraction(value) for value in _sequence(params.get("sequence"))]
+            if len(values) not in range(6, 13):
+                raise ValueError
+            subsequences = (values[::2], values[1::2])
+            steps: list[Fraction] = []
+            for subsequence in subsequences:
+                differences = [
+                    right - left
+                    for left, right in zip(
+                        subsequence, subsequence[1:], strict=False
+                    )
+                ]
+                if len(differences) < 2 or len(set(differences)) != 1:
+                    raise ValueError
+                steps.append(differences[0])
+            if not any(steps):
+                raise ValueError
+            next_parity = len(values) % 2
+            result = subsequences[next_parity][-1] + steps[next_parity]
+            return _SolvedValue(result, (steps[0], steps[1], result))
     except (TypeError, ValueError) as exc:
         raise DeterministicVerificationError(
             "reasoning_proof_invalid", "The reasoning puzzle is inconsistent or under-constrained."

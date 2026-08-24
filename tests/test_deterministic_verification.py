@@ -490,6 +490,49 @@ def test_broader_competitive_exam_math_families_are_solved(
 
 
 @pytest.mark.parametrize(
+    ("family", "parameters", "options", "values", "trace", "correct"),
+    [
+        (
+            "permutation_combination",
+            {"n": 8, "r": 2, "requested": "combination"},
+            ["১৬", "২৮", "৫৬", "৬৪"],
+            [16, 28, 56, 64],
+            [28],
+            1,
+        ),
+        (
+            "inverse_proportion",
+            {"known_quantity": 6, "known_value": 15, "target_quantity": 10},
+            ["৬", "৯", "১০", "২৫"],
+            [6, 9, 10, 25],
+            [90, 9],
+            1,
+        ),
+    ],
+)
+def test_combinatorics_and_inverse_proportion_are_solved(
+    family: str,
+    parameters: dict,
+    options: list[str],
+    values: list,
+    trace: list,
+    correct: int,
+) -> None:
+    candidate = mathematics_candidate()
+    candidate["options"] = options
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": values,
+        "explanation_values": trace,
+        "explanation_conclusion": options[correct],
+    }
+    assert verify_candidate(candidate).family == family
+
+
+@pytest.mark.parametrize(
     ("family", "parameters"),
     [
         ("percentage_change", {"original": 0, "updated": 10}),
@@ -506,6 +549,11 @@ def test_broader_competitive_exam_math_families_are_solved(
         (
             "triangle_measure",
             {"sides": [1, 2, 3], "requested": "perimeter", "length_unit": "metre"},
+        ),
+        ("permutation_combination", {"n": 5, "r": 6, "requested": "combination"}),
+        (
+            "inverse_proportion",
+            {"known_quantity": 6, "known_value": 15, "target_quantity": 0},
         ),
     ],
 )
@@ -689,6 +737,49 @@ def test_calendar_and_clock_reasoning_families_are_solved(
 
 
 @pytest.mark.parametrize(
+    ("family", "sequence", "options", "values", "trace", "correct"),
+    [
+        (
+            "quadratic_series_next",
+            [2, 6, 12, 20],
+            [28, 30, 32, 36],
+            [28, 30, 32, 36],
+            [2, 10, 30],
+            1,
+        ),
+        (
+            "alternating_arithmetic_series_next",
+            [2, 10, 5, 15, 8, 20],
+            [10, 11, 23, 25],
+            [10, 11, 23, 25],
+            [3, 5, 11],
+            1,
+        ),
+    ],
+)
+def test_additional_series_families_are_solved(
+    family: str,
+    sequence: list[int],
+    options: list[int],
+    values: list[int],
+    trace: list[int],
+    correct: int,
+) -> None:
+    candidate = reasoning_candidate()
+    candidate["options"] = [str(value) for value in options]
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": {"sequence": sequence},
+        "option_values": values,
+        "explanation_values": trace,
+        "explanation_conclusion": str(options[correct]),
+    }
+    assert verify_candidate(candidate).family == family
+
+
+@pytest.mark.parametrize(
     ("family", "parameters"),
     [
         ("calendar_weekday_offset", {"start_weekday": 7, "day_offset": 1}),
@@ -699,6 +790,10 @@ def test_calendar_and_clock_reasoning_families_are_solved(
         ("geometric_series_next", {"sequence": [0, 0, 0]}),
         ("alphabet_series_next", {"positions": [1, 3, 6]}),
         ("alphabet_series_next", {"positions": [0, 3, 6]}),
+        ("quadratic_series_next", {"sequence": [1, 4, 9, 17]}),
+        ("quadratic_series_next", {"sequence": [2, 5, 8, 11]}),
+        ("alternating_arithmetic_series_next", {"sequence": [1, 2, 3, 4, 6, 8]}),
+        ("alternating_arithmetic_series_next", {"sequence": [1, 1, 1, 1, 1, 1]}),
     ],
 )
 def test_calendar_and_clock_reasoning_reject_invalid_parameters(

@@ -411,12 +411,14 @@ percentage_of, average, ratio_share, simple_interest, algebra_linear, time_work,
 speed_distance, profit_loss, rounded_division, gcd_lcm, exact_square_root, and
 compound_interest, direct_proportion, weighted_average, partnership_share,
 percentage_change, simple_probability, rectangle_measure, discount_price,
-simultaneous_linear_equations, and triangle_measure.
+simultaneous_linear_equations, triangle_measure, permutation_combination, and
+inverse_proportion.
 Supported reasoning families are
 arithmetic_series_next, ordering_rank, odd_one_out_tag, coding_shift, direction_path,
 ordering_constraints, syllogism_finite_sets, analogy_mapping,
-calendar_weekday_offset, clock_smaller_angle, geometric_series_next, and
-alphabet_series_next. Unsupported or
+calendar_weekday_offset, clock_smaller_angle, geometric_series_next,
+alphabet_series_next, quadratic_series_next, and
+alternating_arithmetic_series_next. Unsupported or
 under-constrained questions are forbidden.
 Use these exact parameter objects: arithmetic_expression has values and operators;
 percentage_of has base and percent; average has values; ratio_share has total,
@@ -447,6 +449,10 @@ requested discount_amount or sale_price; simultaneous_linear_equations has a1, b
 c1, a2, b2, c2 for two independent equations and requested x or y; triangle_measure
 has length_unit and requested area with positive base and height, or requested
 perimeter with exactly three positive sides satisfying the strict triangle inequality.
+permutation_combination has integer n from 0 through 100, integer r from 0 through n,
+and requested permutation or combination, tracing the exact result; inverse_proportion
+has positive known_quantity and target_quantity plus non-negative known_value, tracing
+the constant product then result.
 arithmetic_series_next has sequence; ordering_rank has values,
 target, and direction (ascending or descending); odd_one_out_tag has exactly four tags,
 three equal and one different; coding_shift has source, shift, and encode/decode
@@ -460,7 +466,11 @@ hand angle then the smaller angle, with degree units; geometric_series_next has 
 to eight non-zero sequence values with one exact non-zero common ratio and traces
 ratio then next value; alphabet_series_next has three to twelve integer positions
 from 1=A through 26=Z with one non-zero forward modular step and traces step then the
-next position. Use ASCII numeric proof values
+next position; quadratic_series_next has four to nine values with one non-zero constant second
+difference and traces that second difference, the next first difference, then the next
+value; alternating_arithmetic_series_next has six to twelve values whose even-indexed
+and odd-indexed subsequences each have a constant step, at least one non-zero, and
+traces the even step, odd step, then next value. Use ASCII numeric proof values
 even when displayed options use Bengali digits.
 For every other subject, use proof_family evidence_single_answer, copy the four
 displayed answers to proof_option_values and proof_evidence_values, and set the
