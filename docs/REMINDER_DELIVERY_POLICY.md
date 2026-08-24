@@ -19,7 +19,21 @@ the durable data contract and keeps `deliveryEnabled: false`. It includes:
 - aggregate sent/delivered/failed/opt-out metrics without message bodies;
 - a dry-run, synthetic-account canary and alerting before any real-user send.
 
-The reminder remains unavailable in the UI and API until the migration is
-deployed, a reliable scheduler is funded and selected, the worker implements
-the lease/completion contract, and a synthetic private-message canary passes.
-No real-user delivery may be enabled merely because the schema exists.
+The repository includes a bounded lease/completion worker, but it is not
+scheduled and defaults to `disabled`. Its only active mode is `synthetic`; that
+mode requires both `--confirm-synthetic-canary` and an exact
+`REMINDER_SYNTHETIC_USER_ID`. It cancels any claimed real reminder or canary for
+a different learner, emits one fixed answer-free message, records only the
+Telegram receipt, classifies permanent chat errors, and applies bounded retry
+delays. There is deliberately no `live` mode.
+
+The safe no-op can be exercised without credentials:
+
+```bash
+python scripts/run_reminder_delivery_worker.py --mode disabled
+```
+
+The reminder remains unavailable in the UI and API until a reliable scheduler
+is funded and selected and an approved synthetic private-message canary passes.
+No real-user delivery may be enabled merely because the schema and worker code
+exist.
