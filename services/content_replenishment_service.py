@@ -410,11 +410,13 @@ four empty strings. Supported mathematics families are arithmetic_expression,
 percentage_of, average, ratio_share, simple_interest, algebra_linear, time_work,
 speed_distance, profit_loss, rounded_division, gcd_lcm, exact_square_root, and
 compound_interest, direct_proportion, weighted_average, partnership_share,
-percentage_change, simple_probability, and rectangle_measure.
+percentage_change, simple_probability, rectangle_measure, discount_price,
+simultaneous_linear_equations, and triangle_measure.
 Supported reasoning families are
 arithmetic_series_next, ordering_rank, odd_one_out_tag, coding_shift, direction_path,
 ordering_constraints, syllogism_finite_sets, analogy_mapping,
-calendar_weekday_offset, and clock_smaller_angle. Unsupported or
+calendar_weekday_offset, clock_smaller_angle, geometric_series_next, and
+alphabet_series_next. Unsupported or
 under-constrained questions are forbidden.
 Use these exact parameter objects: arithmetic_expression has values and operators;
 percentage_of has base and percent; average has values; ratio_share has total,
@@ -440,6 +442,11 @@ fraction result as its trace and probability units; rectangle_measure has positi
 length and width, length_unit centimetre/metre/kilometre, and requested area or
 perimeter. Area traces the result and uses square_<length_unit>; perimeter traces side
 sum then result and uses the length unit.
+discount_price has positive marked_price, discount_percent from 0 through 100, and
+requested discount_amount or sale_price; simultaneous_linear_equations has a1, b1,
+c1, a2, b2, c2 for two independent equations and requested x or y; triangle_measure
+has length_unit and requested area with positive base and height, or requested
+perimeter with exactly three positive sides satisfying the strict triangle inequality.
 arithmetic_series_next has sequence; ordering_rank has values,
 target, and direction (ascending or descending); odd_one_out_tag has exactly four tags,
 three equal and one different; coding_shift has source, shift, and encode/decode
@@ -449,7 +456,11 @@ right, and all/some/none relation; analogy_mapping has a mapping and query;
 calendar_weekday_offset has integer start_weekday (Monday 0 through Sunday 6) and
 non-negative integer day_offset, tracing the resulting weekday index;
 clock_smaller_angle has integer hour 0-23 and minute 0-59, tracing the raw absolute
-hand angle then the smaller angle, with degree units. Use ASCII numeric proof values
+hand angle then the smaller angle, with degree units; geometric_series_next has three
+to eight non-zero sequence values with one exact non-zero common ratio and traces
+ratio then next value; alphabet_series_next has three to twelve integer positions
+from 1=A through 26=Z with one non-zero forward modular step and traces step then the
+next position. Use ASCII numeric proof values
 even when displayed options use Bengali digits.
 For every other subject, use proof_family evidence_single_answer, copy the four
 displayed answers to proof_option_values and proof_evidence_values, and set the

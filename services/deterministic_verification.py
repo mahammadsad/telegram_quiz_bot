@@ -627,6 +627,69 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
                 result = 2 * side_sum
                 return _SolvedValue(result, (side_sum, result), length_unit)
             raise ValueError
+        if family == "discount_price":
+            marked_price = _fraction(params["marked_price"])
+            discount_percent = _fraction(params["discount_percent"])
+            requested = str(params.get("requested") or "")
+            if marked_price <= 0 or discount_percent < 0 or discount_percent > 100:
+                raise ValueError
+            discount_amount = marked_price * discount_percent / 100
+            if requested == "discount_amount":
+                return _SolvedValue(discount_amount, (discount_amount,), "currency")
+            if requested == "sale_price":
+                result = marked_price - discount_amount
+                return _SolvedValue(
+                    result, (discount_amount, result), "currency"
+                )
+            raise ValueError
+        if family == "simultaneous_linear_equations":
+            a1 = _fraction(params["a1"])
+            b1 = _fraction(params["b1"])
+            c1 = _fraction(params["c1"])
+            a2 = _fraction(params["a2"])
+            b2 = _fraction(params["b2"])
+            c2 = _fraction(params["c2"])
+            requested = str(params.get("requested") or "")
+            determinant = a1 * b2 - a2 * b1
+            if not determinant:
+                raise ValueError
+            if requested == "x":
+                equation_numerator = c1 * b2 - c2 * b1
+            elif requested == "y":
+                equation_numerator = a1 * c2 - a2 * c1
+            else:
+                raise ValueError
+            result = equation_numerator / determinant
+            return _SolvedValue(result, (determinant, equation_numerator, result))
+        if family == "triangle_measure":
+            requested = str(params.get("requested") or "")
+            length_unit = _required_unit(
+                params.get("length_unit"), {"centimetre", "metre", "kilometre"}
+            )
+            if requested == "area":
+                base = _fraction(params["base"])
+                height = _fraction(params["height"])
+                if base <= 0 or height <= 0:
+                    raise ValueError
+                product = base * height
+                result = product / 2
+                return _SolvedValue(
+                    result, (product, result), f"square_{length_unit}"
+                )
+            if requested == "perimeter":
+                sides = [_fraction(value) for value in _sequence(params.get("sides"))]
+                if (
+                    len(sides) != 3
+                    or any(side <= 0 for side in sides)
+                    or any(
+                        sides[index] >= sum(sides, Fraction()) - sides[index]
+                        for index in range(3)
+                    )
+                ):
+                    raise ValueError
+                result = sum(sides, Fraction())
+                return _SolvedValue(result, (result,), length_unit)
+            raise ValueError
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         raise DeterministicVerificationError(
             "math_proof_invalid", "The mathematics proof parameters are invalid."
@@ -773,6 +836,37 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
             raw_angle = abs(Fraction(60 * hour - 11 * minute, 2))
             result = min(raw_angle, Fraction(360) - raw_angle)
             return _SolvedValue(result, (raw_angle, result), "degree")
+        if family == "geometric_series_next":
+            values = [_fraction(value) for value in _sequence(params.get("sequence"))]
+            if len(values) not in range(3, 9) or any(not value for value in values):
+                raise ValueError
+            ratio = values[1] / values[0]
+            if not ratio or abs(ratio) > 100 or any(
+                right != left * ratio
+                for left, right in zip(values, values[1:], strict=False)
+            ):
+                raise ValueError
+            result = values[-1] * ratio
+            return _SolvedValue(result, (ratio, result))
+        if family == "alphabet_series_next":
+            alphabet_positions = [
+                _bounded_int(value, minimum=1, maximum=26)
+                for value in _sequence(params.get("positions"))
+            ]
+            if len(alphabet_positions) not in range(3, 13):
+                raise ValueError
+            alphabet_steps = [
+                (right - left) % 26
+                for left, right in zip(
+                    alphabet_positions, alphabet_positions[1:], strict=False
+                )
+            ]
+            if not alphabet_steps[0] or len(set(alphabet_steps)) != 1:
+                raise ValueError
+            result = (
+                (alphabet_positions[-1] - 1 + alphabet_steps[0]) % 26
+            ) + 1
+            return _SolvedValue(result, (alphabet_steps[0], result))
     except (TypeError, ValueError) as exc:
         raise DeterministicVerificationError(
             "reasoning_proof_invalid", "The reasoning puzzle is inconsistent or under-constrained."

@@ -74,8 +74,8 @@ Production is unchanged.
   configurable daily/weekly/monthly/six-month pools. Current-affairs grounding
   reads only the verified event/claim pool; legacy publication-age fallback is
   retained for rollback compatibility.
-- Phase D subject validation now covers 19 typed mathematics families and
-  ten typed reasoning families. Solver-produced traces, option units, and
+- Phase D subject validation now covers 22 typed mathematics families and
+  twelve typed reasoning families. Solver-produced traces, option units, and
   rounding policies are checked independently. Typed English/Bengali forms
   require exact authoritative rule spans; uncertain Bengali and translation
   correctness fail into explicit human-review reasons.

@@ -436,6 +436,33 @@ def test_more_math_families_reject_invalid_parameters(
             ["metre"] * 4,
             2,
         ),
+        (
+            "discount_price",
+            {"marked_price": 800, "discount_percent": 15, "requested": "sale_price"},
+            ["১২০", "৬৮০", "৭২০", "৮০০"],
+            [120, 680, 720, 800],
+            [120, 680],
+            ["currency"] * 4,
+            1,
+        ),
+        (
+            "simultaneous_linear_equations",
+            {"a1": 1, "b1": 1, "c1": 7, "a2": 1, "b2": -1, "c2": 1, "requested": "x"},
+            [2, 3, 4, 5],
+            [2, 3, 4, 5],
+            [-2, -8, 4],
+            [""] * 4,
+            2,
+        ),
+        (
+            "triangle_measure",
+            {"base": 12, "height": 5, "requested": "area", "length_unit": "metre"},
+            ["২৫", "৩০", "৩৪", "৬০"],
+            [25, 30, 34, 60],
+            [60, 30],
+            ["square_metre"] * 4,
+            1,
+        ),
     ],
 )
 def test_broader_competitive_exam_math_families_are_solved(
@@ -470,6 +497,15 @@ def test_broader_competitive_exam_math_families_are_solved(
         (
             "rectangle_measure",
             {"length": 12, "width": -1, "requested": "area", "length_unit": "metre"},
+        ),
+        ("discount_price", {"marked_price": 100, "discount_percent": 101, "requested": "sale_price"}),
+        (
+            "simultaneous_linear_equations",
+            {"a1": 1, "b1": 1, "c1": 2, "a2": 2, "b2": 2, "c2": 4, "requested": "x"},
+        ),
+        (
+            "triangle_measure",
+            {"sides": [1, 2, 3], "requested": "perimeter", "length_unit": "metre"},
         ),
     ],
 )
@@ -607,6 +643,24 @@ def test_typed_reasoning_families_are_machine_solved(
             ["degree"] * 4,
             1,
         ),
+        (
+            "geometric_series_next",
+            {"sequence": [2, 6, 18, 54]},
+            ["৮১", "১০৮", "১৬২", "২১৬"],
+            [81, 108, 162, 216],
+            [3, 162],
+            None,
+            2,
+        ),
+        (
+            "alphabet_series_next",
+            {"positions": [23, 26, 3, 6]},
+            ["৬", "৭", "৮", "৯"],
+            [6, 7, 8, 9],
+            [3, 9],
+            None,
+            3,
+        ),
     ],
 )
 def test_calendar_and_clock_reasoning_families_are_solved(
@@ -641,6 +695,10 @@ def test_calendar_and_clock_reasoning_families_are_solved(
         ("calendar_weekday_offset", {"start_weekday": 0, "day_offset": -1}),
         ("clock_smaller_angle", {"hour": 24, "minute": 0}),
         ("clock_smaller_angle", {"hour": 3, "minute": 60}),
+        ("geometric_series_next", {"sequence": [2, 6, 17]}),
+        ("geometric_series_next", {"sequence": [0, 0, 0]}),
+        ("alphabet_series_next", {"positions": [1, 3, 6]}),
+        ("alphabet_series_next", {"positions": [0, 3, 6]}),
     ],
 )
 def test_calendar_and_clock_reasoning_reject_invalid_parameters(
