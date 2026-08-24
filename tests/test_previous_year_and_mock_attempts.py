@@ -301,6 +301,9 @@ def test_previous_year_endpoint_never_serializes_answer_keys(monkeypatch) -> Non
     )
     response = CLIENT.get("/api/previous-year?exam=wbcs&year=2025&language=en")
     assert response.status_code == 200
+    assert response.headers["x-answer-free-payload"] == "1"
+    assert response.headers["cache-control"].startswith("public, max-age=300")
+    assert response.headers["etag"].startswith('"')
     body = response.text.casefold()
     assert "correctindex" not in body
     assert "officialanswer" not in body

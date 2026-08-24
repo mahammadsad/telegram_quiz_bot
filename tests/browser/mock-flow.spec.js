@@ -89,6 +89,56 @@ async function installMockAttemptApi(page, { failFirstProgress = false } = {}) {
       body: JSON.stringify({ active: true }),
     });
   });
+  await page.route("**/api/previous-year**", async (route) => route.fulfill({
+    status: 200,
+    contentType: "application/json",
+    headers: { "X-Answer-Free-Payload": "1" },
+    body: JSON.stringify({
+      total: 2,
+      limit: 100,
+      offset: 0,
+      rows: [
+        {
+          provenanceId: "55555555-5555-4555-8555-555555555551",
+          questionId: "44444444-4444-4444-8444-000000000001",
+          examKey: "WBCS",
+          year: 2025,
+          shift: "সকাল",
+          stageKey: "preliminary",
+          paperKey: "general-studies",
+          sectionKey: "history",
+          originalQuestionNumber: 12,
+          language: "bn",
+          sourceUrl: "https://example.gov.in/wbcs-2025.pdf",
+          sourceTitle: "অফিসিয়াল প্রশ্নপত্র",
+          licenseCode: "official-source",
+          answerStatus: "published",
+          humanReviewed: true,
+          question: "যাচাই করা পূর্ববর্তী বছরের প্রশ্ন এক",
+          options: ["ক", "খ", "গ", "ঘ"],
+        },
+        {
+          provenanceId: "55555555-5555-4555-8555-555555555552",
+          questionId: "44444444-4444-4444-8444-000000000002",
+          examKey: "WBCS",
+          year: 2025,
+          shift: "সকাল",
+          stageKey: "preliminary",
+          paperKey: "general-studies",
+          sectionKey: "geography",
+          originalQuestionNumber: 13,
+          language: "bn",
+          sourceUrl: "https://example.gov.in/wbcs-2025.pdf",
+          sourceTitle: "অফিসিয়াল প্রশ্নপত্র",
+          licenseCode: "official-source",
+          answerStatus: "published",
+          humanReviewed: true,
+          question: "যাচাই করা পূর্ববর্তী বছরের প্রশ্ন দুই",
+          options: ["ক", "খ", "গ", "ঘ"],
+        },
+      ],
+    }),
+  }));
   await page.route("**/api/tests/**", async (route) => {
     const request = route.request();
     const url = new URL(request.url());
@@ -263,6 +313,11 @@ test("authenticated catalog shows server attempt state and resumes across device
 
   await expect(page.locator("#screen-catalog")).toBeVisible();
   await expect(page.locator(".catalog-item")).toContainText("2 / 4 উত্তর · অসম্পূর্ণ");
+  await expect(page.locator("#pyq-status")).toContainText("2 / 2");
+  await expect(page.locator("#pyq-hierarchy")).toContainText("পরীক্ষা: WBCS");
+  await expect(page.locator("#pyq-hierarchy")).toContainText("বছর: 2025");
+  await expect(page.locator("#pyq-hierarchy")).toContainText("শিফট: সকাল");
+  await expect(page.locator("#pyq-hierarchy")).not.toContainText("correctIndex");
   const resume = page.getByRole("link", { name: "চালিয়ে যান" });
   await expect(resume).toHaveAttribute("href", new RegExp(`test=${TEST_ID}.*clientAttempt=${ATTEMPT_ID}`));
   await resume.click();

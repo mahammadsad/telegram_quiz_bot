@@ -94,12 +94,19 @@ def build_catalog_router(
 
     @router.get("/api/previous-year")
     def previous_year(
-        exam: str | None = None, year: int | None = None, language: str | None = None, limit: int = 50, offset: int = 0
+        response: Response,
+        exam: str | None = None,
+        year: int | None = None,
+        language: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
     ) -> dict:
         try:
-            return attempts_service.previous_year_catalog(
+            payload = attempts_service.previous_year_catalog(
                 exam_key=exam, exam_year=year, language=language, limit=limit, offset=offset
             )
+            mark_answer_free(response, payload)
+            return payload
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:
