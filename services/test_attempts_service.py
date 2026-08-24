@@ -108,5 +108,36 @@ def get(telegram_user: dict, *, attempt_id: uuid.UUID) -> dict | None:
     return test_attempts_repo.get(attempt_id, _user_id(telegram_user))
 
 
+def recent(telegram_user: dict, *, limit: int) -> dict:
+    rows = test_attempts_repo.recent(
+        _user_id(telegram_user),
+        limit=max(1, min(limit, 100)),
+    )
+    projected = [
+        {
+            "attemptId": row["id"],
+            "testInstanceId": row["test_instance_id"],
+            "clientAttemptId": row["client_attempt_id"],
+            "status": row["status"],
+            "attemptNumber": row["attempt_number"],
+            "startedAt": row["started_at"],
+            "deadlineAt": row.get("deadline_at"),
+            "submittedAt": row.get("submitted_at"),
+            "questionCount": row["question_count"],
+            "answeredCount": row["answered_count"],
+            "correctCount": row["correct_count"],
+            "wrongCount": row["wrong_count"],
+            "skippedCount": row["skipped_count"],
+            "netMarks": float(row["net_marks"]),
+        }
+        for row in rows
+        if row.get("status") in {"in_progress", "submitted", "auto_submitted"}
+    ]
+    return {
+        "count": len(projected),
+        "rows": projected,
+    }
+
+
 def _user_id(telegram_user: dict) -> str:
     return str(users_repo.upsert_user(User.from_telegram(telegram_user))["id"])

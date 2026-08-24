@@ -223,6 +223,68 @@ def test_test_attempt_owner_read_and_transition_endpoints(monkeypatch) -> None:
     assert recovered.json()["attemptId"] == str(ATTEMPT_ID)
 
 
+def test_recent_attempts_are_authenticated_bounded_and_answer_free(monkeypatch) -> None:
+    telegram_user = {"id": 54321}
+    monkeypatch.setattr(api_module, "verify_init_data", lambda *args: telegram_user)
+    captured: dict = {}
+    monkeypatch.setattr(
+        api_module.test_attempts_service,
+        "recent",
+        lambda user, **kwargs: captured.update(user=user, **kwargs)
+        or {
+            "count": 1,
+            "rows": [{
+                "attemptId": str(ATTEMPT_ID),
+                "testInstanceId": str(INSTANCE_ID),
+                "clientAttemptId": str(ATTEMPT_ID),
+                "status": "in_progress",
+                "answeredCount": 3,
+            }],
+        },
+    )
+
+    response = CLIENT.get(
+        "/api/tests/attempts/recent?limit=500",
+        headers={"X-Telegram-Init-Data": "signed"},
+    )
+    assert response.status_code == 200
+    assert captured == {"user": telegram_user, "limit": 500}
+    assert response.json()["rows"][0]["status"] == "in_progress"
+    assert "selectedIndex" not in response.text
+    assert "correctOption" not in response.text
+
+
+def test_recent_attempt_service_projects_only_resumable_or_completed_states(monkeypatch) -> None:
+    monkeypatch.setattr(service, "_user_id", lambda user: "user-id")
+    captured: dict = {}
+    base = {
+        "id": str(ATTEMPT_ID),
+        "test_instance_id": str(INSTANCE_ID),
+        "client_attempt_id": str(ATTEMPT_ID),
+        "attempt_number": 1,
+        "started_at": "2026-08-24T00:00:00Z",
+        "deadline_at": None,
+        "submitted_at": None,
+        "question_count": 10,
+        "answered_count": 3,
+        "correct_count": 0,
+        "wrong_count": 0,
+        "skipped_count": 0,
+        "net_marks": "0.00",
+    }
+    monkeypatch.setattr(
+        service.test_attempts_repo,
+        "recent",
+        lambda user_id, **kwargs: captured.update(user_id=user_id, **kwargs)
+        or [{**base, "status": "in_progress"}, {**base, "status": "invalidated"}],
+    )
+
+    payload = service.recent({"id": 1}, limit=500)
+    assert captured == {"user_id": "user-id", "limit": 100}
+    assert payload["count"] == 1
+    assert payload["rows"][0]["answeredCount"] == 3
+
+
 def test_previous_year_endpoint_never_serializes_answer_keys(monkeypatch) -> None:
     monkeypatch.setattr(
         api_module.test_attempts_service,

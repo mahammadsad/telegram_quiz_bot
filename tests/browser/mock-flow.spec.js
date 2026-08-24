@@ -86,6 +86,31 @@ async function installMockAttemptApi(page, { failFirstProgress = false } = {}) {
       contentType: "application/json",
       body: JSON.stringify(value),
     });
+    if (request.method() === "GET" && path === "/api/tests/catalog") {
+      return json({ rows: [{
+        testInstanceId: TEST_ID,
+        title: "WBCS পূর্ণ মক পরীক্ষা",
+        testType: "full_mock",
+        examKey: "WBCS",
+        examName: "WBCS",
+        subjectKey: "mixed",
+        questionCount: 4,
+        timeLimitSeconds: 1800,
+        negativeMarksPerWrong: 0.25,
+        availability: "open",
+      }] });
+    }
+    if (request.method() === "GET" && path === "/api/tests/attempts/recent") {
+      return json({ count: 1, rows: [{
+        attemptId: ATTEMPT_ID,
+        testInstanceId: TEST_ID,
+        clientAttemptId: ATTEMPT_ID,
+        status: "in_progress",
+        questionCount: 4,
+        answeredCount: 2,
+        netMarks: 0,
+      }] });
+    }
     if (request.method() === "GET" && path === `/api/tests/instances/${TEST_ID}`) {
       return json(testInstance());
     }
@@ -208,4 +233,23 @@ test("failed progress sync keeps the local draft and exposes retry", async ({ pa
   await page.locator("#btn-sync-retry").click();
   await expect(page.locator("#sync-status")).toContainText("সিঙ্ক হয়েছে");
   expect(api.progress.length).toBeGreaterThanOrEqual(2);
+});
+
+test("authenticated catalog shows server attempt state and resumes across devices", async ({ page }) => {
+  await installTelegramMock(page);
+  const api = await installMockAttemptApi(page);
+  await page.goto("/mock.html");
+
+  await expect(page.locator("#screen-catalog")).toBeVisible();
+  await expect(page.locator(".catalog-item")).toContainText("2 / 4 উত্তর · অসম্পূর্ণ");
+  const resume = page.getByRole("link", { name: "চালিয়ে যান" });
+  await expect(resume).toHaveAttribute("href", new RegExp(`test=${TEST_ID}.*clientAttempt=${ATTEMPT_ID}`));
+  await resume.click();
+
+  await expect(page.locator("#screen-intro")).toBeVisible();
+  await expect(page.locator("#resume-box")).toBeVisible();
+  await page.locator("#btn-resume").click();
+  await expect(page.locator("#screen-test")).toBeVisible();
+  expect(api.starts).toHaveLength(1);
+  expect(api.starts[0].clientAttemptId).toBe(ATTEMPT_ID);
 });

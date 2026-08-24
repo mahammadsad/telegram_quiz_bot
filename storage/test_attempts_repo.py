@@ -7,6 +7,7 @@ from typing import Any
 
 from database.client import get_client
 from errors import DatabaseIntegrityError
+from storage.contracts import as_rows
 
 
 def previous_year_catalog(
@@ -88,6 +89,24 @@ def get(attempt_id: uuid.UUID, user_id: str) -> dict | None:
     if not isinstance(result.data, dict) or "attemptId" not in result.data:
         raise DatabaseIntegrityError("get_test_attempt_for_user returned an invalid response.")
     return result.data
+
+
+def recent(user_id: str, *, limit: int) -> list[dict]:
+    """Return answer-free attempt metadata scoped to one verified user."""
+    result = (
+        get_client()
+        .table("test_attempts")
+        .select(
+            "id,test_instance_id,client_attempt_id,status,attempt_number,"
+            "started_at,deadline_at,submitted_at,question_count,answered_count,"
+            "correct_count,wrong_count,skipped_count,net_marks"
+        )
+        .eq("user_id", user_id)
+        .order("started_at", desc=True)
+        .limit(limit)
+        .execute()
+    )
+    return as_rows(result.data, "recent test attempts")
 
 
 def _rpc(name: str, payload: dict[str, Any], *, require_rows: bool = False) -> dict:

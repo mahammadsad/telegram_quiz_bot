@@ -85,6 +85,21 @@ def build_test_attempt_router(
         except Exception as exc:
             raise write_failure(exc, "Test attempt could not be submitted.") from exc
 
+    @router.get("/attempts/recent")
+    def recent_attempts(
+        limit: int = 100,
+        init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+    ) -> dict:
+        try:
+            return attempt_service.recent(read_user(init_data), limit=limit)
+        except TelegramAuthError as exc:
+            raise HTTPException(status_code=401, detail=str(exc)) from exc
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503,
+                detail="Test attempt history is temporarily unavailable.",
+            ) from exc
+
     @router.get("/attempts/{attempt_id}")
     def get_attempt(
         attempt_id: UUID,

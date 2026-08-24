@@ -122,6 +122,8 @@ def test_mock_page_without_uuid_opens_catalog_instead_of_dead_end() -> None:
     assert 'id="screen-catalog"' in html
     script = CLIENT.get("/mock.js").text
     assert 'miniappFetch(api("/api/tests/catalog?limit=100"))' in script
+    assert 'api("/api/tests/attempts/recent?limit=100")' in script
+    assert '"X-Telegram-Init-Data":initData' in script
     assert "if(!validTestId(testId)){loadCatalog();return}" in script
 
 
