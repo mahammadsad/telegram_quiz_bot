@@ -313,6 +313,99 @@ def test_additional_competitive_exam_math_families_are_solved(
     assert verify_candidate(candidate).family == family
 
 
+@pytest.mark.parametrize(
+    ("family", "parameters", "options", "option_values", "trace", "units", "correct"),
+    [
+        (
+            "direct_proportion",
+            {"known_quantity": 5, "known_value": 60, "target_quantity": 8},
+            ["৮৪", "৯০", "৯৬", "১০০"],
+            [84, 90, 96, 100],
+            [12, 96],
+            None,
+            2,
+        ),
+        (
+            "weighted_average",
+            {"values": [10, 20], "weights": [1, 3]},
+            ["১৫", "১৭.৫", "২০", "২৫"],
+            [15, "17.5", 20, 25],
+            [70, 4, "17.5"],
+            None,
+            1,
+        ),
+        (
+            "partnership_share",
+            {
+                "capitals": [1000, 2000],
+                "durations": [12, 6],
+                "total_profit": 600,
+                "requested_index": 0,
+            },
+            ["২০০", "২৫০", "৩০০", "৪০০"],
+            [200, 250, 300, 400],
+            [24000, 300],
+            ["currency"] * 4,
+            2,
+        ),
+    ],
+)
+def test_more_competitive_exam_math_families_are_solved(
+    family: str,
+    parameters: dict,
+    options: list[str],
+    option_values: list,
+    trace: list,
+    units: list[str] | None,
+    correct: int,
+) -> None:
+    candidate = mathematics_candidate()
+    candidate["options"] = options
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": option_values,
+        "explanation_values": trace,
+        "explanation_conclusion": options[correct],
+    }
+    if units is not None:
+        candidate["deterministic_proof"]["option_units"] = units
+
+    assert verify_candidate(candidate).family == family
+
+
+@pytest.mark.parametrize(
+    ("family", "parameters"),
+    [
+        ("direct_proportion", {"known_quantity": 0, "known_value": 10, "target_quantity": 2}),
+        ("weighted_average", {"values": [10, 20], "weights": [1]}),
+        (
+            "partnership_share",
+            {"capitals": [100, 200], "durations": [12, 0], "total_profit": 30, "requested_index": 0},
+        ),
+    ],
+)
+def test_more_math_families_reject_invalid_parameters(
+    family: str, parameters: dict
+) -> None:
+    candidate = mathematics_candidate()
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": [10, 20, 25, 30],
+        "explanation_values": [25],
+        "explanation_conclusion": "২৫",
+    }
+
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+
+    assert raised.value.code == "math_proof_invalid"
+
+
 def test_exact_square_root_rejects_non_perfect_square() -> None:
     candidate = mathematics_candidate()
     candidate["deterministic_proof"] = {

@@ -329,8 +329,9 @@ def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
             "For mathematics, proof_family must be copied exactly from the supported mathematics "
             "family list in this prompt; never invent a geometry, theorem, or other unsupported "
             "family. If the source fact cannot produce a question using one listed family, use a "
-            "different supplied fact. gcd_lcm, exact_square_root, and compound_interest are valid "
-            "only with the exact parameter contracts listed in the base prompt."
+            "different supplied fact. Every listed family, including gcd_lcm, exact_square_root, "
+            "compound_interest, direct_proportion, weighted_average, and partnership_share, is "
+            "valid only with the exact parameter contract listed in the base prompt."
         )
     if rejection_codes & {
         "math_proof_invalid",
@@ -407,7 +408,8 @@ Use proof_option_units for all four options when the family has a unit; otherwis
 four empty strings. Supported mathematics families are arithmetic_expression,
 percentage_of, average, ratio_share, simple_interest, algebra_linear, time_work,
 speed_distance, profit_loss, rounded_division, gcd_lcm, exact_square_root, and
-compound_interest. Supported reasoning families are
+compound_interest, direct_proportion, weighted_average, and partnership_share.
+Supported reasoning families are
 arithmetic_series_next, ordering_rank, odd_one_out_tag, coding_shift, direction_path,
 ordering_constraints, syllogism_finite_sets, and analogy_mapping. Unsupported or
 under-constrained questions are forbidden.
@@ -423,6 +425,11 @@ exact_square_root has a positive perfect-square radicand; compound_interest has
 principal, rate_percent, periods, and requested (amount or interest).
 For compound_interest the trace is the amount for an amount question, or amount then
 interest for an interest question, and all options use currency units.
+direct_proportion has known_quantity, known_value, and target_quantity, with a trace of
+unit rate then result; weighted_average has equally sized values and positive weights,
+with a trace of weighted total, total weight, then result; partnership_share has equally
+sized positive capitals and durations, non-negative total_profit, and a zero-based
+requested_index, with a trace of total capital-time share then result and currency units.
 arithmetic_series_next has sequence; ordering_rank has values,
 target, and direction (ascending or descending); odd_one_out_tag has exactly four tags,
 three equal and one different; coding_shift has source, shift, and encode/decode

@@ -548,6 +548,53 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
                 result = amount - principal
                 return _SolvedValue(result, (amount, result), "currency")
             raise ValueError
+        if family == "direct_proportion":
+            known_quantity = _fraction(params["known_quantity"])
+            known_value = _fraction(params["known_value"])
+            target_quantity = _fraction(params["target_quantity"])
+            if known_quantity <= 0 or known_value < 0 or target_quantity <= 0:
+                raise ValueError
+            unit_rate = known_value / known_quantity
+            result = unit_rate * target_quantity
+            return _SolvedValue(result, (unit_rate, result))
+        if family == "weighted_average":
+            values = [_fraction(value) for value in _sequence(params.get("values"))]
+            weights = [_fraction(value) for value in _sequence(params.get("weights"))]
+            if (
+                len(values) not in range(2, 9)
+                or len(values) != len(weights)
+                or any(weight <= 0 for weight in weights)
+            ):
+                raise ValueError
+            weighted_total = sum(
+                (value * weight for value, weight in zip(values, weights, strict=True)),
+                Fraction(),
+            )
+            total_weight = sum(weights, Fraction())
+            result = weighted_total / total_weight
+            return _SolvedValue(result, (weighted_total, total_weight, result))
+        if family == "partnership_share":
+            capitals = [_fraction(value) for value in _sequence(params.get("capitals"))]
+            durations = [_fraction(value) for value in _sequence(params.get("durations"))]
+            total_profit = _fraction(params["total_profit"])
+            requested_index = params.get("requested_index")
+            if (
+                len(capitals) not in range(2, 9)
+                or len(capitals) != len(durations)
+                or any(value <= 0 for value in capitals + durations)
+                or total_profit < 0
+                or isinstance(requested_index, bool)
+                or not isinstance(requested_index, int)
+                or requested_index not in range(len(capitals))
+            ):
+                raise ValueError
+            shares = [
+                capital * duration
+                for capital, duration in zip(capitals, durations, strict=True)
+            ]
+            total_share = sum(shares, Fraction())
+            result = total_profit * shares[requested_index] / total_share
+            return _SolvedValue(result, (total_share, result), "currency")
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         raise DeterministicVerificationError(
             "math_proof_invalid", "The mathematics proof parameters are invalid."
