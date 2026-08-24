@@ -25,6 +25,9 @@
 
   var quizId = getQuizId();
   var requestedAttemptId = getResultAttemptId();
+  var requestedHomeSubject = new URLSearchParams(location.search).get("subject") || "";
+  var homeSubjects = ["history","geography","polity","economics","science","mathematics","reasoning","english","bengali","computer","current-affairs","environment","miscellaneous"];
+  if (homeSubjects.indexOf(requestedHomeSubject) < 0) requestedHomeSubject = "";
   var quiz = null;
   var legacyLocal = false;
   var readOnlyMode = false;
@@ -306,12 +309,13 @@
 
   function renderHome(items){
     var catalogue = byId("quiz-catalogue");
+    if (requestedHomeSubject) items = items.filter(function(item){ return item.subjectKey === requestedHomeSubject; });
     catalogue.textContent = "";
     byId("home-count").textContent = items.length ? bn(items.length) + "টি উপলভ্য" : "";
     if (!items.length) {
       var empty = document.createElement("div");
       empty.className = "home-state";
-      empty.textContent = "এখনও কোনো প্রকাশিত কুইজ নেই। প্রথম কুইজ প্রকাশ হলে এখানে দেখা যাবে।";
+      empty.textContent = requestedHomeSubject ? "আপনার নির্বাচিত বিষয়ে এখন কোনো প্রকাশিত কুইজ নেই। অন্য বিষয় বা মক পরীক্ষা খুলুন।" : "এখনও কোনো প্রকাশিত কুইজ নেই। প্রথম কুইজ প্রকাশ হলে এখানে দেখা যাবে।";
       catalogue.appendChild(empty);
     }
     items.forEach(function(item){

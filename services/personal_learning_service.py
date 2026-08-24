@@ -34,7 +34,10 @@ MASTERY_STRENGTHS = {"all", "due", "weak", "strong"}
 
 
 def dashboard(telegram_user: dict) -> dict:
-    payload = _safe(personal_learning_repo.dashboard(_user_id(telegram_user)))
+    user_id = _user_id(telegram_user)
+    payload = _safe(personal_learning_repo.dashboard(user_id))
+    preference_payload = _safe(personal_learning_repo.preferences(user_id))
+    payload["studyPlan"] = _study_plan(payload, preference_payload)
     payload["identity"] = _identity(telegram_user)
     return payload
 
@@ -282,6 +285,131 @@ def _safe(payload: dict) -> dict:
         if private_field in text:
             raise ValueError("Personalized-learning projection contained a private field.")
     return payload
+
+
+def _study_plan(dashboard_payload: dict, preference_payload: dict) -> dict:
+    """Build one transparent next assignment from saved preferences and mastery."""
+    preferred_subjects = [
+        str(value)
+        for value in preference_payload.get("preferredSubjects", [])
+        if str(value) in SUBJECTS
+    ]
+    target_exams = [
+        str(value)
+        for value in preference_payload.get("targetExams", [])
+        if str(value) in EXAM_KEYS
+    ]
+    daily_target = _bounded_int(
+        preference_payload.get("dailyQuestionTarget", dashboard_payload.get("dailyTarget", 30)),
+        default=30,
+        minimum=1,
+        maximum=130,
+    )
+    answered = _bounded_int(
+        dashboard_payload.get("todayAnswered", 0), default=0, minimum=0, maximum=10000
+    )
+    remaining = max(0, daily_target - answered)
+    due = _bounded_int(
+        dashboard_payload.get("revisionDueToday", dashboard_payload.get("dueReviews", 0)),
+        default=0,
+        minimum=0,
+        maximum=10000,
+    )
+    weak = _bounded_int(
+        dashboard_payload.get("weakQuestions", 0), default=0, minimum=0, maximum=10000
+    )
+    due_subject = _priority_subject(
+        dashboard_payload.get("subjectRevisionCounts"), preferred_subjects, value_key="due"
+    )
+    weak_subject = _priority_subject(
+        dashboard_payload.get("subjectPerformance"),
+        preferred_subjects,
+        value_key="accuracy",
+        lowest=True,
+    )
+    if not weak_subject:
+        candidate = dashboard_payload.get("weakestSubject")
+        if isinstance(candidate, dict) and str(candidate.get("subjectKey") or "") in SUBJECTS:
+            weak_subject = str(candidate["subjectKey"])
+
+    action = "broad_maintenance"
+    subject_key: str | None = None
+    exam_key: str | None = None
+    reason_code = "broad_maintenance"
+    question_target = max(1, remaining) if remaining else 0
+    if due > 0:
+        action = "continue_due_revision"
+        subject_key = due_subject
+        reason_code = "preferred_subject_due" if due_subject in preferred_subjects else "due_review"
+        question_target = min(due, max(1, remaining or due))
+    elif weak > 0:
+        action = "practice_weak_topics"
+        subject_key = weak_subject
+        reason_code = (
+            "preferred_subject_weakness"
+            if weak_subject in preferred_subjects
+            else "weakest_available_subject"
+        )
+        question_target = min(weak, max(1, remaining or weak))
+    elif remaining == 0:
+        action = "goal_complete"
+        reason_code = "daily_target_complete"
+    elif target_exams:
+        action = "target_exam_mock"
+        exam_key = target_exams[0]
+        reason_code = "saved_target_exam"
+    elif preferred_subjects:
+        action = "preferred_subject_quiz"
+        subject_key = preferred_subjects[0]
+        reason_code = "saved_preferred_subject"
+
+    return {
+        "version": 1,
+        "personalized": bool(preferred_subjects or target_exams),
+        "preferredSubjects": preferred_subjects,
+        "targetExams": target_exams,
+        "dailyQuestionTarget": daily_target,
+        "remainingQuestions": remaining,
+        "questionTarget": question_target,
+        "nextAction": action,
+        "subjectKey": subject_key,
+        "examKey": exam_key,
+        "reasonCode": reason_code,
+        "broadcastQuizPersonalized": False,
+    }
+
+
+def _priority_subject(
+    rows: Any,
+    preferred_subjects: list[str],
+    *,
+    value_key: str,
+    lowest: bool = False,
+) -> str | None:
+    if not isinstance(rows, list):
+        return None
+    valid = [
+        row
+        for row in rows
+        if isinstance(row, dict) and str(row.get("subjectKey") or "") in SUBJECTS
+    ]
+    preferred = [row for row in valid if str(row["subjectKey"]) in preferred_subjects]
+    candidates = preferred or valid
+    if not candidates:
+        return None
+
+    def score(row: dict) -> float:
+        value = row.get(value_key)
+        return float(value) if isinstance(value, (int, float)) and not isinstance(value, bool) else 0.0
+
+    selected = min(candidates, key=score) if lowest else max(candidates, key=score)
+    return str(selected["subjectKey"])
+
+
+def _bounded_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return default
+    return max(minimum, min(int(value), maximum))
 
 
 def _identity(telegram_user: dict) -> dict:

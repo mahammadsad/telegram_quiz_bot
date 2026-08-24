@@ -151,6 +151,20 @@ function dashboardPayload() {
     chapterPerformance: [
       { subjectKey: "history", chapter: "আধুনিক ভারত", accuracy: 82 },
     ],
+    studyPlan: {
+      version: 1,
+      personalized: true,
+      preferredSubjects: ["history", "geography"],
+      targetExams: ["WBCS", "SSC"],
+      dailyQuestionTarget: 30,
+      remainingQuestions: 12,
+      questionTarget: 4,
+      nextAction: "continue_due_revision",
+      subjectKey: "geography",
+      examKey: null,
+      reasonCode: "preferred_subject_due",
+      broadcastQuizPersonalized: false,
+    },
     recentQuizzes: [
       {
         quizId: QUIZ_ID,

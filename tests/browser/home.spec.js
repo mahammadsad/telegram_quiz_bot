@@ -43,3 +43,14 @@ test("home keeps core study paths available when recent quizzes cannot load", as
   await expect(page.getByRole("link", { name: /আজকের পুনরাবৃত্তি/ })).toBeVisible();
   await expect(page.getByRole("link", { name: /আমার অগ্রগতি/ })).toBeVisible();
 });
+
+test("preference assignment opens only the requested recent subject", async ({ page }) => {
+  await installTelegramMock(page, { startParam: "" });
+  await installApiMocks(page);
+  await page.goto("/?subject=geography");
+
+  await expect(page.locator("#screen-home")).toBeVisible();
+  await expect(page.locator("#quiz-catalogue .quiz-card")).toHaveCount(1);
+  await expect(page.locator("#quiz-catalogue")).toContainText("ভূগোল");
+  await expect(page.locator("#quiz-catalogue")).not.toContainText("ইতিহাস");
+});

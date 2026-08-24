@@ -92,6 +92,7 @@
       queueMode=data.mode;queueSource=data.sourceType;
       if(prefs){preferences.sound=prefs.revisionSoundEnabled!==false;preferences.vibration=prefs.revisionVibrationEnabled===true;writeLocalPreference("revisionSoundEnabled",preferences.sound);writeLocalPreference("revisionVibrationEnabled",preferences.vibration)}
       rows=requestedSource==="bookmark"?(data.questions||[]):(data.rows||[]);
+      if(subject&&requestedSource==="due")rows.sort(function(a,b){return(a.subjectKey===subject?0:1)-(b.subjectKey===subject?0:1)});
       if(queueSource==="weak_topic")rows.sort(function(a,b){return(a.masteryScore||0)-(b.masteryScore||0)});
       el("count").textContent=bn(rows.length)+"টি";
       if(!rows.length){state("empty");return}index=0;render();

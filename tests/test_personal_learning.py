@@ -224,6 +224,82 @@ def test_dashboard_endpoint_requires_telegram_header(monkeypatch):
     assert response.json() == {"todayAnswered": 10, "dueReviews": 2}
 
 
+def test_dashboard_study_plan_prioritizes_due_preferred_subject(monkeypatch) -> None:
+    monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
+    monkeypatch.setattr(
+        service.personal_learning_repo,
+        "dashboard",
+        lambda user_id: {
+            "dailyTarget": 30,
+            "todayAnswered": 18,
+            "revisionDueToday": 7,
+            "weakQuestions": 4,
+            "subjectRevisionCounts": [
+                {"subjectKey": "history", "due": 5},
+                {"subjectKey": "geography", "due": 2},
+                {"subjectKey": "science", "due": 9},
+            ],
+            "subjectPerformance": [
+                {"subjectKey": "history", "accuracy": 80},
+                {"subjectKey": "geography", "accuracy": 45},
+            ],
+        },
+    )
+    monkeypatch.setattr(
+        service.personal_learning_repo,
+        "preferences",
+        lambda user_id: {
+            "preferredSubjects": ["history", "geography", "invented"],
+            "targetExams": ["WBCS"],
+            "dailyQuestionTarget": 30,
+        },
+    )
+
+    payload = service.dashboard({"id": 123, "first_name": "শিক্ষার্থী"})
+    plan = payload["studyPlan"]
+
+    assert plan == {
+        "version": 1,
+        "personalized": True,
+        "preferredSubjects": ["history", "geography"],
+        "targetExams": ["WBCS"],
+        "dailyQuestionTarget": 30,
+        "remainingQuestions": 12,
+        "questionTarget": 7,
+        "nextAction": "continue_due_revision",
+        "subjectKey": "history",
+        "examKey": None,
+        "reasonCode": "preferred_subject_due",
+        "broadcastQuizPersonalized": False,
+    }
+
+
+def test_study_plan_uses_target_exam_only_after_revision_and_weakness() -> None:
+    plan = service._study_plan(
+        {"todayAnswered": 4, "revisionDueToday": 0, "weakQuestions": 0},
+        {
+            "preferredSubjects": ["mathematics"],
+            "targetExams": ["SSC"],
+            "dailyQuestionTarget": 20,
+        },
+    )
+
+    assert plan["nextAction"] == "target_exam_mock"
+    assert plan["examKey"] == "SSC"
+    assert plan["remainingQuestions"] == 16
+    assert plan["broadcastQuizPersonalized"] is False
+
+
+def test_study_plan_marks_completed_daily_target_without_over_assignment() -> None:
+    plan = service._study_plan(
+        {"todayAnswered": 40, "revisionDueToday": 0, "weakQuestions": 0},
+        {"preferredSubjects": ["history"], "dailyQuestionTarget": 30},
+    )
+
+    assert plan["nextAction"] == "goal_complete"
+    assert plan["questionTarget"] == 0
+
+
 def test_private_learning_endpoints_project_authenticated_user(monkeypatch):
     monkeypatch.setattr(api_module, "verify_init_data", lambda *args: {"id": 123})
     monkeypatch.setattr(

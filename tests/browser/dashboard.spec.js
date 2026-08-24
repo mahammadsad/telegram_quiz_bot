@@ -38,6 +38,11 @@ test("personal dashboard keeps bookmark questions in Practice and omits a bookma
     "href",
     "practice.html?source=due",
   );
+  await expect(page.locator("#next-copy")).toContainText("আপনার পছন্দ");
+  await expect(page.locator("#next-link")).toHaveAttribute(
+    "href",
+    "practice.html?source=due&subject=geography",
+  );
 
   await expect(page.locator("#settings-card")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "সেটিংস" })).toHaveAttribute(

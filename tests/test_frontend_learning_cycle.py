@@ -56,6 +56,8 @@ def test_root_without_a_quiz_id_is_a_real_discovery_home() -> None:
         'href="dashboard.html"',
     ):
         assert contract in INDEX
+    assert 'new URLSearchParams(location.search).get("subject")' in INDEX
+    assert "item.subjectKey === requestedHomeSubject" in INDEX
     no_quiz_branch = INDEX.split("if (!quizId)", 1)[1].split("} else {", 1)[0]
     assert "loadHome();" in no_quiz_branch
     assert "showError" not in no_quiz_branch
@@ -112,6 +114,9 @@ def test_personal_dashboard_uses_private_sql_analytics_without_settings_controls
     assert "prefers-reduced-motion" in DASHBOARD
     assert '"miscellaneous":"বিবিধ সাধারণ জ্ঞান"' in DASHBOARD
     assert '"static-gk"' not in DASHBOARD
+    assert "data.studyPlan" in DASHBOARD
+    assert 'plan.nextAction==="target_exam_mock"' in DASHBOARD
+    assert "broadcastQuizPersonalized" not in DASHBOARD
 
 
 def test_preferences_and_privacy_have_a_dedicated_settings_page():
@@ -150,6 +155,13 @@ def test_only_a_complete_locale_is_advertised() -> None:
     assert 'value="hi"' not in language.group(1)
     assert 'value="en"' not in language.group(1)
     assert 'supportedLocales = Object.freeze(["bn"])' in SHELL
+
+
+def test_preference_assignment_routes_are_bounded_to_existing_study_surfaces() -> None:
+    assert 'requestedSource==="due"' in PRACTICE
+    assert 'a.subjectKey===subject' in PRACTICE
+    assert 'params.get("exam")' in MOCK
+    assert 'byId("catalog-search").value=requestedExam' in MOCK
 
 
 def test_pwa_cache_is_fail_closed_for_answer_material() -> None:
