@@ -508,6 +508,14 @@ def test_broader_competitive_exam_math_families_are_solved(
             [90, 9],
             1,
         ),
+        (
+            "quadratic_equation_root",
+            {"a": 1, "b": -5, "c": 6, "requested": "larger"},
+            ["১", "২", "৩", "৬"],
+            [1, 2, 3, 6],
+            [1, 1, 3],
+            2,
+        ),
     ],
 )
 def test_combinatorics_and_inverse_proportion_are_solved(
@@ -554,6 +562,14 @@ def test_combinatorics_and_inverse_proportion_are_solved(
         (
             "inverse_proportion",
             {"known_quantity": 6, "known_value": 15, "target_quantity": 0},
+        ),
+        (
+            "quadratic_equation_root",
+            {"a": 1, "b": 0, "c": 1, "requested": "larger"},
+        ),
+        (
+            "quadratic_equation_root",
+            {"a": 1, "b": -2, "c": 1, "requested": "larger"},
         ),
     ],
 )

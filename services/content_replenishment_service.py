@@ -427,8 +427,8 @@ percentage_of, average, ratio_share, simple_interest, algebra_linear, time_work,
 speed_distance, profit_loss, rounded_division, gcd_lcm, exact_square_root, and
 compound_interest, direct_proportion, weighted_average, partnership_share,
 percentage_change, simple_probability, rectangle_measure, discount_price,
-simultaneous_linear_equations, triangle_measure, permutation_combination, and
-inverse_proportion.
+simultaneous_linear_equations, triangle_measure, permutation_combination,
+inverse_proportion, and quadratic_equation_root.
 Supported reasoning families are
 arithmetic_series_next, ordering_rank, odd_one_out_tag, coding_shift, direction_path,
 ordering_constraints, syllogism_finite_sets, analogy_mapping,
@@ -468,7 +468,10 @@ perimeter with exactly three positive sides satisfying the strict triangle inequ
 permutation_combination has integer n from 0 through 100, integer r from 0 through n,
 and requested permutation or combination, tracing the exact result; inverse_proportion
 has positive known_quantity and target_quantity plus non-negative known_value, tracing
-the constant product then result.
+the constant product then result; quadratic_equation_root has bounded integer a, b,
+and c with non-zero a, two distinct rational roots from a positive perfect-square
+discriminant, and requested smaller or larger, tracing discriminant, its square root,
+then the requested root.
 arithmetic_series_next has sequence; ordering_rank has values,
 target, and direction (ascending or descending); odd_one_out_tag has exactly four tags,
 three equal and one different; coding_shift has source, shift, and encode/decode

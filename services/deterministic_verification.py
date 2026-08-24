@@ -711,6 +711,27 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             constant_product = known_quantity * known_value
             result = constant_product / target_quantity
             return _SolvedValue(result, (constant_product, result))
+        if family == "quadratic_equation_root":
+            coefficient_a = _bounded_int(params.get("a"), minimum=-10**6, maximum=10**6)
+            coefficient_b = _bounded_int(params.get("b"), minimum=-10**6, maximum=10**6)
+            coefficient_c = _bounded_int(params.get("c"), minimum=-10**6, maximum=10**6)
+            requested = str(params.get("requested") or "")
+            if not coefficient_a or requested not in {"smaller", "larger"}:
+                raise ValueError
+            discriminant = coefficient_b**2 - 4 * coefficient_a * coefficient_c
+            if discriminant <= 0 or discriminant > 10**12:
+                raise ValueError
+            square_root = isqrt(discriminant)
+            if square_root * square_root != discriminant:
+                raise ValueError
+            roots = sorted(
+                (
+                    Fraction(-coefficient_b - square_root, 2 * coefficient_a),
+                    Fraction(-coefficient_b + square_root, 2 * coefficient_a),
+                )
+            )
+            result = roots[0] if requested == "smaller" else roots[1]
+            return _SolvedValue(result, (discriminant, square_root, result))
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         raise DeterministicVerificationError(
             "math_proof_invalid", "The mathematics proof parameters are invalid."
