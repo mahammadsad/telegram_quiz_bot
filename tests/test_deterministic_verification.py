@@ -251,6 +251,86 @@ def test_extended_mathematics_families_are_solved(
 
 
 @pytest.mark.parametrize(
+    ("family", "parameters", "options", "option_values", "trace", "units", "correct"),
+    [
+        (
+            "gcd_lcm",
+            {"values": [18, 24], "requested": "gcd"},
+            ["৩", "৬", "৯", "১২"],
+            [3, 6, 9, 12],
+            [6],
+            None,
+            1,
+        ),
+        (
+            "exact_square_root",
+            {"radicand": 144},
+            ["১০", "১১", "১২", "১৩"],
+            [10, 11, 12, 13],
+            [12],
+            None,
+            2,
+        ),
+        (
+            "compound_interest",
+            {
+                "principal": 1000,
+                "rate_percent": 10,
+                "periods": 2,
+                "requested": "amount",
+            },
+            ["১১০০", "১২০০", "১২১০", "১২২০"],
+            [1100, 1200, 1210, 1220],
+            [1210],
+            ["currency"] * 4,
+            2,
+        ),
+    ],
+)
+def test_additional_competitive_exam_math_families_are_solved(
+    family: str,
+    parameters: dict,
+    options: list[str],
+    option_values: list,
+    trace: list,
+    units: list[str] | None,
+    correct: int,
+) -> None:
+    candidate = mathematics_candidate()
+    candidate["options"] = options
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": option_values,
+        "explanation_values": trace,
+        "explanation_conclusion": options[correct],
+    }
+    if units is not None:
+        candidate["deterministic_proof"]["option_units"] = units
+
+    assert verify_candidate(candidate).family == family
+
+
+def test_exact_square_root_rejects_non_perfect_square() -> None:
+    candidate = mathematics_candidate()
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": "exact_square_root",
+        "parameters": {"radicand": 145},
+        "option_values": [10, 11, 12, 13],
+        "explanation_values": [12],
+        "explanation_conclusion": "১২",
+    }
+
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+
+    assert raised.value.code == "math_proof_invalid"
+
+
+@pytest.mark.parametrize(
     ("family", "parameters", "option_values", "explanation_values", "units", "correct"),
     [
         ("time_work", {"worker_times": [6, 3], "time_unit": "hour"}, [1, 2, 3, 4], ["1/2", 2], ["hour"] * 4, 1),

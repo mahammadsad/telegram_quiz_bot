@@ -327,9 +327,10 @@ def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
     if rejection_codes & {"math_family_unsupported", "proof_family_unsupported"}:
         guidance.append(
             "For mathematics, proof_family must be copied exactly from the supported mathematics "
-            "family list in this prompt; never invent a geometry, HCF/LCM, root, theorem, or other "
+            "family list in this prompt; never invent a geometry, theorem, or other unsupported "
             "family. If the source fact cannot produce a question using one listed family, use a "
-            "different supplied fact."
+            "different supplied fact. gcd_lcm, exact_square_root, and compound_interest are valid "
+            "only with the exact parameter contracts listed in the base prompt."
         )
     if rejection_codes & {
         "math_proof_invalid",
@@ -405,7 +406,8 @@ solution trace, and proof_explanation_conclusion equal to the displayed proved o
 Use proof_option_units for all four options when the family has a unit; otherwise use
 four empty strings. Supported mathematics families are arithmetic_expression,
 percentage_of, average, ratio_share, simple_interest, algebra_linear, time_work,
-speed_distance, profit_loss, and rounded_division. Supported reasoning families are
+speed_distance, profit_loss, rounded_division, gcd_lcm, exact_square_root, and
+compound_interest. Supported reasoning families are
 arithmetic_series_next, ordering_rank, odd_one_out_tag, coding_shift, direction_path,
 ordering_constraints, syllogism_finite_sets, and analogy_mapping. Unsupported or
 under-constrained questions are forbidden.
@@ -416,7 +418,12 @@ rate_percent, and years; algebra_linear has coefficient, constant, and right_han
 time_work has worker_times and time_unit; speed_distance has requested plus the two
 known values, distance_unit, and time_unit; profit_loss has cost_price, selling_price,
 and requested; rounded_division has numerator, denominator, decimal_places, and
-rounding_mode half_up. arithmetic_series_next has sequence; ordering_rank has values,
+rounding_mode half_up; gcd_lcm has values and requested (gcd or lcm);
+exact_square_root has a positive perfect-square radicand; compound_interest has
+principal, rate_percent, periods, and requested (amount or interest).
+For compound_interest the trace is the amount for an amount question, or amount then
+interest for an interest question, and all options use currency units.
+arithmetic_series_next has sequence; ordering_rank has values,
 target, and direction (ascending or descending); odd_one_out_tag has exactly four tags,
 three equal and one different; coding_shift has source, shift, and encode/decode
 direction; direction_path has cardinal moves; ordering_constraints has items,

@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from fractions import Fraction
 from itertools import permutations
+from math import gcd, isqrt
 from typing import Any, Mapping, Sequence
 
 from config.settings import DETERMINISTIC_PROOF_VERSION
@@ -503,6 +504,50 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             quantum = Decimal(1).scaleb(-places)
             result = (numerator / denominator).quantize(quantum, rounding=ROUND_HALF_UP)
             return _SolvedValue(result, (result,))
+        if family == "gcd_lcm":
+            integer_values = [
+                _positive_int(value) for value in _sequence(params.get("values"))
+            ]
+            requested = str(params.get("requested") or "")
+            if len(integer_values) not in range(2, 9):
+                raise ValueError
+            if requested == "gcd":
+                integer_result = integer_values[0]
+                for integer_value in integer_values[1:]:
+                    integer_result = gcd(integer_result, integer_value)
+            elif requested == "lcm":
+                integer_result = 1
+                for integer_value in integer_values:
+                    integer_result = (
+                        integer_result
+                        * integer_value
+                        // gcd(integer_result, integer_value)
+                    )
+                    if integer_result > 10**12:
+                        raise ValueError
+            else:
+                raise ValueError
+            return _SolvedValue(integer_result, (integer_result,))
+        if family == "exact_square_root":
+            radicand = _positive_int(params.get("radicand"), maximum=10**12)
+            result = isqrt(radicand)
+            if result * result != radicand:
+                raise ValueError
+            return _SolvedValue(result, (result,))
+        if family == "compound_interest":
+            principal = _fraction(params["principal"])
+            rate = _fraction(params["rate_percent"])
+            periods = _positive_int(params.get("periods"), maximum=100)
+            requested = str(params.get("requested") or "")
+            if principal <= 0 or rate <= 0 or rate > 1000:
+                raise ValueError
+            amount = principal * (Fraction(1) + rate / 100) ** periods
+            if requested == "amount":
+                return _SolvedValue(amount, (amount,), "currency")
+            if requested == "interest":
+                result = amount - principal
+                return _SolvedValue(result, (amount, result), "currency")
+            raise ValueError
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         raise DeterministicVerificationError(
             "math_proof_invalid", "The mathematics proof parameters are invalid."
@@ -755,6 +800,18 @@ def _decimal(value: Any) -> Decimal:
     except InvalidOperation as exc:
         raise ValueError from exc
     if not result.is_finite():
+        raise ValueError
+    return result
+
+
+def _positive_int(value: Any, *, maximum: int = 10**9) -> int:
+    if isinstance(value, bool):
+        raise ValueError
+    try:
+        result = int(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError from exc
+    if str(result) != str(value).strip() or result <= 0 or result > maximum:
         raise ValueError
     return result
 

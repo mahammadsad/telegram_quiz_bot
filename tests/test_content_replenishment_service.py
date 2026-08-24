@@ -168,6 +168,7 @@ def test_repair_prompt_gives_static_code_specific_guidance() -> None:
     )
 
     assert "never invent a geometry" in prompt
+    assert "gcd_lcm" in prompt
     assert "none of the three distractor values" in prompt
     assert "one consistent visible representation" in prompt
 
