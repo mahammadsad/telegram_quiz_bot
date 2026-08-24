@@ -252,6 +252,9 @@ def test_delivery_slo_workflow_is_read_only_bounded_and_pinned() -> None:
     source = path.read_text(encoding="utf-8")
     assert "scripts/report_quiz_delivery_slo.py" in source
     assert "--fail-on-terminal" not in source
+    assert "--fail-on-slo" in source
+    assert trigger["workflow_dispatch"]["inputs"]["enforce_slo"]["default"] is False
+    assert workflow["jobs"]["report"]["steps"][-1]["if"] == "always()"
     assert "SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}" in source
     assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in source
     assert "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f" in source

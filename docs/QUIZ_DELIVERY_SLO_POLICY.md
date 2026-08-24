@@ -43,4 +43,5 @@ this is a complete observability system.
 
 The `Quiz Delivery SLO` workflow runs the same read-only report after the daily
 quiz window and retains the aggregate JSON artifact for 30 days. Its schedule is
-diagnostic redundancy, not the primary quiz-delivery control plane.
+diagnostic redundancy, not the primary quiz-delivery control plane. A deliberate
+manual run can select `enforce_slo`; scheduled runs always remain non-blocking.
