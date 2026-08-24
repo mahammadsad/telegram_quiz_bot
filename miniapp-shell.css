@@ -1,4 +1,4 @@
-.skip-link{position:fixed;left:12px;top:8px;z-index:10000;display:flex;min-height:44px;align-items:center;transform:translateY(-160%);background:#fff;color:#0b4f49;border:2px solid #0f766e;border-radius:8px;padding:10px 14px;font-weight:700;text-decoration:none}.skip-link:focus{transform:translateY(0)}
+.skip-link{position:fixed;left:12px;top:8px;z-index:10000;display:flex;min-height:44px;align-items:center;transform:translateY(-160%);background:#fff;color:#8f1c13;border:2px solid #b42318;border-radius:8px;padding:10px 14px;font-weight:700;text-decoration:none}.skip-link:focus{transform:translateY(0)}
 .network-status{position:sticky;top:0;z-index:9999;background:#7c2d12;color:#fff;padding:10px 16px;text-align:center;font-size:14px;font-weight:700;line-height:1.4}.network-status[hidden]{display:none}
 :where(button,a,input,select,textarea,[tabindex]):focus-visible{outline:3px solid #f59e0b!important;outline-offset:3px!important}
 @media(prefers-reduced-motion:reduce){.skip-link{transition:none!important}}

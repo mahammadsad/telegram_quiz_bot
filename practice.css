@@ -1,11 +1,11 @@
   :root{
     color-scheme:light dark;
-    --bg:var(--tg-theme-bg-color,#f3f7f8);
+    --bg:var(--tg-theme-bg-color,#f7f7f6);
     --surface:var(--tg-theme-secondary-bg-color,#fff);
-    --text:var(--tg-theme-text-color,#14212b);
-    --hint:var(--tg-theme-hint-color,#52606d);
-    --link:#066c76;
-    --button:var(--tg-theme-button-color,#066257);
+    --text:var(--tg-theme-text-color,#222);
+    --hint:var(--tg-theme-hint-color,#666);
+    --link:var(--tg-theme-link-color,#0a5aa6);
+    --button:var(--tg-theme-button-color,#b42318);
     --button-text:var(--tg-theme-button-text-color,#fff);
     --line:color-mix(in srgb,var(--hint) 25%,transparent);
     --success:#158047;
