@@ -397,6 +397,59 @@ def test_near_duplicate_is_rejected_instead_of_substituted(monkeypatch, valid_qu
         )
 
 
+@pytest.mark.parametrize(
+    "database_message",
+    [
+        "question 1 repeats a knowledge point inside the 30-day cooldown",
+        "question content cannot be reused at position 2",
+        "question content identity collision at position 3",
+        "question classification collision at position 4",
+    ],
+)
+def test_atomic_database_collision_is_a_retryable_domain_error(
+    monkeypatch, valid_questions, database_message
+):
+    monkeypatch.setattr(service.questions_repo, "get_by_content_hash", lambda *args: None)
+    monkeypatch.setattr(service.questions_repo, "get_latest_by_stem", lambda *args: {"id": "old"})
+
+    def reject(**kwargs):
+        raise RuntimeError({"message": database_message, "code": "P0001"})
+
+    monkeypatch.setattr(service.quiz_packs_repo, "save_atomic", reject)
+
+    with pytest.raises(service.QuizContentCollisionError) as raised:
+        service.record_quiz_pack(
+            QUIZ_ID,
+            valid_questions,
+            {"subject_key": "history", "chapter": "আধুনিক ভারত"},
+            worker_id="worker-1",
+        )
+
+    assert raised.value.retryable is True
+    assert "P0001" not in str(raised.value)
+
+
+def test_unrecognized_atomic_database_error_is_not_reclassified(monkeypatch, valid_questions):
+    monkeypatch.setattr(service.questions_repo, "get_by_content_hash", lambda *args: None)
+    monkeypatch.setattr(service.questions_repo, "get_latest_by_stem", lambda *args: {"id": "old"})
+    original = RuntimeError("database unavailable")
+
+    def reject(**kwargs):
+        raise original
+
+    monkeypatch.setattr(service.quiz_packs_repo, "save_atomic", reject)
+
+    with pytest.raises(RuntimeError) as raised:
+        service.record_quiz_pack(
+            QUIZ_ID,
+            valid_questions,
+            {"subject_key": "history", "chapter": "আধুনিক ভারত"},
+            worker_id="worker-1",
+        )
+
+    assert raised.value is original
+
+
 def test_database_checksum_mismatch_blocks_pack_before_readback(monkeypatch, valid_questions):
     monkeypatch.setattr(service.questions_repo, "get_by_content_hash", lambda *args: None)
     monkeypatch.setattr(service.questions_repo, "get_latest_by_stem", lambda *args: {"id": "old"})

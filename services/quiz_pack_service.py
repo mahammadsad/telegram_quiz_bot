@@ -420,14 +420,32 @@ def record_quiz_pack(
     )
     question_rows = [_question_row_for_atomic_save(quiz_id, item, meta) for item in clean_questions]
     checksum = content_checksum(quiz_id, subject_key, chapter, clean_questions)
-    save_result = quiz_packs_repo.save_atomic(
-        quiz_id=quiz_id,
-        worker_id=worker_id,
-        questions=question_rows,
-        content_checksum=checksum,
-        replace=replace,
-        source_required=source_required,
-    )
+    try:
+        save_result = quiz_packs_repo.save_atomic(
+            quiz_id=quiz_id,
+            worker_id=worker_id,
+            questions=question_rows,
+            content_checksum=checksum,
+            replace=replace,
+            source_required=source_required,
+        )
+    except Exception as exc:
+        # Postgres remains the final authority for cross-pack cooldown and
+        # immutable identity. Supabase surfaces those intentional P0001
+        # rejections as a generic API error, so translate only the reviewed,
+        # stable messages into the retryable domain error used by dispatch.
+        message = str(exc).casefold()
+        collision_markers = (
+            "repeats a knowledge point inside the 30-day cooldown",
+            "question content cannot be reused at position",
+            "question content identity collision at position",
+            "question classification collision at position",
+        )
+        if any(marker in message for marker in collision_markers):
+            raise QuizContentCollisionError(
+                f"Atomic quiz save rejected recently used content in {quiz_id}; regenerate safely."
+            ) from exc
+        raise
     if not save_result.get("ready"):
         raise DatabaseIntegrityError("Saved quiz checksum did not match generated content; posting is blocked.")
     saved = get_quiz_pack(quiz_id)
