@@ -420,13 +420,14 @@ def test_authoritative_migration_version_is_latest_filename() -> None:
 def test_versioned_production_manifest_matches_deployment_intent() -> None:
     manifest_path = ROOT / "config" / "production.toml"
     assert manifest_path.is_file()
-    assert PRODUCTION_CONFIG_VERSION == "2026-08-23.3"
+    assert PRODUCTION_CONFIG_VERSION == "2026-08-24.1"
     assert re.fullmatch(r"[0-9a-f]{64}", PRODUCTION_CONFIG_HASH)
     assert PRODUCTION_CONFIG["quiz"]["source_backed_rotation_enabled"] is True
     assert PRODUCTION_CONFIG["quiz"]["source_optional_stable_subjects_enabled"] is True
     assert PRODUCTION_CONFIG["gemini"] == {
         "primary_model": "gemini-3.1-flash-lite",
         "fallback_model": "gemini-2.5-flash",
+        "verifier_model": "gemini-3.5-flash-lite",
         "failover_enabled": True,
     }
     assert PRODUCTION_CONFIG["verification"] == {
@@ -475,6 +476,7 @@ def test_versioned_production_manifest_matches_deployment_intent() -> None:
     render_env = {row["key"]: row.get("value") for row in render["services"][0]["envVars"] if "value" in row}
     assert render_env["GEMINI_MODEL_PRIMARY"] == PRODUCTION_CONFIG["gemini"]["primary_model"]
     assert render_env["GEMINI_MODEL_FALLBACK"] == PRODUCTION_CONFIG["gemini"]["fallback_model"]
+    assert render_env["GEMINI_VERIFIER_MODEL"] == PRODUCTION_CONFIG["gemini"]["verifier_model"]
     assert render_env["QUESTION_VERIFICATION_MIN_CONFIDENCE"] == str(
         PRODUCTION_CONFIG["quiz"]["verification_min_confidence"]
     )

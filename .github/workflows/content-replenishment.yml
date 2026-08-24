@@ -35,6 +35,10 @@ jobs:
       SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
       GEMINI_API_KEY_PRIMARY: ${{ secrets.GEMINI_API_KEY_PRIMARY }}
       GEMINI_API_KEY_SECONDARY: ${{ secrets.GEMINI_API_KEY_SECONDARY }}
+      GEMINI_MODEL_PRIMARY: gemini-3.1-flash-lite
+      GEMINI_MODEL_FALLBACK: gemini-2.5-flash
+      GEMINI_VERIFIER_MODEL: gemini-3.5-flash-lite
+      GEMINI_FAILOVER_ENABLED: "true"
       LIMIT: ${{ inputs.limit || '5' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

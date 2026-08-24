@@ -56,6 +56,8 @@ services:
         value: gemini-3.1-flash-lite
       - key: GEMINI_MODEL_FALLBACK
         value: gemini-2.5-flash
+      - key: GEMINI_VERIFIER_MODEL
+        value: gemini-3.5-flash-lite
       - key: GEMINI_FAILOVER_ENABLED
         value: "true"
       - key: QUESTION_VERIFICATION_MIN_CONFIDENCE

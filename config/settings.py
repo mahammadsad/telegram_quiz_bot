@@ -94,6 +94,10 @@ GEMINI_MODEL_FALLBACK = os.environ.get(
     "GEMINI_MODEL_FALLBACK",
     _locked_value("GEMINI_MODEL_FALLBACK", PRODUCTION_CONFIG["gemini"]["fallback_model"]),
 ).strip()
+GEMINI_VERIFIER_MODEL = os.environ.get(
+    "GEMINI_VERIFIER_MODEL",
+    _locked_value("GEMINI_VERIFIER_MODEL", PRODUCTION_CONFIG["gemini"]["verifier_model"]),
+).strip()
 
 # Backward-compatible alias for older modules/database provenance. New
 # generation code always uses the explicit primary/fallback names above.

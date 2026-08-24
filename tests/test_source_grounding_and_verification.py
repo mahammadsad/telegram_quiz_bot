@@ -303,10 +303,14 @@ def test_different_model_is_recorded_as_independent(valid_questions):
         "notes": "Verified from the cited evidence.",
     } for index in range(1, 11)]
 
+    calls = []
+
     class DifferentModelPool:
-        fallback_model = "gemini-verifier"
+        fallback_model = "gemini-generator-fallback"
+        verifier_model = "gemini-verifier"
 
         def generate_subject_quiz(self, **kwargs):
+            calls.append(kwargs)
             return json.dumps(results), {
                 "provider": "secondary",
                 "model": "gemini-verifier",
@@ -320,6 +324,7 @@ def test_different_model_is_recorded_as_independent(valid_questions):
         generator_metadata={"provider": "primary", "model": "gemini-generator"},
     )
     assert metadata["independent_model"] is True
+    assert calls[0]["preferred_model"] == "gemini-verifier"
     assert accepted[0]["verification_checks"]["independent_model"] is True
     assert accepted[0]["verification_checks"]["generator_model"] == "gemini-generator"
     assert accepted[0]["verification_checks"]["verifier_model"] == "gemini-verifier"

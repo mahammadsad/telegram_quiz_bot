@@ -50,7 +50,11 @@ def verify_questions(
     raw_text, metadata = pool.generate_subject_quiz(
         prompt=prompt,
         response_schema=VERIFICATION_JSON_SCHEMA,
-        preferred_model=getattr(pool, "fallback_model", None),
+        preferred_model=getattr(
+            pool,
+            "verifier_model",
+            getattr(pool, "fallback_model", None),
+        ),
     )
     generator = generator_metadata or {}
     generator_model = str(generator.get("model") or "").strip()

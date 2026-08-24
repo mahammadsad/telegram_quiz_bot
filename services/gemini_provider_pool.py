@@ -79,6 +79,9 @@ class GeminiProviderPool:
         self.max_backoff = max(self.backoff_base, float(env.get("GEMINI_MAX_BACKOFF_SECONDS", settings.GEMINI_MAX_BACKOFF_SECONDS)))
         self.primary_model = (env.get("GEMINI_MODEL_PRIMARY") or settings.GEMINI_MODEL_PRIMARY).strip()
         self.fallback_model = (env.get("GEMINI_MODEL_FALLBACK") or settings.GEMINI_MODEL_FALLBACK).strip()
+        self.verifier_model = (
+            env.get("GEMINI_VERIFIER_MODEL") or settings.GEMINI_VERIFIER_MODEL
+        ).strip()
         self._client_factory = client_factory or self._default_client
         self._sleep = sleep
         self._now = now
