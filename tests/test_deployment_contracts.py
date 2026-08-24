@@ -254,7 +254,7 @@ def test_delivery_slo_workflow_is_read_only_bounded_and_pinned() -> None:
     assert "--fail-on-terminal" not in source
     assert "SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}" in source
     assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in source
-    assert "actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02" in source
+    assert "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f" in source
 
 
 def test_delivery_slo_script_supports_the_documented_direct_invocation() -> None:
