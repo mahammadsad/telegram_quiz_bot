@@ -413,7 +413,8 @@ compound_interest, direct_proportion, weighted_average, partnership_share,
 percentage_change, simple_probability, and rectangle_measure.
 Supported reasoning families are
 arithmetic_series_next, ordering_rank, odd_one_out_tag, coding_shift, direction_path,
-ordering_constraints, syllogism_finite_sets, and analogy_mapping. Unsupported or
+ordering_constraints, syllogism_finite_sets, analogy_mapping,
+calendar_weekday_offset, and clock_smaller_angle. Unsupported or
 under-constrained questions are forbidden.
 Use these exact parameter objects: arithmetic_expression has values and operators;
 percentage_of has base and percent; average has values; ratio_share has total,
@@ -444,8 +445,12 @@ target, and direction (ascending or descending); odd_one_out_tag has exactly fou
 three equal and one different; coding_shift has source, shift, and encode/decode
 direction; direction_path has cardinal moves; ordering_constraints has items,
 before/after constraints, and target; syllogism_finite_sets has explicit sets, left,
-right, and all/some/none relation; analogy_mapping has a mapping and query. Use ASCII
-numeric proof values even when displayed options use Bengali digits.
+right, and all/some/none relation; analogy_mapping has a mapping and query;
+calendar_weekday_offset has integer start_weekday (Monday 0 through Sunday 6) and
+non-negative integer day_offset, tracing the resulting weekday index;
+clock_smaller_angle has integer hour 0-23 and minute 0-59, tracing the raw absolute
+hand angle then the smaller angle, with degree units. Use ASCII numeric proof values
+even when displayed options use Bengali digits.
 For every other subject, use proof_family evidence_single_answer, copy the four
 displayed answers to proof_option_values and proof_evidence_values, and set the
 conclusion to the displayed correct option. Use empty proof_explanation_values and four

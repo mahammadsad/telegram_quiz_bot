@@ -586,6 +586,80 @@ def test_typed_reasoning_families_are_machine_solved(
     assert verify_candidate(candidate).family == family
 
 
+@pytest.mark.parametrize(
+    ("family", "parameters", "options", "values", "trace", "units", "correct"),
+    [
+        (
+            "calendar_weekday_offset",
+            {"start_weekday": 0, "day_offset": 10},
+            ["১", "২", "৩", "৪"],
+            [1, 2, 3, 4],
+            [3],
+            None,
+            2,
+        ),
+        (
+            "clock_smaller_angle",
+            {"hour": 3, "minute": 30},
+            ["৬০°", "৭৫°", "৯০°", "১০৫°"],
+            [60, 75, 90, 105],
+            [75, 75],
+            ["degree"] * 4,
+            1,
+        ),
+    ],
+)
+def test_calendar_and_clock_reasoning_families_are_solved(
+    family: str,
+    parameters: dict,
+    options: list[str],
+    values: list,
+    trace: list,
+    units: list[str] | None,
+    correct: int,
+) -> None:
+    candidate = reasoning_candidate()
+    candidate["options"] = options
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": values,
+        "explanation_values": trace,
+        "explanation_conclusion": options[correct],
+    }
+    if units is not None:
+        candidate["deterministic_proof"]["option_units"] = units
+    assert verify_candidate(candidate).family == family
+
+
+@pytest.mark.parametrize(
+    ("family", "parameters"),
+    [
+        ("calendar_weekday_offset", {"start_weekday": 7, "day_offset": 1}),
+        ("calendar_weekday_offset", {"start_weekday": 0, "day_offset": -1}),
+        ("clock_smaller_angle", {"hour": 24, "minute": 0}),
+        ("clock_smaller_angle", {"hour": 3, "minute": 60}),
+    ],
+)
+def test_calendar_and_clock_reasoning_reject_invalid_parameters(
+    family: str, parameters: dict
+) -> None:
+    candidate = reasoning_candidate()
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": [1, 2, 3, 4],
+        "explanation_values": [3],
+        "explanation_conclusion": "৩",
+    }
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+    assert raised.value.code == "reasoning_proof_invalid"
+
+
 def test_underconstrained_ordering_is_rejected() -> None:
     candidate = reasoning_candidate()
     candidate["deterministic_proof"] = {

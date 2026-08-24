@@ -762,6 +762,17 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
             if not result:
                 raise ValueError
             return _SolvedValue(result, (result,))
+        if family == "calendar_weekday_offset":
+            start_weekday = _bounded_int(params.get("start_weekday"), minimum=0, maximum=6)
+            day_offset = _bounded_int(params.get("day_offset"), minimum=0, maximum=366000)
+            result = (start_weekday + day_offset) % 7
+            return _SolvedValue(result, (result,))
+        if family == "clock_smaller_angle":
+            hour = _bounded_int(params.get("hour"), minimum=0, maximum=23) % 12
+            minute = _bounded_int(params.get("minute"), minimum=0, maximum=59)
+            raw_angle = abs(Fraction(60 * hour - 11 * minute, 2))
+            result = min(raw_angle, Fraction(360) - raw_angle)
+            return _SolvedValue(result, (raw_angle, result), "degree")
     except (TypeError, ValueError) as exc:
         raise DeterministicVerificationError(
             "reasoning_proof_invalid", "The reasoning puzzle is inconsistent or under-constrained."
@@ -893,6 +904,14 @@ def _positive_int(value: Any, *, maximum: int = 10**9) -> int:
     if str(result) != str(value).strip() or result <= 0 or result > maximum:
         raise ValueError
     return result
+
+
+def _bounded_int(value: Any, *, minimum: int, maximum: int) -> int:
+    if isinstance(value, bool) or not isinstance(value, int):
+        raise ValueError
+    if value < minimum or value > maximum:
+        raise ValueError
+    return value
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:

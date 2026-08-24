@@ -75,7 +75,7 @@ Production is unchanged.
   reads only the verified event/claim pool; legacy publication-age fallback is
   retained for rollback compatibility.
 - Phase D subject validation now covers 19 typed mathematics families and
-  eight typed reasoning families. Solver-produced traces, option units, and
+  ten typed reasoning families. Solver-produced traces, option units, and
   rounding policies are checked independently. Typed English/Bengali forms
   require exact authoritative rule spans; uncertain Bengali and translation
   correctness fail into explicit human-review reasons.
