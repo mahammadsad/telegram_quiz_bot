@@ -38,7 +38,10 @@ def test_slo_counts_expected_missing_late_and_terminal_jobs() -> None:
         "completeDays": 0,
         "deliveryCompletenessRate": round(2 / 13, 6),
         "onTimeDeliveryRate": round(1 / 13, 6),
+        "terminalFailureRate": round(1 / 13, 6),
     }
+    assert report["objectives"]["policyVersion"] == 1
+    assert report["evaluation"]["overallMet"] is False
     assert report["daily"][0]["complete"] is False
     assert "quiz_id" not in str(report).lower()
     assert "telegram" not in str(report).lower()
@@ -57,6 +60,14 @@ def test_slo_complete_day_is_recognized() -> None:
     )
     assert report["summary"]["completeDays"] == 1
     assert report["summary"]["deliveryCompletenessRate"] == 1.0
+    assert report["evaluation"] == {
+        "deliveryCompletenessMet": True,
+        "onTimeDeliveryMet": True,
+        "missingJobsMet": True,
+        "terminalFailureRateMet": True,
+        "unknownDeliveryMet": True,
+        "overallMet": True,
+    }
 
 
 def test_slo_rejects_duplicate_identity_and_unbounded_windows() -> None:

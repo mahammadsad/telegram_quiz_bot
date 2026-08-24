@@ -25,6 +25,11 @@ def main() -> int:
         action="store_true",
         help="Exit non-zero when the window contains terminal delivery failures.",
     )
+    parser.add_argument(
+        "--fail-on-slo",
+        action="store_true",
+        help="Exit non-zero when any versioned engineering objective is missed.",
+    )
     args = parser.parse_args()
     if args.days not in range(1, 32):
         raise SystemExit("--days must be between 1 and 31")
@@ -43,7 +48,11 @@ def main() -> int:
         end_date=args.end_date,
     )
     print(json.dumps(report, sort_keys=True))
-    return int(bool(args.fail_on_terminal and report["summary"]["terminalFailureJobs"]))
+    terminal_failed = bool(
+        args.fail_on_terminal and report["summary"]["terminalFailureJobs"]
+    )
+    slo_failed = bool(args.fail_on_slo and not report["evaluation"]["overallMet"])
+    return int(terminal_failed or slo_failed)
 
 
 if __name__ == "__main__":

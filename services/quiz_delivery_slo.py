@@ -12,6 +12,10 @@ from config.subjects import QUIZ_SUBJECTS
 _SUBJECT_KEYS = tuple(subject.key for subject in QUIZ_SUBJECTS)
 _ACTIVE = frozenset({"due", "claimed", "generating", "ready", "posting", "retry_wait"})
 _TERMINAL_FAILURE = frozenset({"blocked", "posting_unknown", "dead_letter"})
+SLO_POLICY_VERSION = 1
+DELIVERY_COMPLETENESS_TARGET = 0.99
+ON_TIME_DELIVERY_TARGET = 0.95
+TERMINAL_FAILURE_RATE_LIMIT = 0.01
 
 
 def quiz_delivery_slo_report(
@@ -77,9 +81,27 @@ def quiz_delivery_slo_report(
             "complete": day_statuses["posted"] == len(_SUBJECT_KEYS),
         })
 
+    delivery_rate = _rate(posted, expected)
+    on_time_rate = _rate(on_time, expected)
+    terminal_rate = _rate(terminal, expected)
+    evaluation = {
+        "deliveryCompletenessMet": delivery_rate >= DELIVERY_COMPLETENESS_TARGET,
+        "onTimeDeliveryMet": on_time_rate >= ON_TIME_DELIVERY_TARGET,
+        "missingJobsMet": status_counts["missing"] == 0,
+        "terminalFailureRateMet": terminal_rate <= TERMINAL_FAILURE_RATE_LIMIT,
+        "unknownDeliveryMet": status_counts["posting_unknown"] == 0,
+    }
     return {
         "window": {"start": start_date.isoformat(), "end": end_date.isoformat(), "days": day_count},
         "targets": {"dailySubjects": len(_SUBJECT_KEYS), "onTimeGraceMinutes": int(on_time_grace.total_seconds() // 60)},
+        "objectives": {
+            "policyVersion": SLO_POLICY_VERSION,
+            "deliveryCompletenessRate": DELIVERY_COMPLETENESS_TARGET,
+            "onTimeDeliveryRate": ON_TIME_DELIVERY_TARGET,
+            "terminalFailureRateLimit": TERMINAL_FAILURE_RATE_LIMIT,
+            "missingJobs": 0,
+            "unknownDeliveryJobs": 0,
+        },
         "summary": {
             "expectedJobs": expected,
             "recordedJobs": len(indexed),
@@ -89,9 +111,11 @@ def quiz_delivery_slo_report(
             "terminalFailureJobs": terminal,
             "retryingJobs": retrying,
             "completeDays": sum(1 for value in daily if value["complete"]),
-            "deliveryCompletenessRate": _rate(posted, expected),
-            "onTimeDeliveryRate": _rate(on_time, expected),
+            "deliveryCompletenessRate": delivery_rate,
+            "onTimeDeliveryRate": on_time_rate,
+            "terminalFailureRate": terminal_rate,
         },
+        "evaluation": {**evaluation, "overallMet": all(evaluation.values())},
         "statusCounts": dict(sorted(status_counts.items())),
         "subjects": {
             subject: {

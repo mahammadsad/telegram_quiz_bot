@@ -17,16 +17,29 @@ does not select quiz IDs, content, answers, learner identifiers, worker IDs or
 Telegram message IDs. It is read-only and requires the same explicit Supabase
 project-identity check as other production diagnostics.
 
+Policy version 1 defines non-contractual engineering objectives for every
+rolling report window:
+
+- at least 99% delivery completeness;
+- at least 95% delivery within the 30-minute grace period;
+- no missing durable jobs;
+- no unknown-delivery jobs;
+- terminal failures at or below 1% of expected jobs.
+
+The JSON includes each objective, each pass/fail result and one `overallMet`
+result. These are internal reliability targets, not a public availability SLA.
+
 Run it with production credentials already present in the environment:
 
 ```bash
 python scripts/report_quiz_delivery_slo.py --days 14
 ```
 
-The diagnostic does not fail a release by default because formal availability
-targets have not been approved. Operators may use `--fail-on-terminal` for a
-deliberate incident check. External tracing and an independently monitored alert
-delivery path remain required before this is a complete observability system.
+The diagnostic does not fail a release by default while the platform builds a
+representative baseline. Operators may use `--fail-on-terminal` for a deliberate
+incident check or `--fail-on-slo` to enforce every versioned objective. External
+tracing and an independently monitored alert delivery path remain required before
+this is a complete observability system.
 
 The `Quiz Delivery SLO` workflow runs the same read-only report after the daily
 quiz window and retains the aggregate JSON artifact for 30 days. Its schedule is
