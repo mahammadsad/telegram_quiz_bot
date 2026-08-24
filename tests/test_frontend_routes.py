@@ -133,6 +133,9 @@ def test_syllabus_map_is_external_asset_only_and_linked_from_learning_surfaces()
     assert '<script src="syllabus.js"></script>' in html
     assert "<script>" not in html
     assert 'fetcher(api("/api/syllabus")' in script
+    assert 'api("/api/me/syllabus-progress")' in script
+    assert '"X-Telegram-Init-Data":initData' in script
+    assert 'id="personal-progress"' in html
     assert "innerHTML" not in script
     assert "syllabus.html" in CLIENT.get("/dashboard.html").text
     assert "syllabus.html" in CLIENT.get("/mock.html").text

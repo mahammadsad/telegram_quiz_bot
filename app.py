@@ -59,6 +59,7 @@ from services import (
     readiness_service,
     resource_quality_service,
     syllabus_catalog_service,
+    syllabus_progress_service,
     test_attempts_service,
 )
 from storage import stats_repo, users_repo
@@ -327,6 +328,7 @@ app.include_router(
 app.include_router(
     build_learner_router(
         learning_service=personal_learning_service,
+        syllabus_progress_service=syllabus_progress_service,
         moderation_service=question_moderation_service,
         privacy_service=privacy_service,
         read_user=_telegram_user_from_init_data,

@@ -569,6 +569,44 @@ async function installApiMocks(page, options = {}) {
       });
     }
 
+    if (path === "/api/me/syllabus-progress" && method === "GET") {
+      return json({
+        version: 1,
+        criteria: {
+          unit: "mapped_knowledge_point",
+          masteryScoreAtLeast: 80,
+          attemptsAtLeast: 2,
+          diagnosticClaim: false,
+        },
+        summary: {
+          mappedKnowledgePoints: 8,
+          attemptedKnowledgePoints: 5,
+          masteredKnowledgePoints: 3,
+          dueKnowledgePoints: 1,
+          coveragePercent: 62.5,
+          masteryPercent: 37.5,
+        },
+        subjects: [
+          {
+            key: "history",
+            masteryPercent: 50,
+            chapters: [
+              {
+                key: "history:modern-india",
+                microTopics: [
+                  { key: "history:modern-india:t01", status: "mastered", dueKnowledgePoints: 0 },
+                  { key: "history:modern-india:t02", status: "in_progress", dueKnowledgePoints: 1 },
+                  { key: "history:modern-india:t03", status: "not_started", dueKnowledgePoints: 0 },
+                  { key: "history:modern-india:t04", status: "content_not_mapped", dueKnowledgePoints: 0 },
+                ],
+              },
+            ],
+          },
+          { key: "geography", masteryPercent: 25, chapters: [] },
+        ],
+      });
+    }
+
     if (path === `/api/quiz/${QUIZ_ID}` && method === "GET") {
       if (options.quizLoadDelayMs) {
         await new Promise((resolve) => setTimeout(resolve, options.quizLoadDelayMs));

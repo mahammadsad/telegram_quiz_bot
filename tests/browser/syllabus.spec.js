@@ -18,6 +18,10 @@ test("syllabus map exposes the reviewed hierarchy and honest availability", asyn
 
   await expect(page.locator("#catalog .subject-card")).toHaveCount(2);
   await expect(page.locator("#summary")).toContainText("২টি বিষয়");
+  await expect(page.locator("#personal-progress")).toBeVisible();
+  await expect(page.locator("#progress-copy")).toContainText("৫ / ৮টি");
+  await expect(page.locator(".topic-progress.mastered")).toContainText("আয়ত্ত");
+  await expect(page.locator(".topic-progress.in-progress")).toContainText("পুনরাবৃত্তি");
   await expect(page.locator(".chapter").first()).toContainText("দৈনিক কুইজে আছে");
   await expect(page.locator(".chapter").nth(1)).toContainText("সিলেবাসে আছে");
 
@@ -46,4 +50,14 @@ test("syllabus map provides a recoverable empty filter state", async ({ page }) 
   await expect(page.locator("#empty")).toBeVisible();
   await page.locator("#clear-filters").click();
   await expect(page.locator("#catalog .subject-card")).toHaveCount(2);
+});
+
+test("public syllabus discovery does not invent private progress", async ({ page }) => {
+  await installTelegramMock(page, { requireLaunchHash: true });
+  await installApiMocks(page);
+  await page.goto("/syllabus.html");
+
+  await expect(page.locator("#catalog .subject-card")).toHaveCount(2);
+  await expect(page.locator("#personal-progress")).toBeHidden();
+  await expect(page.locator(".topic-progress")).toHaveCount(0);
 });

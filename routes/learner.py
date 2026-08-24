@@ -22,6 +22,7 @@ from telegram.auth import TelegramAuthError
 def build_learner_router(
     *,
     learning_service: Any,
+    syllabus_progress_service: Any,
     moderation_service: Any,
     privacy_service: Any,
     read_user: Callable[[str], dict],
@@ -51,6 +52,14 @@ def build_learner_router(
     @router.get("/dashboard")
     def dashboard(init_data: str = Header(default="", alias="X-Telegram-Init-Data")) -> dict:
         return read(learning_service.dashboard, init_data, "ব্যক্তিগত ড্যাশবোর্ড এখন খোলা যাচ্ছে না।")
+
+    @router.get("/syllabus-progress")
+    def syllabus_progress(init_data: str = Header(default="", alias="X-Telegram-Init-Data")) -> dict:
+        return read(
+            syllabus_progress_service.syllabus_progress,
+            init_data,
+            "সিলেবাস অগ্রগতি এখন লোড করা যাচ্ছে না।",
+        )
 
     @router.get("/question-reports")
     def report_statuses(
