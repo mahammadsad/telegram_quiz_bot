@@ -52,7 +52,7 @@ def failures() -> list[str]:
         if not path.is_file():
             problems.append(f"missing:{path.name}")
             continue
-        observed = hashlib.md5(path.read_bytes()).hexdigest()  # noqa: S324
+        observed = hashlib.md5(path.read_bytes(), usedforsecurity=False).hexdigest()
         if observed != expected_md5:
             problems.append(f"source_mismatch:{path.name}")
     problems.extend(missing_references())
