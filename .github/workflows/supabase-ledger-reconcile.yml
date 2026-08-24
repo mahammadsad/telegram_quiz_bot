@@ -1,0 +1,96 @@
+name: Reconcile Production Supabase Ledger
+
+on:
+  workflow_dispatch:
+    inputs:
+      safety_ack:
+        description: Enter RECONCILE VERIFIED LEDGER FOR tizxodkcpglmxgtwepor
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-supabase-migrations
+  cancel-in-progress: false
+
+jobs:
+  reconcile-ledger:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production
+    env:
+      EXPECTED_SUPABASE_PROJECT_REF: tizxodkcpglmxgtwepor
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      INPUT_SAFETY_ACK: ${{ inputs.safety_ack }}
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Fail-closed production identity and verified-version gate
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          from pathlib import Path
+
+          expected_ref = "tizxodkcpglmxgtwepor"
+          expected_ack = f"RECONCILE VERIFIED LEDGER FOR {expected_ref}"
+          verified_versions = (
+              "20260820090000",
+              "20260820100000",
+              "20260820110000",
+              "20260820120000",
+              "20260821090000",
+              "20260821091000",
+              "20260821100000",
+              "20260821101000",
+          )
+          if os.environ.get("EXPECTED_SUPABASE_PROJECT_REF") != expected_ref:
+              raise SystemExit("Refusing reconciliation: production project ref is not exact.")
+          if os.environ.get("INPUT_SAFETY_ACK") != expected_ack:
+              raise SystemExit("Refusing reconciliation: acknowledgement is not exact.")
+          if not os.environ.get("SUPABASE_ACCESS_TOKEN") or not os.environ.get("SUPABASE_DB_PASSWORD"):
+              raise SystemExit("Refusing reconciliation: production credentials are unavailable.")
+          local_versions = {path.name[:14] for path in Path("supabase/migrations").glob("*.sql")}
+          if set(verified_versions) - local_versions:
+              raise SystemExit("Refusing reconciliation: a verified migration source is missing.")
+          print("Production identity and exact verified-version gate passed.")
+          PY
+
+      - name: Verify recovered production migration source equivalence
+        run: python scripts/check_migration_ledger_sources.py
+
+      - name: Link the exact production project for this ephemeral runner
+        run: >-
+          npx --yes supabase@2.77.0 link
+          --project-ref "$EXPECTED_SUPABASE_PROJECT_REF"
+          --password "$SUPABASE_DB_PASSWORD"
+          --yes
+
+      - name: Mark independently verified schema-equivalent versions as applied
+        run: >-
+          npx --yes supabase@2.77.0 migration repair
+          20260820090000
+          20260820100000
+          20260820110000
+          20260820120000
+          20260821090000
+          20260821091000
+          20260821100000
+          20260821101000
+          --status applied
+          --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Compare local and production migration ledgers after reconciliation
+        run: >-
+          npx --yes supabase@2.77.0 migration list
+          --linked --password "$SUPABASE_DB_PASSWORD"
+
+      - name: Prove the remaining migration plan without changing schema
+        run: >-
+          npx --yes supabase@2.77.0 db push
+          --password "$SUPABASE_DB_PASSWORD"
+          --include-all --dry-run --yes

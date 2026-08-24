@@ -266,6 +266,43 @@ def test_production_migration_plan_is_manual_and_read_only() -> None:
     assert "push:" not in source
 
 
+def test_production_ledger_reconciliation_is_exact_and_schema_read_only() -> None:
+    path = WORKFLOW_DIR / "supabase-ledger-reconcile.yml"
+    workflow = _load_yaml(path)
+    trigger = workflow.get("on") or workflow.get(True)
+    assert set(trigger) == {"workflow_dispatch"}
+    assert workflow["permissions"] == {"contents": "read"}
+    assert workflow["concurrency"] == {
+        "group": "production-supabase-migrations",
+        "cancel-in-progress": False,
+    }
+
+    job = workflow["jobs"]["reconcile-ledger"]
+    assert job["environment"] == "production"
+    assert job["env"]["EXPECTED_SUPABASE_PROJECT_REF"] == PRODUCTION_PROJECT_REF
+    for name in ("SUPABASE_ACCESS_TOKEN", "SUPABASE_DB_PASSWORD"):
+        assert job["env"][name] == f"${{{{ secrets.{name} }}}}"
+
+    source = path.read_text(encoding="utf-8")
+    assert "RECONCILE VERIFIED LEDGER FOR {expected_ref}" in source
+    assert "supabase@2.77.0 migration repair" in source
+    assert "--status applied" in source
+    for version in (
+        "20260820090000",
+        "20260820100000",
+        "20260820110000",
+        "20260820120000",
+        "20260821090000",
+        "20260821091000",
+        "20260821100000",
+        "20260821101000",
+    ):
+        assert source.count(version) == 2
+    assert "--include-all --dry-run --yes" in source
+    assert "schedule:" not in source
+    assert "push:" not in source
+
+
 def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> None:
     static_path = WORKFLOW_DIR / "source-rollout.yml"
     static = _load_yaml(static_path)
