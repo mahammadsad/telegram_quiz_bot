@@ -5,8 +5,8 @@ browser always submits `false`, and the authenticated API rejects a crafted
 `true` value. No user should appear opted in before private-message delivery is
 safe and operational.
 
-Reminder delivery may be enabled only after an additive, reviewed data contract
-provides all of these controls:
+Migration `20260824033823_durable_reminder_consent_delivery.sql` now provides
+the durable data contract and keeps `deliveryEnabled: false`. It includes:
 
 - explicit opt-in timestamp, policy version, source, and immediate opt-out;
 - learner timezone plus quiet-hour start/end, with a conservative default;
@@ -19,7 +19,7 @@ provides all of these controls:
 - aggregate sent/delivered/failed/opt-out metrics without message bodies;
 - a dry-run, synthetic-account canary and alerting before any real-user send.
 
-The current production migration ledger is not reconciled, so the required
-durable consent and delivery schema must not be added or applied as a shortcut.
-The reminder remains unavailable until that prerequisite and a reliable
-scheduler are both resolved.
+The reminder remains unavailable in the UI and API until the migration is
+deployed, a reliable scheduler is funded and selected, the worker implements
+the lease/completion contract, and a synthetic private-message canary passes.
+No real-user delivery may be enabled merely because the schema exists.

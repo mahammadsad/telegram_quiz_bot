@@ -38,7 +38,7 @@ jobs:
           import os
           from pathlib import Path
 
-          from database.contract import LEARNER_REPORT_STATUS_PROJECTION_MIGRATION_VERSION
+          from database.contract import REMINDER_DELIVERY_MIGRATION_VERSION
 
           expected_ref = "tizxodkcpglmxgtwepor"
           expected_ack = f"APPLY TRACKED MIGRATIONS TO {expected_ref}"
@@ -60,8 +60,8 @@ jobs:
           if missing:
               raise SystemExit("Refusing migration: required production credentials are unavailable.")
           migration = Path("supabase/migrations") / (
-              f"{LEARNER_REPORT_STATUS_PROJECTION_MIGRATION_VERSION}_"
-              "learner_report_status_projection.sql"
+              f"{REMINDER_DELIVERY_MIGRATION_VERSION}_"
+              "durable_reminder_consent_delivery.sql"
           )
           if not migration.is_file():
               raise SystemExit("Refusing migration: expected reviewed migration is missing.")
@@ -128,4 +128,49 @@ jobs:
           if not isinstance(payload, dict) or not {"items", "total", "limit", "offset"} <= payload.keys():
               raise SystemExit("Migration verification returned an unexpected projection payload.")
           print("Learner report status projection is callable.")
+          PY
+
+      - name: Verify reminder delivery contract remains disabled
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import time
+          from urllib.error import HTTPError
+          from urllib.request import Request, urlopen
+
+          url = os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1/rpc/get_reminder_delivery_contract"
+          request = Request(
+              url,
+              data=b"{}",
+              headers={
+                  "apikey": os.environ["SUPABASE_SERVICE_KEY"],
+                  "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_KEY']}",
+                  "Content-Type": "application/json",
+              },
+              method="POST",
+          )
+          payload = None
+          for attempt in range(6):
+              try:
+                  with urlopen(request, timeout=15) as response:
+                      payload = json.loads(response.read().decode("utf-8"))
+                  break
+              except HTTPError as error:
+                  if error.code != 404 or attempt == 5:
+                      raise
+                  time.sleep(5)
+          expected = {
+              "ready": True,
+              "migrationVersion": "20260824033823",
+              "consentPolicyVersion": "reminder-consent-v1",
+              "deliveryEnabled": False,
+              "answerFreePayload": True,
+              "maxAttempts": 5,
+              "maxClaimBatch": 100,
+          }
+          if payload != expected:
+              raise SystemExit("Reminder delivery contract is not exact or is unexpectedly enabled.")
+          print("Reminder delivery contract is ready and real delivery remains disabled.")
           PY

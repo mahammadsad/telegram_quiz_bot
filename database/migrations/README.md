@@ -12,7 +12,7 @@ New migrations use the Supabase CLI timestamp convention and live in
    `001` through `003` for an existing project that has not run them.
 2. Every `supabase/migrations/*.sql` file in filename/timestamp order. The
    latest additive migration is
-   `20260823065257_learner_report_status_projection.sql`; the scheduler's
+   `20260824033823_durable_reminder_consent_delivery.sql`; the scheduler's
    fail-closed platform contract remains
    `20260822190025_platform_contract_v1.sql`. Existing hosted projects
    apply only ledger entries they have not already applied.

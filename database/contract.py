@@ -34,6 +34,7 @@ ADVISOR_HARDENING_MIGRATION_VERSION = "20260821091000"
 POST_UNKNOWN_RECOVERY_MIGRATION_VERSION = "20260821101000"
 PLATFORM_CONTRACT_MIGRATION_VERSION = "20260822190025"
 LEARNER_REPORT_STATUS_PROJECTION_MIGRATION_VERSION = "20260823065257"
+REMINDER_DELIVERY_MIGRATION_VERSION = "20260824033823"
 PLATFORM_CONTRACT_KEY = "telegram_quiz_platform"
 PLATFORM_CONTRACT_VERSION = "1.0.0"
 PLATFORM_CONTRACT_REQUIRED_CHECKS = (
@@ -57,7 +58,6 @@ PLATFORM_CONTRACT_REQUIRED_CHECKS = (
     "advisorHardening",
     "postUnknownRecovery",
 )
-# This is an additive, non-readiness-gating learner feature.  The platform
-# contract remains at its established fail-closed scheduler gate so a delayed
-# status projection rollout cannot interrupt quiz publication.
-LATEST_MIGRATION_VERSION = LEARNER_REPORT_STATUS_PROJECTION_MIGRATION_VERSION
+# Later additive learner features do not replace the established fail-closed
+# scheduler platform contract. Their rollout must not interrupt quiz posting.
+LATEST_MIGRATION_VERSION = REMINDER_DELIVERY_MIGRATION_VERSION

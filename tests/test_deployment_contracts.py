@@ -234,6 +234,9 @@ def test_production_migration_workflow_is_manual_and_fail_closed() -> None:
     assert '--project-ref "$EXPECTED_SUPABASE_PROJECT_REF"' in source
     assert "--dry-run" in source
     assert "get_my_question_report_statuses" in source
+    assert "get_reminder_delivery_contract" in source
+    assert "deliveryEnabled" in source
+    assert "REMINDER_DELIVERY_MIGRATION_VERSION" in source
     assert "schedule:" not in source
     assert "push:" not in source
 
