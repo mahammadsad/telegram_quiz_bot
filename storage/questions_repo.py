@@ -216,7 +216,9 @@ def get_generation_exclusions(subject: str, limit: int = 240) -> list[Row]:
         .table("questions")
         .select(
             "question_text,option_a,option_b,option_c,option_d,correct_option,"
-            "topic,micro_topic_key,created_at,last_used_at"
+            "topic,micro_topic_key,created_at,last_used_at,"
+            "knowledge_point:knowledge_points!questions_knowledge_point_id_fkey("
+            "entity_key,relation_key,answer_value)"
         )
         .eq("subject", subject)
         .order("created_at", desc=True)

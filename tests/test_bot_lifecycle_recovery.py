@@ -956,10 +956,47 @@ def test_generation_prompt_requires_normalized_option_values_to_be_distinct():
 
 def test_generation_repair_has_specific_batch_wide_duplicate_and_balance_guidance():
     duplicate = bot._repair_generation_prompt("base", "duplicate_question")
+    duplicate_fact = bot._repair_generation_prompt("base", "duplicate_fact")
     balance = bot._repair_generation_prompt("base", "answer_position_balance")
 
     assert "ten distinct relationships" in duplicate
+    assert "identity tuples pairwise" in duplicate_fact
     assert "Recalculate every correct_index" in balance
+    assert "entity-relation-answer tuples pairwise" in bot._repair_generation_prompt(
+        "base", "micro_topic"
+    )
+
+
+def test_recent_generation_exclusions_include_canonical_knowledge_identity(monkeypatch):
+    monkeypatch.setattr(
+        bot.questions_repo,
+        "get_generation_exclusions",
+        lambda _subject: [{
+            "question_text": "পুরনো প্রশ্ন",
+            "option_a": "ক",
+            "option_b": "খ",
+            "option_c": "গ",
+            "option_d": "ঘ",
+            "correct_option": "B",
+            "topic": "অধ্যায়",
+            "micro_topic_key": "reasoning:topic:t01",
+            "knowledge_point": {
+                "entity_key": "entity",
+                "relation_key": "relation",
+                "answer_value": "answer",
+            },
+        }],
+    )
+
+    assert bot._recent_generation_exclusions("reasoning") == [{
+        "question": "পুরনো প্রশ্ন",
+        "answer": "খ",
+        "chapter": "অধ্যায়",
+        "micro_topic_key": "reasoning:topic:t01",
+        "knowledge_entity": "entity",
+        "knowledge_relation": "relation",
+        "knowledge_answer_value": "answer",
+    }]
 
 
 def _ready_phase_e3_contract() -> dict:

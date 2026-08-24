@@ -165,6 +165,11 @@ _VALIDATION_REPAIR_HINTS = {
         "Replace every repeated or paraphrased stem and repeated entity-relation-answer tuple. "
         "The ten questions must test ten distinct relationships, not ten wordings of fewer facts."
     ),
+    "duplicate_fact": (
+        "Replace every repeated entity-relation-answer tuple across the full batch, including "
+        "inverse or paraphrased stems that still test the same fact. Compare all ten canonical "
+        "identity tuples pairwise before returning."
+    ),
     "option_pattern_leakage": (
         "Make all four options use the same visible answer type and script pattern; "
         "the correct option must not be the only numeric, Latin, Bengali, or mixed-script option."
@@ -199,7 +204,7 @@ Internal subject: {subject.internal_subject}
 Chapter: {chapter}
 Available curated micro-topics:
 {json.dumps(available_topics, ensure_ascii=False, separators=(",", ":"))}
-Recent questions that MUST NOT be repeated or paraphrased (JSON):
+Recent questions and canonical identities that MUST NOT be repeated or paraphrased (JSON):
 {json.dumps(exclusions, ensure_ascii=False, separators=(",", ":"))}
 
 Rules:
@@ -252,12 +257,17 @@ def _recent_generation_exclusions(subject_key: str) -> list[dict]:
     for row in rows:
         letter = str(row.get("correct_option") or "")
         answer = row.get(f"option_{letter.lower()}") if letter in "ABCD" else ""
+        knowledge = row.get("knowledge_point")
+        identity = knowledge if isinstance(knowledge, dict) else {}
         result.append(
             {
                 "question": row.get("question_text"),
                 "answer": answer,
                 "chapter": row.get("topic"),
                 "micro_topic_key": row.get("micro_topic_key"),
+                "knowledge_entity": identity.get("entity_key"),
+                "knowledge_relation": identity.get("relation_key"),
+                "knowledge_answer_value": identity.get("answer_value"),
             }
         )
     return result
@@ -284,6 +294,8 @@ def _repair_generation_prompt(prompt: str, reason_code: str) -> str:
         + reason_code
         + ". "
         + repair_hint
+        + " Independently re-check all ten canonical entity-relation-answer tuples pairwise and "
+        + "replace any repeated fact even when the failed code names a different rule."
         + " Generate one complete replacement array under the same evidence and syllabus rules. "
         + "Re-check every numbered rule before returning it. Do not return a partial "
         + "patch, commentary, or the previous response."
