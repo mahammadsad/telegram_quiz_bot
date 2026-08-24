@@ -859,6 +859,9 @@ def language_candidate(subject: str) -> dict:
 
 def test_english_language_form_requires_versioned_source_rule() -> None:
     candidate = language_candidate("english")
+    candidate["language_verification"]["review_status"] = "source_proved"
+    candidate["language_verification"]["translation_status"] = "not_applicable"
+    candidate.pop("language_human_review")
 
     result = verify_candidate(candidate)
 

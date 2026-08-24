@@ -358,6 +358,18 @@ def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
             "Use four genuinely different options in one consistent visible representation and script; "
             "do not mix numeric digits with number words or add labels to only some options."
         )
+    if rejection_codes & {
+        "language_evidence_invalid",
+        "language_review_invalid",
+        "language_review_required",
+        "translation_review_required",
+    }:
+        guidance.append(
+            "For English or Bengali language questions, use review_status source_proved, copy an "
+            "exact source_span from the supplied fact, set uncertain false, and set "
+            "translation_status not_applicable. Do not generate translation-form candidates; "
+            "translation requires a separate real operator attestation."
+        )
     tailored = " " + " ".join(guidance) if guidance else ""
     return (
         prompt
@@ -398,6 +410,10 @@ human_reviewed, uncertain boolean, and translation_status. Generated content mus
 claim human_reviewed: that state requires a separate server-side operator attestation.
 Mark uncertain Bengali and unreviewed translation as review-required so the verifier
 rejects them with the human-review reason. Never use model confidence as language proof.
+Automated batches must not use the Bengali translation form. For every non-translation
+form set translation_status to not_applicable; bilingual Bengali instructions around an
+English grammar, vocabulary, comprehension, or error-detection item do not by themselves
+turn that item into a translation claim.
 For other subjects use language_question_form generic_fact and
 language_verification_json {{}}.
 

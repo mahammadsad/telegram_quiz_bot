@@ -164,13 +164,20 @@ def test_replenishment_retry_backoff_is_capped() -> None:
 def test_repair_prompt_gives_static_code_specific_guidance() -> None:
     prompt = content_replenishment_service._candidate_repair_prompt(
         "base",
-        {"math_family_unsupported", "answer_not_unique", "option_pattern_leakage"},
+        {
+            "math_family_unsupported",
+            "answer_not_unique",
+            "option_pattern_leakage",
+            "translation_review_required",
+        },
     )
 
     assert "never invent a geometry" in prompt
     assert "gcd_lcm" in prompt
     assert "none of the three distractor values" in prompt
     assert "one consistent visible representation" in prompt
+    assert "translation_status not_applicable" in prompt
+    assert "separate real operator attestation" in prompt
 
 
 def test_replenishment_preserves_verified_candidates_and_logs_hash_only(monkeypatch, valid_questions):
@@ -229,6 +236,7 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
     assert "ordering_constraints" in prompt
     assert "syllogism_finite_sets" in prompt
     assert "uncertain bengali" in prompt.lower()
+    assert "must not use the Bengali translation form" in prompt
 
 
 def test_replenishment_repairs_a_fully_rejected_batch_without_weakening_checks(monkeypatch, valid_questions) -> None:

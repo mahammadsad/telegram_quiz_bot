@@ -327,8 +327,7 @@ def _verify_subject_language_contract(
             "language_review_required",
             "Uncertain Bengali language content must enter human review.",
         )
-    language = str(candidate.get("language") or "").lower()
-    if (form == "translation" or language == "bn-en") and (
+    if form == "translation" and (
         verification.get("translation_status") != "human_reviewed" or not human_reviewed
     ):
         raise DeterministicVerificationError(
