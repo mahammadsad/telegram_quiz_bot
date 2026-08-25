@@ -141,9 +141,9 @@ def _candidate_schema(subject_key: str) -> dict[str, Any]:
         }
     proof_families: tuple[str, ...]
     if subject_key == "mathematics":
-        proof_families = MATHEMATICS_PROOF_FAMILIES
+        proof_families = (*MATHEMATICS_PROOF_FAMILIES, "evidence_span_single_answer")
     elif subject_key == "reasoning":
-        proof_families = REASONING_PROOF_FAMILIES
+        proof_families = (*REASONING_PROOF_FAMILIES, "evidence_span_single_answer")
     else:
         proof_families = ("evidence_span_single_answer",)
     properties["proof_family"]["enum"] = list(proof_families)
@@ -510,6 +510,7 @@ def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
     if rejection_codes & {
         "language_form_invalid",
         "language_evidence_invalid",
+        "language_uncertainty_invalid",
         "language_review_invalid",
         "language_review_required",
         "translation_review_required",
@@ -544,9 +545,13 @@ def _candidate_prompt(
         LANGUAGE_QUESTION_FORMS.get(subject_key, ("generic_fact",))
     )
     if subject_key == "mathematics":
-        required_proofs = ", ".join(MATHEMATICS_PROOF_FAMILIES)
+        required_proofs = ", ".join(
+            (*MATHEMATICS_PROOF_FAMILIES, "evidence_span_single_answer")
+        )
     elif subject_key == "reasoning":
-        required_proofs = ", ".join(REASONING_PROOF_FAMILIES)
+        required_proofs = ", ".join(
+            (*REASONING_PROOF_FAMILIES, "evidence_span_single_answer")
+        )
     else:
         required_proofs = "evidence_span_single_answer"
     return f"""Create exactly {batch_size} independent Bengali MCQ candidates for verified inventory.
@@ -583,17 +588,20 @@ turn that item into a translation claim.
 For other subjects use language_question_form generic_fact and
 language_verification_json {{}}.
 
-For mathematics and reasoning, also return a supported proof_family,
+For a mathematics or reasoning calculation/puzzle, return a supported solver proof_family,
 proof_parameters_json containing only machine-readable inputs (never a claimed answer),
 four proof_option_values, proof_explanation_values containing the exact deterministic
 solution trace, and proof_explanation_conclusion equal to the displayed proved option.
-Set proof_evidence_span to an empty string for mathematics and reasoning.
+Set proof_evidence_span to an empty string for solver-backed calculations and puzzles.
 Use proof_option_units for all four options when the family has a unit; otherwise use
 four empty strings. Supported mathematics families are
 {", ".join(MATHEMATICS_PROOF_FAMILIES)}.
 Supported reasoning families are
 {", ".join(REASONING_PROOF_FAMILIES)}. Unsupported or
-under-constrained questions are forbidden.
+under-constrained questions are forbidden. A conceptual mathematics or reasoning question
+whose answer is stated explicitly in a supplied fact may instead use
+evidence_span_single_answer and the exact evidence-span contract below; never fabricate
+numeric inputs merely to force a solver family.
 Use these exact parameter objects: arithmetic_expression has values and operators;
 percentage_of has base and percent; average has values; ratio_share has total,
 left_ratio, right_ratio, and requested (left or right); simple_interest has principal,
@@ -649,7 +657,7 @@ value; alternating_arithmetic_series_next has six to twelve values whose even-in
 and odd-indexed subsequences each have a constant step, at least one non-zero, and
 traces the even step, odd step, then next value. Use ASCII numeric proof values
 even when displayed options use Bengali digits.
-For every other subject, use proof_family evidence_span_single_answer, copy the four
+For every evidence-backed question, use proof_family evidence_span_single_answer, copy the four
 canonical source-language values aligned positionally with the four displayed options
 to proof_option_values and proof_evidence_values, and set the conclusion to the displayed
 correct option. The correct indexed proof value and knowledge_answer_value must copy the
@@ -727,12 +735,61 @@ def _enrich(
                 "evidence_summary": source.fact_summary if source else "",
                 "fact_version": source.fact_version if source else "",
                 "language": item.get("language") or ("bn-en" if subject_key == "english" else "bn"),
-                "language_question_form": item.get("language_question_form"),
-                "language_verification": _json_object(item.get("language_verification_json")),
+                "language_question_form": _normalized_language_form(
+                    item.get("language_question_form"), subject_key
+                ),
+                "language_verification": _language_verification_from_item(
+                    item, subject_key, source
+                ),
                 "deterministic_proof": _proof_from_item(item),
             }
         )
     return enriched
+
+
+def _normalized_language_form(value: Any, subject_key: str) -> str:
+    normalized = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
+    aliases = {
+        "grammar": "grammar_rule",
+        "grammar_question": "grammar_rule",
+        "vocabulary_question": "vocabulary",
+        "reading_comprehension": "comprehension",
+        "error_detection_question": "error_detection",
+        "literature_fact": "literature",
+        "literary": "literature",
+        "linguistic": "linguistics",
+    }
+    candidate = aliases.get(normalized, normalized)
+    allowed = LANGUAGE_QUESTION_FORMS.get(subject_key, ("generic_fact",))
+    return candidate if candidate in allowed else normalized
+
+
+def _language_verification_from_item(
+    item: dict[str, Any],
+    subject_key: str,
+    source: SourceDocument | None,
+) -> dict[str, Any] | None:
+    artifact = _json_object(item.get("language_verification_json"))
+    if subject_key not in LANGUAGE_QUESTION_FORMS or not source:
+        return artifact
+    span = str(item.get("proof_evidence_span") or "").strip()
+    if not span or span not in source.fact_summary:
+        return artifact
+    derived = dict(artifact or {})
+    derived.update(
+        {
+            "version": 1,
+            "authority_type": (
+                source.kind if source.kind in {"official", "primary"} else "reviewed_reference"
+            ),
+            "rule_id": "source-span-"
+            + hashlib.sha256(f"{source.id}\0{span}".encode()).hexdigest()[:24],
+            "source_span": span,
+            "review_status": "source_proved",
+            "translation_status": "not_applicable",
+        }
+    )
+    return derived
 
 
 def _proof_from_item(item: dict[str, Any]) -> dict[str, Any] | None:

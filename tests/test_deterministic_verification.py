@@ -80,6 +80,20 @@ def test_mathematics_solver_proves_one_answer() -> None:
 
     assert result.family == "percentage_of"
     assert result.expected_answer == "২৫"
+
+
+def test_mathematics_concept_can_use_exact_source_evidence() -> None:
+    candidate = evidence_candidate()
+    candidate["subject_key"] = "mathematics"
+    candidate["deterministic_proof"].update(
+        family="evidence_span_single_answer",
+        evidence_span="পশ্চিমবঙ্গের রাজধানী কলকাতা",
+    )
+
+    result = verify_candidate(candidate)
+
+    assert result.family == "evidence_span_single_answer"
+    assert result.expected_answer == candidate["options"][candidate["correct_index"]]
     assert result.checks["unique_answer_proved"] is True
 
 
@@ -940,6 +954,16 @@ def test_uncertain_english_routes_to_human_review() -> None:
         verify_candidate(candidate)
 
     assert raised.value.code == "language_review_required"
+
+
+def test_language_verification_requires_explicit_uncertainty() -> None:
+    candidate = language_candidate("english")
+    candidate["language_verification"].pop("uncertain")
+
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+
+    assert raised.value.code == "language_uncertainty_invalid"
 
 
 def test_translation_correctness_is_separate_from_factual_proof() -> None:

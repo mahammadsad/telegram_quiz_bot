@@ -117,14 +117,14 @@ def verify_candidate(
 
     family = str(proof.get("family") or "").strip()
     solved: _SolvedValue
-    if subject == "mathematics":
-        solved = _solve_mathematics(family, proof.get("parameters"))
-    elif subject == "reasoning":
-        solved = _solve_reasoning(family, proof.get("parameters"))
-    elif family == "evidence_single_answer":
+    if family == "evidence_single_answer":
         solved = _SolvedValue(_solve_evidence(candidate, proof), ())
     elif family == "evidence_span_single_answer":
         solved = _SolvedValue(_solve_evidence_span(candidate, proof), ())
+    elif subject == "mathematics":
+        solved = _solve_mathematics(family, proof.get("parameters"))
+    elif subject == "reasoning":
+        solved = _solve_reasoning(family, proof.get("parameters"))
     else:
         raise DeterministicVerificationError(
             "proof_family_unsupported",
@@ -152,7 +152,10 @@ def verify_candidate(
             "The declared answer disagrees with the deterministic solver.",
         )
 
-    if subject in {"mathematics", "reasoning"}:
+    if subject in {"mathematics", "reasoning"} and family not in {
+        "evidence_single_answer",
+        "evidence_span_single_answer",
+    }:
         _verify_explanation_values(proof, solved.explanation_values)
     if solved.unit is not None:
         _verify_option_units(proof, solved.unit)
@@ -311,7 +314,13 @@ def _verify_subject_language_contract(
             "The language rule is not anchored to the supplied authoritative source span.",
         )
     review_status = str(verification.get("review_status") or "")
-    uncertain = verification.get("uncertain") is True
+    raw_uncertain = verification.get("uncertain")
+    if not isinstance(raw_uncertain, bool):
+        raise DeterministicVerificationError(
+            "language_uncertainty_invalid",
+            "Language verification requires an explicit uncertainty decision.",
+        )
+    uncertain = raw_uncertain
     if review_status not in {"source_proved", "human_reviewed"}:
         raise DeterministicVerificationError(
             "language_review_invalid", "Language review status is missing or unsupported."
