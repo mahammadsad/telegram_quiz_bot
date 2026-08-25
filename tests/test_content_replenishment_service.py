@@ -167,6 +167,7 @@ def test_repair_prompt_gives_static_code_specific_guidance() -> None:
         {
             "math_family_unsupported",
             "answer_not_unique",
+            "answer_leakage",
             "option_pattern_leakage",
             "translation_review_required",
             "language_form_invalid",
@@ -177,6 +178,7 @@ def test_repair_prompt_gives_static_code_specific_guidance() -> None:
     assert "never invent a geometry" in prompt
     assert "gcd_lcm" in prompt
     assert "none of the three distractor values" in prompt
+    assert "correct option text in the question stem" in prompt
     assert "one consistent visible representation" in prompt
     assert "translation_status not_applicable" in prompt
     assert "language_question_form must be exactly" in prompt
@@ -239,6 +241,14 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
         "proof_explanation_values",
         "proof_evidence_span",
     } <= required
+    base_properties = content_replenishment_service.CANDIDATE_JSON_SCHEMA["items"][
+        "properties"
+    ]
+    assert base_properties["options"]["minItems"] == 4
+    assert base_properties["options"]["maxItems"] == 4
+    assert base_properties["correct_index"]["minimum"] == 0
+    assert base_properties["correct_index"]["maximum"] == 3
+    assert base_properties["difficulty"]["enum"] == ["easy", "medium", "hard"]
 
     prompt = content_replenishment_service._candidate_prompt("history", "আধুনিক ভারত", grounding(valid_questions), 3)
     assert "algebra_linear" in prompt

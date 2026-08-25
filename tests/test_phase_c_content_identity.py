@@ -125,6 +125,21 @@ def test_nine_valid_candidates_survive_one_rejection(valid_questions) -> None:
     }]
 
 
+def test_candidate_answer_leakage_has_actionable_rejection_code(valid_questions) -> None:
+    candidate = deepcopy(valid_questions[0])
+    answer = candidate["options"][candidate["correct_index"]]
+    candidate["question"] = f"{answer} উত্তরটি কোন বিকল্পে লেখা আছে?"
+
+    accepted, rejected = validate_question_candidates(
+        [candidate],
+        "history",
+        "আধুনিক ভারত",
+    )
+
+    assert accepted == []
+    assert rejected[0]["code"] == "answer_leakage"
+
+
 def test_identity_rejects_incomplete_semantic_fields() -> None:
     with pytest.raises(ValueError, match="non-empty"):
         knowledge_key(

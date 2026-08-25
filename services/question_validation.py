@@ -477,6 +477,7 @@ def validate_question_candidates(
 def _candidate_rejection_code(message: str) -> str:
     clean = message.lower()
     checks = (
+        ("reveals its correct answer", "answer_leakage"),
         ("source", "source_invalid"),
         ("verification", "verification_failed"),
         ("correct index", "answer_invalid"),
@@ -486,6 +487,9 @@ def _candidate_rejection_code(message: str) -> str:
         ("another chapter", "chapter_mismatch"),
         ("micro-topic", "micro_topic_invalid"),
         ("truncated", "content_truncated"),
+        ("invalid difficulty", "difficulty_invalid"),
+        ("explanation", "explanation_invalid"),
+        ("blank or duplicated", "question_duplicate"),
         ("bengali", "language_invalid"),
     )
     return next((code for fragment, code in checks if fragment in clean), "content_invalid")

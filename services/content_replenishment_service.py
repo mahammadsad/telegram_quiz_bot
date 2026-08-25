@@ -48,11 +48,16 @@ CANDIDATE_JSON_SCHEMA: dict[str, Any] = {
         "type": "OBJECT",
         "properties": {
             "question": {"type": "STRING"},
-            "options": {"type": "ARRAY", "items": {"type": "STRING"}},
-            "correct_index": {"type": "INTEGER"},
+            "options": {
+                "type": "ARRAY",
+                "items": {"type": "STRING"},
+                "minItems": 4,
+                "maxItems": 4,
+            },
+            "correct_index": {"type": "INTEGER", "minimum": 0, "maximum": 3},
             "explanation": {"type": "STRING"},
             "detailed_explanation": {"type": "STRING"},
-            "difficulty": {"type": "STRING"},
+            "difficulty": {"type": "STRING", "enum": ["easy", "medium", "hard"]},
             "subject_key": {"type": "STRING"},
             "chapter": {"type": "STRING"},
             "micro_topic_key": {"type": "STRING"},
@@ -469,6 +474,11 @@ def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
             "For evidence_span_single_answer, copy one short exact contiguous source span that contains "
             "the correct answer and enough context to prove the claim, but none of the three distractor "
             "values. Ensure exactly one proof_option_value equals the solution."
+        )
+    if "answer_leakage" in rejection_codes:
+        guidance.append(
+            "Do not include the correct option text in the question stem. Ask for the value or "
+            "relationship without naming the answer, then place it only among the four options."
         )
     if rejection_codes & {"evidence_span_invalid", "answer_not_in_evidence"}:
         guidance.append(
