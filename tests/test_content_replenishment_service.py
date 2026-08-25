@@ -341,6 +341,12 @@ def test_language_form_normalization_does_not_promote_generic_content() -> None:
     assert content_replenishment_service._normalized_language_form(
         "generic_fact", "bengali"
     ) == "generic_fact"
+    assert content_replenishment_service._normalized_language_form(
+        "generic_fact", "bengali", "bengali:phonetics:t02"
+    ) == "linguistics"
+    assert content_replenishment_service._normalized_language_form(
+        "generic_fact", "english", "english:error-correction:t01"
+    ) == "error_detection"
 
 
 def test_replenishment_excludes_historical_identity_from_job_progress(monkeypatch, valid_questions) -> None:

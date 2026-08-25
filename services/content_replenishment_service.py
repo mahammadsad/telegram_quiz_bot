@@ -736,7 +736,9 @@ def _enrich(
                 "fact_version": source.fact_version if source else "",
                 "language": item.get("language") or ("bn-en" if subject_key == "english" else "bn"),
                 "language_question_form": _normalized_language_form(
-                    item.get("language_question_form"), subject_key
+                    item.get("language_question_form"),
+                    subject_key,
+                    source.micro_topic_key if source else "",
                 ),
                 "language_verification": _language_verification_from_item(
                     item, subject_key, source
@@ -747,7 +749,11 @@ def _enrich(
     return enriched
 
 
-def _normalized_language_form(value: Any, subject_key: str) -> str:
+def _normalized_language_form(
+    value: Any,
+    subject_key: str,
+    micro_topic_key: str = "",
+) -> str:
     normalized = str(value or "").strip().lower().replace("-", "_").replace(" ", "_")
     aliases = {
         "grammar": "grammar_rule",
@@ -761,7 +767,18 @@ def _normalized_language_form(value: Any, subject_key: str) -> str:
     }
     candidate = aliases.get(normalized, normalized)
     allowed = LANGUAGE_QUESTION_FORMS.get(subject_key, ("generic_fact",))
-    return candidate if candidate in allowed else normalized
+    if candidate in allowed:
+        return candidate
+    reviewed_topic_forms = {
+        "bengali:phonetics": "linguistics",
+        "bengali:word-sentence": "grammar_rule",
+        "english:parts-tense": "grammar_rule",
+        "english:error-correction": "error_detection",
+    }
+    for topic_prefix, form in reviewed_topic_forms.items():
+        if micro_topic_key.startswith(topic_prefix + ":"):
+            return form
+    return normalized
 
 
 def _language_verification_from_item(
