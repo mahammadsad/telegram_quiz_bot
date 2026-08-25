@@ -46,6 +46,7 @@ CANDIDATE_JSON_SCHEMA = {
             "proof_explanation_values": {"type": "ARRAY", "items": {"type": "STRING"}},
             "proof_explanation_conclusion": {"type": "STRING"},
             "proof_evidence_values": {"type": "ARRAY", "items": {"type": "STRING"}},
+            "proof_evidence_span": {"type": "STRING"},
         },
         "required": [
             "question",
@@ -72,6 +73,7 @@ CANDIDATE_JSON_SCHEMA = {
             "proof_explanation_values",
             "proof_explanation_conclusion",
             "proof_evidence_values",
+            "proof_evidence_span",
         ],
     },
 }
@@ -346,8 +348,14 @@ def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
         )
     if "answer_not_unique" in rejection_codes:
         guidance.append(
-            "Ensure the atomic evidence and canonical claim contain the correct answer value but none "
-            "of the three distractor values, and ensure exactly one proof_option_value equals the solution."
+            "For evidence_span_single_answer, copy one short exact contiguous source span that contains "
+            "the correct answer and enough context to prove the claim, but none of the three distractor "
+            "values. Ensure exactly one proof_option_value equals the solution."
+        )
+    if rejection_codes & {"evidence_span_invalid", "answer_not_in_evidence"}:
+        guidance.append(
+            "Copy proof_evidence_span verbatim from the cited supplied fact. It must be a non-empty "
+            "contiguous substring of that fact and must contain knowledge_answer_value verbatim."
         )
     if rejection_codes & {
         "options_duplicate",
@@ -421,6 +429,7 @@ For mathematics and reasoning, also return a supported proof_family,
 proof_parameters_json containing only machine-readable inputs (never a claimed answer),
 four proof_option_values, proof_explanation_values containing the exact deterministic
 solution trace, and proof_explanation_conclusion equal to the displayed proved option.
+Set proof_evidence_span to an empty string for mathematics and reasoning.
 Use proof_option_units for all four options when the family has a unit; otherwise use
 four empty strings. Supported mathematics families are arithmetic_expression,
 percentage_of, average, ratio_share, simple_interest, algebra_linear, time_work,
@@ -491,12 +500,15 @@ value; alternating_arithmetic_series_next has six to twelve values whose even-in
 and odd-indexed subsequences each have a constant step, at least one non-zero, and
 traces the even step, odd step, then next value. Use ASCII numeric proof values
 even when displayed options use Bengali digits.
-For every other subject, use proof_family evidence_single_answer, copy the four
+For every other subject, use proof_family evidence_span_single_answer, copy the four
 displayed answers to proof_option_values and proof_evidence_values, and set the
-conclusion to the displayed correct option. Use empty proof_explanation_values and four
-empty proof_option_units. The canonical claim and atomic evidence
-must contain the canonical answer; if the evidence supports another displayed option,
-discard the candidate instead of guessing.
+conclusion to the displayed correct option. Copy proof_evidence_span verbatim as one
+short, exact, contiguous span from the cited supplied fact. The span must contain enough
+context to prove the canonical claim, contain knowledge_answer_value verbatim, and
+contain none of the three distractor values. Use empty proof_explanation_values and four
+empty proof_option_units. Never use canonical_claim itself as source evidence. If no
+single exact source span proves exactly one displayed option, discard the candidate
+instead of guessing.
 """
 
 
@@ -590,6 +602,8 @@ def _proof_from_item(item: dict[str, Any]) -> dict[str, Any] | None:
     }
     if item.get("proof_evidence_values") is not None:
         proof["evidence_values"] = item.get("proof_evidence_values")
+    if item.get("proof_evidence_span") is not None:
+        proof["evidence_span"] = item.get("proof_evidence_span")
     return proof
 
 

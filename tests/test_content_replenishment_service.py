@@ -228,6 +228,7 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
         "language_verification_json",
         "proof_option_units",
         "proof_explanation_values",
+        "proof_evidence_span",
     } <= required
 
     prompt = content_replenishment_service._candidate_prompt("history", "আধুনিক ভারত", grounding(valid_questions), 3)
@@ -237,6 +238,8 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
     assert "syllogism_finite_sets" in prompt
     assert "uncertain bengali" in prompt.lower()
     assert "must not use the Bengali translation form" in prompt
+    assert "evidence_span_single_answer" in prompt
+    assert "contiguous span" in prompt
 
 
 def test_replenishment_repairs_a_fully_rejected_batch_without_weakening_checks(monkeypatch, valid_questions) -> None:

@@ -94,6 +94,31 @@ def test_atomic_evidence_must_support_exactly_one_answer() -> None:
     assert raised.value.code == "answer_not_unique"
 
 
+def test_exact_evidence_span_is_atomic_inside_a_broader_source() -> None:
+    candidate = evidence_candidate()
+    candidate["evidence_summary"] += " অন্য প্রসঙ্গে দিল্লির কথাও লেখা আছে।"
+    candidate["deterministic_proof"]["family"] = "evidence_span_single_answer"
+    candidate["deterministic_proof"]["evidence_span"] = "সরকারি উৎসে পশ্চিমবঙ্গের রাজধানী কলকাতা বলা হয়েছে।"
+
+    assert verify_candidate(candidate).expected_answer == "কলকাতা"
+
+    candidate["deterministic_proof"]["evidence_span"] = "পশ্চিমবঙ্গের রাজধানী কলকাতা।"
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+    assert raised.value.code == "evidence_span_invalid"
+
+
+def test_exact_evidence_span_rejects_a_second_displayed_answer() -> None:
+    candidate = evidence_candidate()
+    candidate["evidence_summary"] += " পুরনো তালিকায় দিল্লিও লেখা আছে।"
+    candidate["deterministic_proof"]["family"] = "evidence_span_single_answer"
+    candidate["deterministic_proof"]["evidence_span"] = candidate["evidence_summary"]
+
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+    assert raised.value.code == "answer_not_unique"
+
+
 def test_wrong_declared_answer_is_rejected() -> None:
     candidate = mathematics_candidate()
     candidate["correct_index"] = 1

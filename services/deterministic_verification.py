@@ -123,6 +123,8 @@ def verify_candidate(
         solved = _solve_reasoning(family, proof.get("parameters"))
     elif family == "evidence_single_answer":
         solved = _SolvedValue(_solve_evidence(candidate, proof), ())
+    elif family == "evidence_span_single_answer":
+        solved = _SolvedValue(_solve_evidence_span(candidate, proof), ())
     else:
         raise DeterministicVerificationError(
             "proof_family_unsupported",
@@ -1029,6 +1031,38 @@ def _solve_evidence(candidate: Mapping[str, Any], proof: Mapping[str, Any]) -> s
     if len({normalize_text(str(value)) for value in supported}) != 1:
         raise DeterministicVerificationError(
             "answer_not_unique", "Atomic evidence supports zero or multiple displayed answers."
+        )
+    return answer
+
+
+def _solve_evidence_span(candidate: Mapping[str, Any], proof: Mapping[str, Any]) -> str:
+    """Prove one answer against a verbatim atomic span of the verified source."""
+    answer = str(candidate.get("knowledge_answer_value") or "").strip()
+    source = str(candidate.get("evidence_summary") or "")
+    span = str(proof.get("evidence_span") or "").strip()
+    if not span or span not in source:
+        raise DeterministicVerificationError(
+            "evidence_span_invalid",
+            "The atomic evidence span is not an exact contiguous span of the verified source.",
+        )
+    if not answer or answer not in span:
+        raise DeterministicVerificationError(
+            "answer_not_in_evidence",
+            "The atomic evidence span does not contain the canonical answer verbatim.",
+        )
+    evidence_values = proof.get("evidence_values")
+    if not isinstance(evidence_values, Sequence) or isinstance(evidence_values, (str, bytes)):
+        raise DeterministicVerificationError(
+            "proof_invalid", "Evidence proof values must be a list."
+        )
+    supported = {
+        normalize_text(str(value))
+        for value in evidence_values
+        if str(value).strip() and str(value).strip() in span
+    }
+    if supported != {normalize_text(answer)}:
+        raise DeterministicVerificationError(
+            "answer_not_unique", "The atomic evidence span supports zero or multiple displayed answers."
         )
     return answer
 
