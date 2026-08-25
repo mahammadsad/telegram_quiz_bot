@@ -263,12 +263,19 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
     assert english_properties["proof_family"]["enum"] == [
         "evidence_span_single_answer"
     ]
+    language_artifact = english_properties["language_verification_json"]
+    assert language_artifact["type"] == "OBJECT"
+    assert language_artifact["properties"]["review_status"]["enum"] == [
+        "source_proved"
+    ]
+    assert language_artifact["properties"]["uncertain"]["enum"] == [False]
 
     math_schema = content_replenishment_service._candidate_schema("mathematics")
     math_properties = math_schema["items"]["properties"]
     assert "arithmetic_expression" in math_properties["proof_family"]["enum"]
     assert "fraction_operation" not in math_properties["proof_family"]["enum"]
     assert math_properties["language_question_form"]["enum"] == ["generic_fact"]
+    assert math_properties["language_verification_json"]["type"] == "STRING"
 
     reasoning_schema = content_replenishment_service._candidate_schema("reasoning")
     reasoning_properties = reasoning_schema["items"]["properties"]
