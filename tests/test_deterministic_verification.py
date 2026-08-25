@@ -927,6 +927,21 @@ def test_uncertain_bengali_routes_to_human_review() -> None:
     assert verify_candidate(candidate).language_form == "grammar_rule"
 
 
+def test_uncertain_english_routes_to_human_review() -> None:
+    candidate = language_candidate("english")
+    candidate["language_verification"].update(
+        review_status="source_proved",
+        translation_status="not_applicable",
+        uncertain=True,
+    )
+    candidate.pop("language_human_review")
+
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+
+    assert raised.value.code == "language_review_required"
+
+
 def test_translation_correctness_is_separate_from_factual_proof() -> None:
     candidate = language_candidate("bengali")
     candidate["language_question_form"] = "translation"

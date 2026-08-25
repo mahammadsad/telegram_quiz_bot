@@ -324,10 +324,10 @@ def _verify_subject_language_contract(
             "language_review_required",
             "A model-declared human review is not an operator attestation.",
         )
-    if subject == "bengali" and uncertain and not human_reviewed:
+    if uncertain and not human_reviewed:
         raise DeterministicVerificationError(
             "language_review_required",
-            "Uncertain Bengali language content must enter human review.",
+            "Uncertain language content must enter human review.",
         )
     if form == "translation" and (
         verification.get("translation_status") != "human_reviewed" or not human_reviewed

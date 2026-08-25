@@ -120,7 +120,7 @@ def _candidate_schema(subject_key: str) -> dict[str, Any]:
         properties["language_verification_json"] = {
             "type": "OBJECT",
             "properties": {
-                "version": {"type": "INTEGER", "enum": [1]},
+                "version": {"type": "INTEGER", "minimum": 1, "maximum": 1},
                 "authority_type": {
                     "type": "STRING",
                     "enum": ["official", "primary", "reviewed_reference"],
@@ -128,7 +128,7 @@ def _candidate_schema(subject_key: str) -> dict[str, Any]:
                 "rule_id": {"type": "STRING"},
                 "source_span": {"type": "STRING"},
                 "review_status": {"type": "STRING", "enum": ["source_proved"]},
-                "uncertain": {"type": "BOOLEAN", "enum": [False]},
+                "uncertain": {"type": "BOOLEAN"},
                 "translation_status": {
                     "type": "STRING",
                     "enum": ["not_applicable"],
@@ -461,19 +461,25 @@ def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
         )
     if rejection_codes & {
         "math_proof_invalid",
+        "reasoning_proof_invalid",
         "declared_answer_wrong",
         "explanation_steps_invalid",
         "explanation_contradiction",
     }:
         guidance.append(
             "Recompute the machine-readable parameters first, solve them independently, then derive "
-            "correct_index, the exact trace values, and the displayed conclusion from that result."
+            "correct_index, the exact trace values, and the displayed conclusion from that result. "
+            "For reasoning, use the simplest supported family that fits the supplied topic and provide "
+            "a fully constrained instance; never infer missing sets, ordering rules, sequence terms, "
+            "movements, mappings, dates, or clock values."
         )
     if "answer_not_unique" in rejection_codes:
         guidance.append(
             "For evidence_span_single_answer, copy one short exact contiguous source span that contains "
             "the correct answer and enough context to prove the claim, but none of the three distractor "
-            "values. Ensure exactly one proof_option_value equals the solution."
+            "values. For mathematics or reasoning, independently compute the solver result and ensure "
+            "exactly one proof_option_value equals it; do not include equivalent fractions, decimals, "
+            "case variants, or repeated Boolean values among distractors."
         )
     if "answer_leakage" in rejection_codes:
         guidance.append(

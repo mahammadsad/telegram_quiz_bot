@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timedelta, timezone
+from typing import Callable, TypeVar
+
+import httpx
 
 from config.settings import require_env, supabase_project_ref_matches
 from config.subjects import QUIZ_SUBJECTS
@@ -13,6 +17,21 @@ from services.question_inventory import (
     replenishment_plan,
 )
 from storage import content_inventory_repo
+
+_T = TypeVar("_T")
+_READ_ATTEMPTS = 3
+
+
+def _read_with_retry(operation: Callable[[], _T]) -> _T:
+    """Retry only transient read transport failures; never mask database errors."""
+    for attempt in range(_READ_ATTEMPTS):
+        try:
+            return operation()
+        except httpx.TransportError:
+            if attempt == _READ_ATTEMPTS - 1:
+                raise
+            time.sleep(0.5 * (2**attempt))
+    raise AssertionError("unreachable")
 
 
 def main() -> int:
@@ -24,13 +43,16 @@ def main() -> int:
     now = datetime.now(timezone.utc)
     report = {}
     for subject in QUIZ_SUBJECTS:
-        rows = content_inventory_repo.list_verified_candidates(
-            subject.key,
-            now=now,
-            limit=1000,
+        subject_key = subject.key
+        rows = _read_with_retry(
+            lambda subject_key=subject_key: content_inventory_repo.list_verified_candidates(
+                subject_key,
+                now=now,
+                limit=1000,
+            )
         )
         capacity = inventory_report(rows, now=now).get(
-            subject.key,
+            subject_key,
             {
                 "verified": 0,
                 "eligible_now": 0,
@@ -38,11 +60,13 @@ def main() -> int:
                 "eligible_days": 0.0,
             },
         )
-        recent_usage = content_inventory_repo.list_recent_usage(
-            subject.key,
-            since=now - timedelta(days=30),
+        recent_usage = _read_with_retry(
+            lambda subject_key=subject_key: content_inventory_repo.list_recent_usage(
+                subject_key,
+                since=now - timedelta(days=30),
+            )
         )
-        report[subject.key] = {
+        report[subject_key] = {
             **capacity,
             "replenishment": replenishment_plan(int(capacity["verified"])),
             "exposure_quality_30d": exposure_quality_report(recent_usage),

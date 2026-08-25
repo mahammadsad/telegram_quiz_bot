@@ -166,6 +166,7 @@ def test_repair_prompt_gives_static_code_specific_guidance() -> None:
         "base",
         {
             "math_family_unsupported",
+            "reasoning_proof_invalid",
             "answer_not_unique",
             "answer_leakage",
             "option_pattern_leakage",
@@ -178,6 +179,8 @@ def test_repair_prompt_gives_static_code_specific_guidance() -> None:
     assert "never invent a geometry" in prompt
     assert "gcd_lcm" in prompt
     assert "none of the three distractor values" in prompt
+    assert "equivalent fractions" in prompt
+    assert "fully constrained instance" in prompt
     assert "correct option text in the question stem" in prompt
     assert "one consistent visible representation" in prompt
     assert "translation_status not_applicable" in prompt
@@ -278,7 +281,9 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
     assert language_artifact["properties"]["review_status"]["enum"] == [
         "source_proved"
     ]
-    assert language_artifact["properties"]["uncertain"]["enum"] == [False]
+    assert language_artifact["properties"]["version"]["minimum"] == 1
+    assert language_artifact["properties"]["version"]["maximum"] == 1
+    assert language_artifact["properties"]["uncertain"] == {"type": "BOOLEAN"}
 
     math_schema = content_replenishment_service._candidate_schema("mathematics")
     math_properties = math_schema["items"]["properties"]
