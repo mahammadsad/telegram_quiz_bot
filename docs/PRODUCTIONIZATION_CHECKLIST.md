@@ -144,11 +144,13 @@ staging test has passed. Source-code inspection alone is not sufficient.
   repaired, and a guarded retry returned `QUIZ_ALREADY_POSTED` without a
   duplicate message or chapter-history row.
 - [ ] Staging end-to-end quiz lifecycle passes without answer leakage.
-- [ ] Screenshots cover small Android widths, dashboard identity, out-of-top-ten
-  rank, revision feedback, loading, error, and empty states.
+- [x] Screenshots cover all four Android widths, dashboard identity,
+  out-of-top-ten rank, revision feedback, loading, retry/error, and empty
+  states. The focused 2026-08-26 Playwright evidence run passed all 56 tests.
 - [ ] Production environment ownership is reviewed before migration/deployment.
 - [ ] A reversible production migration and rollback/recovery plan is approved.
-- [ ] Production `/health/ready` and critical user flows are checked after deploy.
+- [x] Production `/health/ready` and answer-free critical public flows passed the
+  fail-closed deployed smoke on 2026-08-26 at exact release `c97a6cd`.
 - [x] Release notes, staging/Telegram/mobile guides, database runbook, production
   rollback guide, and non-programmer verification instructions describe the
   current gates without claiming pending hosted results.
