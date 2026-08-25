@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
@@ -17,7 +18,31 @@ from services.question_validation import validate_question_candidates
 from services.source_grounding import GroundingBundle, SourceDocument
 from storage import content_inventory_repo
 
-CANDIDATE_JSON_SCHEMA = {
+MATHEMATICS_PROOF_FAMILIES = (
+    "arithmetic_expression", "percentage_of", "average", "ratio_share",
+    "simple_interest", "algebra_linear", "time_work", "speed_distance",
+    "profit_loss", "rounded_division", "gcd_lcm", "exact_square_root",
+    "compound_interest", "direct_proportion", "weighted_average",
+    "partnership_share", "percentage_change", "simple_probability",
+    "rectangle_measure", "discount_price", "simultaneous_linear_equations",
+    "triangle_measure", "permutation_combination", "inverse_proportion",
+    "quadratic_equation_root",
+)
+REASONING_PROOF_FAMILIES = (
+    "arithmetic_series_next", "ordering_rank", "odd_one_out_tag", "coding_shift",
+    "direction_path", "ordering_constraints", "syllogism_finite_sets",
+    "analogy_mapping", "calendar_weekday_offset", "clock_smaller_angle",
+    "geometric_series_next", "alphabet_series_next", "quadratic_series_next",
+    "alternating_arithmetic_series_next",
+)
+LANGUAGE_QUESTION_FORMS = {
+    "english": ("grammar_rule", "vocabulary", "comprehension", "error_detection"),
+    "bengali": (
+        "grammar_rule", "vocabulary", "comprehension", "literature", "linguistics",
+    ),
+}
+
+CANDIDATE_JSON_SCHEMA: dict[str, Any] = {
     "type": "ARRAY",
     "items": {
         "type": "OBJECT",
@@ -77,6 +102,24 @@ CANDIDATE_JSON_SCHEMA = {
         ],
     },
 }
+
+
+def _candidate_schema(subject_key: str) -> dict[str, Any]:
+    """Constrain model output to the deterministic contract for this subject."""
+    schema = deepcopy(CANDIDATE_JSON_SCHEMA)
+    properties = schema["items"]["properties"]
+    properties["language_question_form"]["enum"] = list(
+        LANGUAGE_QUESTION_FORMS.get(subject_key, ("generic_fact",))
+    )
+    proof_families: tuple[str, ...]
+    if subject_key == "mathematics":
+        proof_families = MATHEMATICS_PROOF_FAMILIES
+    elif subject_key == "reasoning":
+        proof_families = REASONING_PROOF_FAMILIES
+    else:
+        proof_families = ("evidence_span_single_answer",)
+    properties["proof_family"]["enum"] = list(proof_families)
+    return schema
 
 _CANDIDATE_REPAIR_LIMIT = 1
 _CANDIDATE_REPAIR_TARGET = 3
@@ -195,7 +238,7 @@ def generate_and_store_candidate_batch(
         started = datetime.now(timezone.utc)
         raw_text, generation = pool.generate_subject_quiz(
             prompt=active_prompt,
-            response_schema=CANDIDATE_JSON_SCHEMA,
+            response_schema=_candidate_schema(subject_key),
         )
         latency_ms += int((datetime.now(timezone.utc) - started).total_seconds() * 1000)
         generation_history.append(generation)
@@ -426,13 +469,17 @@ def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
             "paraphrase, reorder options for, or create a second version of a rejected existing question."
         )
     if rejection_codes & {
+        "language_form_invalid",
         "language_evidence_invalid",
         "language_review_invalid",
         "language_review_required",
         "translation_review_required",
     }:
         guidance.append(
-            "For English or Bengali language questions, use review_status source_proved, copy an "
+            "For English, language_question_form must be exactly grammar_rule, vocabulary, "
+            "comprehension, or error_detection. For Bengali it must be exactly grammar_rule, "
+            "vocabulary, comprehension, literature, or linguistics. Use review_status "
+            "source_proved and copy an "
             "exact source_span from the supplied fact, set uncertain false, and set "
             "translation_status not_applicable. Do not generate translation-form candidates; "
             "translation requires a separate real operator attestation."
@@ -490,19 +537,10 @@ four proof_option_values, proof_explanation_values containing the exact determin
 solution trace, and proof_explanation_conclusion equal to the displayed proved option.
 Set proof_evidence_span to an empty string for mathematics and reasoning.
 Use proof_option_units for all four options when the family has a unit; otherwise use
-four empty strings. Supported mathematics families are arithmetic_expression,
-percentage_of, average, ratio_share, simple_interest, algebra_linear, time_work,
-speed_distance, profit_loss, rounded_division, gcd_lcm, exact_square_root, and
-compound_interest, direct_proportion, weighted_average, partnership_share,
-percentage_change, simple_probability, rectangle_measure, discount_price,
-simultaneous_linear_equations, triangle_measure, permutation_combination,
-inverse_proportion, and quadratic_equation_root.
+four empty strings. Supported mathematics families are
+{", ".join(MATHEMATICS_PROOF_FAMILIES)}.
 Supported reasoning families are
-arithmetic_series_next, ordering_rank, odd_one_out_tag, coding_shift, direction_path,
-ordering_constraints, syllogism_finite_sets, analogy_mapping,
-calendar_weekday_offset, clock_smaller_angle, geometric_series_next,
-alphabet_series_next, quadratic_series_next, and
-alternating_arithmetic_series_next. Unsupported or
+{", ".join(REASONING_PROOF_FAMILIES)}. Unsupported or
 under-constrained questions are forbidden.
 Use these exact parameter objects: arithmetic_expression has values and operators;
 percentage_of has base and percent; average has values; ratio_share has total,

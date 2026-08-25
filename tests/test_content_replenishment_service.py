@@ -169,6 +169,7 @@ def test_repair_prompt_gives_static_code_specific_guidance() -> None:
             "answer_not_unique",
             "option_pattern_leakage",
             "translation_review_required",
+            "language_form_invalid",
             "historical_duplicate",
         },
     )
@@ -178,6 +179,7 @@ def test_repair_prompt_gives_static_code_specific_guidance() -> None:
     assert "none of the three distractor values" in prompt
     assert "one consistent visible representation" in prompt
     assert "translation_status not_applicable" in prompt
+    assert "language_question_form must be exactly" in prompt
     assert "separate real operator attestation" in prompt
     assert "different supplied atomic fact" in prompt
 
@@ -249,6 +251,33 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
     assert "contiguous span" in prompt
     assert "exact original spelling" in prompt
     assert "translation or transliteration" in prompt
+
+    english_schema = content_replenishment_service._candidate_schema("english")
+    english_properties = english_schema["items"]["properties"]
+    assert english_properties["language_question_form"]["enum"] == [
+        "grammar_rule",
+        "vocabulary",
+        "comprehension",
+        "error_detection",
+    ]
+    assert english_properties["proof_family"]["enum"] == [
+        "evidence_span_single_answer"
+    ]
+
+    math_schema = content_replenishment_service._candidate_schema("mathematics")
+    math_properties = math_schema["items"]["properties"]
+    assert "arithmetic_expression" in math_properties["proof_family"]["enum"]
+    assert "fraction_operation" not in math_properties["proof_family"]["enum"]
+    assert math_properties["language_question_form"]["enum"] == ["generic_fact"]
+
+    reasoning_schema = content_replenishment_service._candidate_schema("reasoning")
+    reasoning_properties = reasoning_schema["items"]["properties"]
+    assert "syllogism_finite_sets" in reasoning_properties["proof_family"]["enum"]
+    assert "categorical_syllogism" not in reasoning_properties["proof_family"]["enum"]
+
+    assert "enum" not in content_replenishment_service.CANDIDATE_JSON_SCHEMA[
+        "items"
+    ]["properties"]["proof_family"]
 
 
 def test_replenishment_excludes_historical_identity_from_job_progress(monkeypatch, valid_questions) -> None:
