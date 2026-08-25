@@ -738,7 +738,7 @@ def _enrich(
                 "language_question_form": _normalized_language_form(
                     item.get("language_question_form"),
                     subject_key,
-                    source.micro_topic_key if source else "",
+                    source.micro_topic_key if source else bundle.micro_topic_key,
                 ),
                 "language_verification": _language_verification_from_item(
                     item, subject_key, source

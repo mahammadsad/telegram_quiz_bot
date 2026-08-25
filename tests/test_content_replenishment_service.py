@@ -333,7 +333,6 @@ def test_language_artifact_is_derived_only_from_exact_verified_span(valid_questi
     )[0]
     assert invalid["language_verification"]["source_span"] == "model paraphrase"
 
-
 def test_language_form_normalization_does_not_promote_generic_content() -> None:
     assert content_replenishment_service._normalized_language_form(
         "Grammar Question", "english"

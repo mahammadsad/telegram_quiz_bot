@@ -140,6 +140,32 @@ def test_candidate_answer_leakage_has_actionable_rejection_code(valid_questions)
     assert rejected[0]["code"] == "answer_leakage"
 
 
+def test_candidate_validation_preserves_language_proof_artifacts(valid_questions) -> None:
+    candidate = deepcopy(valid_questions[0])
+    candidate.update(
+        language_question_form="grammar_rule",
+        language_verification={
+            "version": 1,
+            "authority_type": "official",
+            "rule_id": "source-span-test",
+            "source_span": "reviewed span",
+            "review_status": "source_proved",
+            "uncertain": False,
+            "translation_status": "not_applicable",
+        },
+    )
+
+    accepted, rejected = validate_question_candidates(
+        [candidate],
+        "history",
+        "আধুনিক ভারত",
+    )
+
+    assert rejected == []
+    assert accepted[0]["language_question_form"] == "grammar_rule"
+    assert accepted[0]["language_verification"] == candidate["language_verification"]
+
+
 def test_identity_rejects_incomplete_semantic_fields() -> None:
     with pytest.raises(ValueError, match="non-empty"):
         knowledge_key(

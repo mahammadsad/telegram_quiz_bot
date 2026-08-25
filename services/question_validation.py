@@ -347,6 +347,17 @@ def validate_questions(
             "fact_version": fact_version,
             "difficulty": difficulty,
             "language": language,
+            "language_question_form": _text(raw.get("language_question_form")) or None,
+            "language_verification": (
+                raw.get("language_verification")
+                if isinstance(raw.get("language_verification"), dict)
+                else None
+            ),
+            "language_human_review": (
+                raw.get("language_human_review")
+                if isinstance(raw.get("language_human_review"), dict)
+                else None
+            ),
             "verification_status": verification_status or "generated",
             "verification_score": float(verification_score) if isinstance(verification_score, (int, float)) and not isinstance(verification_score, bool) else None,
             "verification_notes": verification_notes,
