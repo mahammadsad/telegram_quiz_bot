@@ -208,10 +208,15 @@ def main() -> int:
         max_items=args.max_items,
     )
     clean_rows = validate_source_bundle(rows)
-    coverage = validate_current_affairs_coverage(
+    coverage, missing_coverage = current_affairs_coverage(
         clean_rows,
         minimum_per_chapter=args.minimum_per_chapter,
     )
+    if missing_coverage and not args.approve:
+        raise CurrentAffairsRefreshError(
+            "Current-affairs source coverage is below the approved chapter threshold: "
+            + ", ".join(missing_coverage)
+        )
     if args.approve:
         require_write_identity()
         imported = import_source_bundle(clean_rows, approve=True)
@@ -232,6 +237,8 @@ def main() -> int:
             "rbi": stats.source_status,
         },
         "coverage": coverage,
+        "batchCoverageReady": not missing_coverage,
+        "batchCoverageMissing": missing_coverage,
         "imported": imported_count,
         "approved": args.approve,
     }, sort_keys=True))
@@ -990,6 +997,29 @@ def validate_current_affairs_coverage(
     *,
     minimum_per_chapter: int,
 ) -> dict[str, int]:
+    counts, missing = current_affairs_coverage(
+        rows,
+        minimum_per_chapter=minimum_per_chapter,
+    )
+    if missing:
+        raise CurrentAffairsRefreshError(
+            "Current-affairs source coverage is below the approved chapter threshold: "
+            + ", ".join(missing)
+        )
+    return counts
+
+
+def current_affairs_coverage(
+    rows: list[dict],
+    *,
+    minimum_per_chapter: int,
+) -> tuple[dict[str, int], list[str]]:
+    """Summarize one safe refresh batch without making it an atomic rollout unit.
+
+    Validate-only callers retain the strict per-batch gate. Approved refreshes may
+    import independently verified rows from healthy authorities; their workflow
+    must then run the durable all-chapter readiness check against the database.
+    """
     expected = set(ROTATION_CHAPTER_KEYS["current-affairs"])
     counts = Counter(
         _chapter_key_for_name(str(row["chapter"]))
@@ -1005,12 +1035,7 @@ def validate_current_affairs_coverage(
         for key in sorted(expected)
         if counts[key] < minimum_per_chapter or len(topic_counts[key]) < 2
     ]
-    if missing:
-        raise CurrentAffairsRefreshError(
-            "Current-affairs source coverage is below the approved chapter threshold: "
-            + ", ".join(missing)
-        )
-    return {key: counts[key] for key in sorted(expected)}
+    return ({key: counts[key] for key in sorted(expected)}, missing)
 
 
 def require_write_identity() -> None:

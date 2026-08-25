@@ -16,6 +16,7 @@ from scripts.refresh_current_affairs_sources import (
     canonical_isro_release_url,
     canonical_release_url,
     classify_release,
+    current_affairs_coverage,
     parse_all_release_items,
     parse_isro_press_items,
     parse_isro_release,
@@ -455,6 +456,13 @@ def test_classifier_and_coverage_gate_require_both_chapters_and_topic_diversity(
 
     with pytest.raises(CurrentAffairsRefreshError, match="below"):
         validate_current_affairs_coverage(clean[:7], minimum_per_chapter=4)
+
+    counts, missing = current_affairs_coverage(clean[:7], minimum_per_chapter=4)
+    assert counts == {
+        "current-affairs:national": 4,
+        "current-affairs:science-technology": 3,
+    }
+    assert missing == ["current-affairs:science-technology"]
 
 
 def test_classifier_does_not_treat_a_tribunal_report_as_science_for_one_weak_term():

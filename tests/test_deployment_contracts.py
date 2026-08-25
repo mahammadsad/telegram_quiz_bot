@@ -399,6 +399,9 @@ def test_source_rollout_workflows_are_guarded_and_do_not_touch_telegram() -> Non
     assert current_source.index("validate_database_schema") < (
         current_source.index("--max-items 200 --minimum-per-chapter 4 --approve")
     )
+    assert current_source.index("--max-items 200 --minimum-per-chapter 4 --approve") < (
+        current_source.index("scripts/check_source_readiness.py --scope all")
+    )
     assert "REFRESH OFFICIAL SOURCES IN" in current_source
 
 
