@@ -248,6 +248,13 @@ def generate_and_store_candidate_batch(
                     rejected.append({"code": "identity_invalid", "message": str(exc)})
                     continue
                 accepted_by_identity.setdefault(str(identified["variant_fingerprint"]), identified)
+            accepted_by_identity, novelty_rejections = _retain_novel_candidates(
+                accepted_by_identity,
+                subject_key=subject_key,
+                chapter=chapter,
+                generation_model=str(generation.get("model") or ""),
+            )
+            rejected.extend(novelty_rejections)
         rejected.extend(
             {"code": "verification_failed", "message": reason} for reason in verification.get("rejection_reasons", [])
         )
@@ -300,6 +307,51 @@ def generate_and_store_candidate_batch(
         else {"accepted_count": 0, "question_ids": []}
     )
     return ReplenishmentBatchResult(accepted, rejected, context, persistence)
+
+
+def _retain_novel_candidates(
+    candidates: dict[str, dict[str, Any]],
+    *,
+    subject_key: str,
+    chapter: str,
+    generation_model: str,
+) -> tuple[dict[str, dict[str, Any]], list[dict[str, str]]]:
+    rows = [
+        quiz_pack_service.question_row_from_validated_candidate(
+            item,
+            {
+                "subject_key": subject_key,
+                "chapter": chapter,
+                "generation_model": generation_model,
+            },
+        )
+        for item in candidates.values()
+    ]
+    existing_variants, existing_stems, existing_contents = (
+        content_inventory_repo.existing_candidate_identities(
+            variant_fingerprints=[str(row.get("variant_fingerprint") or "") for row in rows],
+            stem_hashes=[str(row.get("stem_hash") or "") for row in rows],
+            content_hashes=[str(row.get("content_hash") or "") for row in rows],
+        )
+    )
+    retained: dict[str, dict[str, Any]] = {}
+    rejections: list[dict[str, str]] = []
+    batch_stems: set[str] = set()
+    batch_contents: set[str] = set()
+    for item, row in zip(candidates.values(), rows, strict=True):
+        variant = str(row.get("variant_fingerprint") or "")
+        stem = str(row.get("stem_hash") or "")
+        content = str(row.get("content_hash") or "")
+        if variant in existing_variants or stem in existing_stems or content in existing_contents:
+            rejections.append({"code": "historical_duplicate"})
+            continue
+        if stem in batch_stems or content in batch_contents:
+            rejections.append({"code": "batch_duplicate"})
+            continue
+        batch_stems.add(stem)
+        batch_contents.add(content)
+        retained[variant] = item
+    return retained, rejections
 
 
 def _aggregate_generation_metadata(history: list[dict[str, Any]]) -> dict[str, Any]:
@@ -367,6 +419,11 @@ def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
         guidance.append(
             "Use four genuinely different options in one consistent visible representation and script; "
             "do not mix numeric digits with number words or add labels to only some options."
+        )
+    if rejection_codes & {"historical_duplicate", "batch_duplicate"}:
+        guidance.append(
+            "Use a different supplied atomic fact and a materially different question stem. Do not "
+            "paraphrase, reorder options for, or create a second version of a rejected existing question."
         )
     if rejection_codes & {
         "language_evidence_invalid",

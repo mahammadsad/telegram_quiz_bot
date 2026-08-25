@@ -30,6 +30,38 @@ def list_recent_usage(subject_key: str, *, since: datetime) -> list[Row]:
     return as_rows(result.data, "recent content usage")
 
 
+def existing_candidate_identities(
+    *,
+    variant_fingerprints: list[str],
+    stem_hashes: list[str],
+    content_hashes: list[str],
+) -> tuple[set[str], set[str], set[str]]:
+    """Return server-only identities that already exist in durable questions."""
+    client = get_client()
+
+    def existing(field: str, values: list[str]) -> set[str]:
+        unique = sorted({value for value in values if value})
+        if not unique:
+            return set()
+        result = (
+            client.table("questions")
+            .select(field)
+            .in_(field, unique)
+            .execute()
+        )
+        return {
+            str(row[field])
+            for row in as_rows(result.data, f"existing question {field}")
+            if row.get(field)
+        }
+
+    return (
+        existing("variant_fingerprint", variant_fingerprints),
+        existing("stem_hash", stem_hashes),
+        existing("content_hash", content_hashes),
+    )
+
+
 def ensure_replenishment_job(
     *,
     logical_date: date,

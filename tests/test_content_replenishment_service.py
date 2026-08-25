@@ -169,6 +169,7 @@ def test_repair_prompt_gives_static_code_specific_guidance() -> None:
             "answer_not_unique",
             "option_pattern_leakage",
             "translation_review_required",
+            "historical_duplicate",
         },
     )
 
@@ -178,6 +179,7 @@ def test_repair_prompt_gives_static_code_specific_guidance() -> None:
     assert "one consistent visible representation" in prompt
     assert "translation_status not_applicable" in prompt
     assert "separate real operator attestation" in prompt
+    assert "different supplied atomic fact" in prompt
 
 
 def test_replenishment_preserves_verified_candidates_and_logs_hash_only(monkeypatch, valid_questions):
@@ -202,6 +204,11 @@ def test_replenishment_preserves_verified_candidates_and_logs_hash_only(monkeypa
         content_replenishment_service.content_inventory_repo,
         "save_verified_candidates",
         save,
+    )
+    monkeypatch.setattr(
+        content_replenishment_service.content_inventory_repo,
+        "existing_candidate_identities",
+        lambda **kwargs: (set(), set(), set()),
     )
     result = content_replenishment_service.generate_and_store_candidate_batch(
         "history",
@@ -244,6 +251,41 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
     assert "translation or transliteration" in prompt
 
 
+def test_replenishment_excludes_historical_identity_from_job_progress(monkeypatch, valid_questions) -> None:
+    responses = [json.dumps(generated_candidates(valid_questions)), json.dumps(verifier_results())]
+
+    class Pool:
+        def generate_subject_quiz(self, **kwargs):
+            return responses.pop(0), {"provider": "primary", "model": "test-model", "attempts": 1}
+
+    def existing(**kwargs):
+        return ({kwargs["variant_fingerprints"][0]}, set(), set())
+
+    saved: list[dict] = []
+    monkeypatch.setattr(
+        content_replenishment_service.content_inventory_repo,
+        "existing_candidate_identities",
+        existing,
+    )
+    monkeypatch.setattr(
+        content_replenishment_service.content_inventory_repo,
+        "save_verified_candidates",
+        lambda rows, context: saved.extend(rows) or {"accepted_count": len(rows)},
+    )
+
+    result = content_replenishment_service.generate_and_store_candidate_batch(
+        "history",
+        "আধুনিক ভারত",
+        grounding(valid_questions),
+        Pool(),
+        batch_size=5,
+    )
+
+    assert len(result.accepted) == 3
+    assert len(saved) == 3
+    assert "historical_duplicate" in result.generation_context["rejection_codes"]
+
+
 def test_replenishment_repairs_a_fully_rejected_batch_without_weakening_checks(monkeypatch, valid_questions) -> None:
     invalid = generated_candidates(valid_questions)
     for row in invalid:
@@ -282,6 +324,11 @@ def test_replenishment_repairs_a_fully_rejected_batch_without_weakening_checks(m
         content_replenishment_service.content_inventory_repo,
         "save_verified_candidates",
         lambda rows, context: saved.extend(rows) or {"accepted_count": len(rows)},
+    )
+    monkeypatch.setattr(
+        content_replenishment_service.content_inventory_repo,
+        "existing_candidate_identities",
+        lambda **kwargs: (set(), set(), set()),
     )
 
     result = content_replenishment_service.generate_and_store_candidate_batch(

@@ -105,7 +105,7 @@ staging test has passed. Source-code inspection alone is not sufficient.
 
 ## Final release evidence
 
-- [x] Local Python suite: 610 passed, 36 skipped; the skips are the expected
+- [x] Local Python suite: 611 passed, 36 skipped; the skips are the expected
   database cases without `TEST_DATABASE_URL`.
 - [x] Local Ruff, configured mypy (90 source files), full-history scanner,
   browser JavaScript execution, and whitespace gates pass.
