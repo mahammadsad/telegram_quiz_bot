@@ -355,7 +355,9 @@ def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
     if rejection_codes & {"evidence_span_invalid", "answer_not_in_evidence"}:
         guidance.append(
             "Copy proof_evidence_span verbatim from the cited supplied fact. It must be a non-empty "
-            "contiguous substring of that fact and must contain knowledge_answer_value verbatim."
+            "contiguous substring of that fact. Copy knowledge_answer_value and the correct indexed "
+            "proof_option_value in the source's exact spelling, even when the displayed Bengali option "
+            "is a faithful translation or transliteration. Do not put a translated value in source proof."
         )
     if rejection_codes & {
         "options_duplicate",
@@ -501,14 +503,18 @@ and odd-indexed subsequences each have a constant step, at least one non-zero, a
 traces the even step, odd step, then next value. Use ASCII numeric proof values
 even when displayed options use Bengali digits.
 For every other subject, use proof_family evidence_span_single_answer, copy the four
-displayed answers to proof_option_values and proof_evidence_values, and set the
-conclusion to the displayed correct option. Copy proof_evidence_span verbatim as one
-short, exact, contiguous span from the cited supplied fact. The span must contain enough
-context to prove the canonical claim, contain knowledge_answer_value verbatim, and
-contain none of the three distractor values. Use empty proof_explanation_values and four
-empty proof_option_units. Never use canonical_claim itself as source evidence. If no
-single exact source span proves exactly one displayed option, discard the candidate
-instead of guessing.
+canonical source-language values aligned positionally with the four displayed options
+to proof_option_values and proof_evidence_values, and set the conclusion to the displayed
+correct option. The correct indexed proof value and knowledge_answer_value must copy the
+source answer in its exact original spelling; they may differ from a faithful displayed
+Bengali translation or transliteration. Copy proof_evidence_span verbatim as one short,
+exact, contiguous span from the cited supplied fact. The span must contain enough context
+to prove the canonical claim, contain that source-language answer verbatim, and contain
+none of the other three canonical proof values. Use empty proof_explanation_values and
+four empty proof_option_units. Never use canonical_claim itself as source evidence. The
+independent verifier must still confirm that every displayed option faithfully maps to
+its positionally aligned proof value. If no single exact source span proves exactly one
+displayed option, discard the candidate instead of guessing.
 """
 
 

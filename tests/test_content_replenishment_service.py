@@ -240,6 +240,8 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
     assert "must not use the Bengali translation form" in prompt
     assert "evidence_span_single_answer" in prompt
     assert "contiguous span" in prompt
+    assert "exact original spelling" in prompt
+    assert "translation or transliteration" in prompt
 
 
 def test_replenishment_repairs_a_fully_rejected_batch_without_weakening_checks(monkeypatch, valid_questions) -> None:
