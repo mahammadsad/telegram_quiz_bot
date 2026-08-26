@@ -87,6 +87,20 @@ PLACEHOLDER_WORDS = {
     "your-value",
 }
 
+# These two immutable blobs contain only the synthetic Google-shaped value from
+# test_provider_error_detail_preserves_reason_but_redacts_sensitive_values.
+# Both the full object ID and path must match; new blobs are never inherited.
+VERIFIED_SYNTHETIC_HISTORY_BLOBS = {
+    (
+        "07789c988bfa7c2561738c26d58df079de208ac9",
+        "tests/test_gemini_pool.py",
+    ),
+    (
+        "9d40d63579c3d9d51c19fc0e857fa4a6dbeea8e3",
+        "tests/test_gemini_pool.py",
+    ),
+}
+
 
 def _public_json_paths(root: Path) -> list[Path]:
     paths = list((root / "quizzes").glob("**/*.json"))
@@ -289,6 +303,8 @@ def _history_failures(root: Path) -> list[str]:
         seen.add(object_id)
         path = Path(object_path)
         if not _is_text_path(path) or any(part in SKIP_PARTS for part in path.parts):
+            continue
+        if (object_id, object_path) in VERIFIED_SYNTHETIC_HISTORY_BLOBS:
             continue
         blob = subprocess.run(
             ["git", "-c", safe_directory, "cat-file", "-p", object_id],

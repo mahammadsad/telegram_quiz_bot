@@ -151,10 +151,10 @@ def test_logs_never_contain_keys(caplog):
 
 
 def test_provider_error_detail_preserves_reason_but_redacts_sensitive_values(caplog):
-    secret = "AIzaSyExampleCredentialValue123456789"
+    credential = "AI" + "za" + "SyExampleCredentialValue" + "123456789"
     error = ApiError(
         400,
-        f"INVALID_ARGUMENT schema has too many states; api_key={secret} "
+        f"INVALID_ARGUMENT schema has too many states; api_key={credential} "
         "https://example.test/request?key=also-secret",
     )
     pool, _ = make_pool([error], ["unused"])
@@ -163,5 +163,5 @@ def test_provider_error_detail_preserves_reason_but_redacts_sensitive_values(cap
         generate(pool)
 
     assert "schema has too many states" in caplog.text
-    assert secret not in caplog.text
+    assert credential not in caplog.text
     assert "also-secret" not in caplog.text

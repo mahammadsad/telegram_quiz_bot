@@ -45,6 +45,23 @@ def test_detects_each_supported_credential_shape_without_real_credentials(tmp_pa
     assert "Supabase secret key" in labels
 
 
+def test_historical_fixture_allowlist_requires_exact_blob_and_path() -> None:
+    allowed = check_public_data.VERIFIED_SYNTHETIC_HISTORY_BLOBS
+
+    assert (
+        "07789c988bfa7c2561738c26d58df079de208ac9",
+        "tests/test_gemini_pool.py",
+    ) in allowed
+    assert (
+        "07789c988bfa7c2561738c26d58df079de208ac9",
+        "tests/another_file.py",
+    ) not in allowed
+    assert (
+        "07789c988bfa7c2561738c26d58df079de208ac0",
+        "tests/test_gemini_pool.py",
+    ) not in allowed
+
+
 def test_detects_publishable_key_in_server_secret_assignment(tmp_path: Path) -> None:
     value = "sb_" + "publishable_" + "P" * 28
 
