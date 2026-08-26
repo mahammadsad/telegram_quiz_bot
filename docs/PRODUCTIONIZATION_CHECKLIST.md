@@ -168,6 +168,9 @@ staging test has passed. Source-code inspection alone is not sufficient.
   durable job nor its run had a Telegram acknowledgement. Durable attempt 5 on
   release `31d2ded` posted `20260826-computer`, recorded Telegram message 2526,
   cleared its prior error state, and left the job terminally `posted`.
+- [x] Latest-history retry rotation advanced Environment through distinct
+  chapters without weakening collision validation; normal durable run
+  `32983417931` posted `20260826-environment` as Telegram message 2532.
 - [x] Staging end-to-end quiz lifecycle passes without answer leakage. Release
   `36daa07` is live on both Render services; the staging answer-free smoke for
   `20260826-computer` and canonical production smoke run `32979274884` passed.
