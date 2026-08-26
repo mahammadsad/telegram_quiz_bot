@@ -139,7 +139,11 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     workflow_trigger = staging.get("on") or staging.get(True)
     assert workflow_trigger == {"workflow_dispatch": workflow_trigger["workflow_dispatch"]}
     inputs = workflow_trigger["workflow_dispatch"]["inputs"]
-    assert inputs["operation"]["options"] == ["preflight", "subject-quiz"]
+    assert inputs["operation"]["options"] == [
+        "preflight",
+        "subject-quiz",
+        "schema-diagnostic",
+    ]
     assert inputs["subject"]["default"] == "computer"
     assert inputs["subject"]["options"][0] == "computer"
     assert inputs["force_post"]["default"] is False
@@ -167,6 +171,7 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert "export-static-fallbacks" not in source
     assert "announce" not in source
     assert "git push" not in source
+    assert "python -m scripts.diagnose_gemini_schema" in source
     assert "except HTTPError as exc" in source
     assert "for attempt in range(1, 7):" in source
     assert "except (TimeoutError, URLError):" in source

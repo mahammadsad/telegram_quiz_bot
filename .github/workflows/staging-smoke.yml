@@ -11,6 +11,7 @@ on:
         options:
           - preflight
           - subject-quiz
+          - schema-diagnostic
       subject:
         description: One enabled, source-covered subject
         required: true
@@ -140,7 +141,7 @@ jobs:
 
           operation = os.environ.get("INPUT_OPERATION", "")
           subject = os.environ.get("INPUT_SUBJECT", "")
-          if operation not in {"preflight", "subject-quiz"}:
+          if operation not in {"preflight", "subject-quiz", "schema-diagnostic"}:
               raise SystemExit("Refusing operation: unsupported staging mode.")
           get_subject(subject, require_quiz_enabled=True)
 
@@ -183,6 +184,10 @@ jobs:
             args+=(--force-regenerate)
           fi
           python bot.py "${args[@]}"
+
+      - name: Probe Gemini schema without database or Telegram writes
+        if: steps.gate.outputs.operation == 'schema-diagnostic'
+        run: python -m scripts.diagnose_gemini_schema
 
       - name: Read sanitized staging health
         if: ${{ inputs.verify_status }}
