@@ -10,7 +10,6 @@ from datetime import date
 
 from bot import (
     _mcq_response_schema,
-    _recent_generation_exclusions,
     build_mcq_prompt,
 )
 from services.gemini_provider_pool import GeminiGenerationError, GeminiProviderPool
@@ -22,21 +21,16 @@ def main() -> int:
     chapter = "অপারেটিং সিস্টেম"
     bundle = load_generation_bundle(subject, chapter, date.today())
     schema = _mcq_response_schema(bundle)
-    exclusions = _recent_generation_exclusions(subject)
+    full_prompt = build_mcq_prompt(subject, chapter, bundle, [])
     variants = (
-        ("no_exclusions", []),
-        ("twenty_exclusions", exclusions[:20]),
-        ("all_exclusions", exclusions),
+        ("first_1000_chars", full_prompt[:1000]),
+        ("first_2500_chars", full_prompt[:2500]),
+        ("first_4000_chars", full_prompt[:4000]),
+        ("full_no_exclusions", full_prompt),
     )
     pool = GeminiProviderPool()
     failed = False
-    for label, selected_exclusions in variants:
-        prompt = build_mcq_prompt(
-            subject,
-            chapter,
-            bundle,
-            selected_exclusions,
-        )
+    for label, prompt in variants:
         try:
             text, _metadata = pool.generate_subject_quiz(
                 prompt=prompt,
@@ -45,13 +39,13 @@ def main() -> int:
         except GeminiGenerationError as exc:
             failed = True
             print(
-                f"CONTEXT_PROBE variant={label} exclusions={len(selected_exclusions)} "
-                f"prompt_chars={len(prompt)} result=failed category={exc.category}"
+                f"CONTEXT_PROBE variant={label} prompt_chars={len(prompt)} "
+                f"result=failed category={exc.category}"
             )
         else:
             print(
-                f"CONTEXT_PROBE variant={label} exclusions={len(selected_exclusions)} "
-                f"prompt_chars={len(prompt)} result=accepted response_chars={len(text)}"
+                f"CONTEXT_PROBE variant={label} prompt_chars={len(prompt)} "
+                f"result=accepted response_chars={len(text)}"
             )
     return int(failed)
 
