@@ -1114,7 +1114,7 @@ def test_source_optional_generation_schema_does_not_require_source_id():
     schema = bot._mcq_response_schema(source_optional)
 
     assert "source_document_id" not in schema["items"]["required"]
-    assert "enum" not in schema["items"]["properties"]["source_document_id"]
+    assert "source_document_id" not in schema["items"]["properties"]
 
 
 def test_generation_repair_has_specific_batch_wide_duplicate_and_balance_guidance():

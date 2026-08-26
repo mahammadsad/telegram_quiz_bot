@@ -150,6 +150,11 @@ def _mcq_response_schema(
     if bundle.source_required:
         properties["source_document_id"]["enum"] = sorted(bundle.source_ids)
         item["required"].append("source_document_id")
+    else:
+        # Source-optional timeless quizzes must omit this field. Keeping it as
+        # an optional property creates an unnecessary structured-output branch
+        # and permits the model to invent a citation the server will discard.
+        properties.pop("source_document_id")
     return schema
 
 _GENERATION_VALIDATION_REPAIR_LIMIT = 1
