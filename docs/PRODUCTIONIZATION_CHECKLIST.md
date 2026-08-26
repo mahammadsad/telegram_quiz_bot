@@ -91,7 +91,9 @@ staging test has passed. Source-code inspection alone is not sufficient.
 
 ## Phase 5 — controlled content rollout
 
-- [ ] Import approved Computer Education expansion sources into staging.
+- [x] Import the reviewed allowlisted static expansion sources into staging;
+  guarded rollout `32901984753` validated, imported, and read back every selected
+  chapter without activating rotation-disabled chapters.
 - [x] Generate and validate one ten-question quiz for a source-covered Computer
   chapter in staging.
 - [x] Compare generated and persisted checksums for that certified pack.
@@ -105,7 +107,7 @@ staging test has passed. Source-code inspection alone is not sufficient.
 
 ## Final release evidence
 
-- [x] Local Python suite: 620 passed, 36 skipped; the skips are the expected
+- [x] Local Python suite: 622 passed, 36 skipped; the skips are the expected
   database cases without `TEST_DATABASE_URL`.
 - [x] Local Ruff, configured mypy (90 source files), full-history scanner,
   browser JavaScript execution, and whitespace gates pass.
@@ -139,6 +141,10 @@ staging test has passed. Source-code inspection alone is not sufficient.
 - [x] Staging application 8.6.0 at exact commit `2bd1086b` returned HTTP 200 from
   `/health/ready` with every exposed readiness check true; the guarded
   preflight passed.
+- [x] Staging contract drift was repaired with the exact tracked platform
+  contract, the 1.0.0 contract readback reported every check true, and the
+  exact tested release `a5225f4` passed guarded preflight `32922058082` after a
+  bounded cold-start retry.
 - [x] The guarded Computer subject lifecycle posted one certified ten-question
   quiz, reconciled its stored Telegram acknowledgement after schema drift was
   repaired, and a guarded retry returned `QUIZ_ALREADY_POSTED` without a

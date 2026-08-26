@@ -1078,6 +1078,43 @@ def test_generation_prompt_requires_normalized_option_values_to_be_distinct():
     assert "audit all 40 options" in basic_repair
 
 
+def test_generation_schema_constrains_exact_grounding_identifiers():
+    bundle = grounding_bundle()
+    schema = bot._mcq_response_schema(bundle)
+    item = schema["items"]
+    properties = item["properties"]
+
+    assert schema["minItems"] == schema["maxItems"] == 10
+    assert properties["subject_key"]["enum"] == [bundle.subject_key]
+    assert properties["chapter"]["enum"] == [bundle.chapter]
+    assert properties["micro_topic_key"]["enum"] == sorted(bundle.topic_keys)
+    assert properties["source_document_id"]["enum"] == sorted(bundle.source_ids)
+    assert item["required"].count("source_document_id") == 1
+    assert properties["options"]["minItems"] == 4
+    assert properties["options"]["maxItems"] == 4
+    assert properties["correct_index"] == {
+        "type": "INTEGER",
+        "minimum": 0,
+        "maximum": 3,
+    }
+
+
+def test_source_optional_generation_schema_does_not_require_source_id():
+    source_optional = GroundingBundle(
+        subject_key="history",
+        chapter="আধুনিক ভারত",
+        micro_topic_id="11111111-1111-4111-8111-111111111111",
+        micro_topic_key="history:modern-india:core",
+        micro_topic_name="আধুনিক ভারত — মূল ধারণা",
+        documents=(),
+    )
+
+    schema = bot._mcq_response_schema(source_optional)
+
+    assert "source_document_id" not in schema["items"]["required"]
+    assert "enum" not in schema["items"]["properties"]["source_document_id"]
+
+
 def test_generation_repair_has_specific_batch_wide_duplicate_and_balance_guidance():
     duplicate = bot._repair_generation_prompt("base", "duplicate_question")
     duplicate_fact = bot._repair_generation_prompt("base", "duplicate_fact")

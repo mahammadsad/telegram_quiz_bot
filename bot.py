@@ -10,8 +10,10 @@ import logging
 import os
 import sys
 import uuid
+from copy import deepcopy
 from datetime import date, datetime, timezone
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 import requests
@@ -86,17 +88,22 @@ LOG = logging.getLogger("subject_quiz_bot")
 ROOT = Path(__file__).resolve().parent
 TELEGRAM_API_BASE = "https://api.telegram.org/bot{token}/{method}"
 
-MCQ_JSON_SCHEMA = {
+MCQ_JSON_SCHEMA: dict[str, Any] = {
     "type": "ARRAY",
     "items": {
         "type": "OBJECT",
         "properties": {
             "question": {"type": "STRING"},
-            "options": {"type": "ARRAY", "items": {"type": "STRING"}},
-            "correct_index": {"type": "INTEGER"},
+            "options": {
+                "type": "ARRAY",
+                "items": {"type": "STRING"},
+                "minItems": 4,
+                "maxItems": 4,
+            },
+            "correct_index": {"type": "INTEGER", "minimum": 0, "maximum": 3},
             "explanation": {"type": "STRING"},
             "detailed_explanation": {"type": "STRING"},
-            "difficulty": {"type": "STRING"},
+            "difficulty": {"type": "STRING", "enum": ["easy", "medium", "hard"]},
             "subject_key": {"type": "STRING"},
             "chapter": {"type": "STRING"},
             "micro_topic_key": {"type": "STRING"},
@@ -125,6 +132,25 @@ MCQ_JSON_SCHEMA = {
         ],
     },
 }
+
+
+def _mcq_response_schema(
+    bundle: source_grounding.GroundingBundle,
+) -> dict[str, Any]:
+    """Constrain generated identifiers to the exact reviewed grounding bundle."""
+    schema = deepcopy(MCQ_JSON_SCHEMA)
+    schema["minItems"] = QUESTION_COUNT
+    schema["maxItems"] = QUESTION_COUNT
+    item = schema["items"]
+    properties = item["properties"]
+    properties["subject_key"]["enum"] = [bundle.subject_key]
+    properties["chapter"]["enum"] = [bundle.chapter]
+    topic_keys = bundle.topic_keys or {bundle.micro_topic_key}
+    properties["micro_topic_key"]["enum"] = sorted(topic_keys)
+    if bundle.source_required:
+        properties["source_document_id"]["enum"] = sorted(bundle.source_ids)
+        item["required"].append("source_document_id")
+    return schema
 
 _GENERATION_VALIDATION_REPAIR_LIMIT = 1
 _VALIDATION_REASON_CODES = (
@@ -194,6 +220,15 @@ _VALIDATION_REPAIR_HINTS = {
         "Independently solve all ten replacement questions before choosing any correct_index. "
         "Recompute every answer and rewrite each short and detailed explanation so both derive "
         "the same unique option. Do not preserve a question merely because its format looks valid."
+    ),
+    "micro_topic": (
+        "For every question, copy micro_topic_key character-for-character from the available "
+        "curated micro-topic list. Never invent, shorten, translate, or combine a key, and make "
+        "it match the cited source_document_id."
+    ),
+    "source_document": (
+        "For every question, copy source_document_id character-for-character from one supplied "
+        "verified source fact and use the micro_topic_key attached to that same source."
     ),
 }
 
@@ -439,7 +474,7 @@ def generate_mcqs(
     for repair_number in range(_GENERATION_VALIDATION_REPAIR_LIMIT + 1):
         raw_text, call_metadata = pool.generate_subject_quiz(
             prompt=active_prompt,
-            response_schema=MCQ_JSON_SCHEMA,
+            response_schema=_mcq_response_schema(grounding_bundle),
         )
         generation_history.append(call_metadata)
         validation_error: QuizValidationError | None = None
