@@ -168,6 +168,9 @@ def test_staging_workflow_is_manual_minimal_and_fail_closed() -> None:
     assert "announce" not in source
     assert "git push" not in source
     assert "except HTTPError as exc" in source
+    assert "for attempt in range(1, 7):" in source
+    assert "except (TimeoutError, URLError):" in source
+    assert "time.sleep(attempt * 5)" in source
     assert 'failures != ["active_quiz_retrieval"]' in source
     assert "Staging readiness must be HTTP 200 after quiz creation." in source
     assert "from database.contract import (" in source
