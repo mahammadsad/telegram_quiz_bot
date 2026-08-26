@@ -163,14 +163,22 @@ staging test has passed. Source-code inspection alone is not sufficient.
   PostgreSQL chain and 665-test suite in run `32944613381`, then reported a
   ready staging contract with `operator_recovery=true`, no permission failures,
   service-role-only execution, and no advisor warnings or errors.
-- [ ] Staging end-to-end quiz lifecycle passes without answer leakage.
+- [x] The audited production recovery requeued only blocked Computer job
+  `063fa7f5-8ea1-4410-8616-9eae42e1292f` after confirming that neither the
+  durable job nor its run had a Telegram acknowledgement. Durable attempt 5 on
+  release `31d2ded` posted `20260826-computer`, recorded Telegram message 2526,
+  cleared its prior error state, and left the job terminally `posted`.
+- [x] Staging end-to-end quiz lifecycle passes without answer leakage. Release
+  `36daa07` is live on both Render services; the staging answer-free smoke for
+  `20260826-computer` and canonical production smoke run `32979274884` passed.
 - [x] Screenshots cover all four Android widths, dashboard identity,
   out-of-top-ten rank, revision feedback, loading, retry/error, and empty
   states. The focused 2026-08-26 Playwright evidence run passed all 56 tests.
 - [ ] Production environment ownership is reviewed before migration/deployment.
 - [ ] A reversible production migration and rollback/recovery plan is approved.
 - [x] Production `/health/ready` and answer-free critical public flows passed the
-  fail-closed deployed smoke on 2026-08-26 at exact release `c97a6cd`.
+  fail-closed deployed smoke on 2026-08-26 at exact release `36daa07` in run
+  `32979274884`; Tests run `32978993467` and Security run `32978993171` passed.
 - [x] Release notes, staging/Telegram/mobile guides, database runbook, production
   rollback guide, and non-programmer verification instructions describe the
   current gates without claiming pending hosted results.
