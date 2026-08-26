@@ -171,6 +171,10 @@ staging test has passed. Source-code inspection alone is not sufficient.
 - [x] Latest-history retry rotation advanced Environment through distinct
   chapters without weakening collision validation; normal durable run
   `32983417931` posted `20260826-environment` as Telegram message 2532.
+- [x] The same guarded path advanced History to a distinct chapter, generated
+  and checksum-verified ten immutable question versions, and recorded Telegram
+  acknowledgement 2533. The 2026-08-26 ledger closed at 10/13 posted; the three
+  remaining jobs are explicit validation/content dead letters, not unknown sends.
 - [x] Staging end-to-end quiz lifecycle passes without answer leakage. Release
   `36daa07` is live on both Render services; the staging answer-free smoke for
   `20260826-computer` and canonical production smoke run `32979274884` passed.
