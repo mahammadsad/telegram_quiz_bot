@@ -56,6 +56,20 @@ def test_chapter_selector_keeps_latest_date_for_duplicate_history_rows():
     assert select_chapter("history", today, history) != "প্রাচীন ভারত"
 
 
+def test_spaced_review_ignores_stale_duplicate_selection(monkeypatch):
+    today = date(2026, 8, 8)
+    chapters = ("one", "two", "three")
+    monkeypatch.setitem(chapter_selector.CHAPTERS, "history", chapters)
+    history = [
+        {"chapter": "three", "selected_for": today.isoformat()},
+        {"chapter": "one", "selected_for": (today - timedelta(days=1)).isoformat()},
+        {"chapter": "two", "selected_for": (today - timedelta(days=2)).isoformat()},
+        {"chapter": "one", "selected_for": (today - timedelta(days=7)).isoformat()},
+    ]
+
+    assert select_chapter("history", today, history) == "two"
+
+
 def test_chapter_selector_never_crosses_subject_catalogues():
     assert select_chapter("science", date(2026, 7, 10), []) == "পদার্থবিদ্যা"
     assert select_chapter("science", date(2026, 7, 10), []) != "প্রাচীন ভারত"
@@ -111,6 +125,26 @@ def test_collision_rotation_advances_after_full_catalogue_coverage(monkeypatch):
 
     assert first == "one"
     assert later == "three"
+
+
+def test_collision_rotation_never_returns_failed_anchor_with_stale_duplicates(
+    monkeypatch,
+):
+    chapters = ("one", "two", "three")
+    monkeypatch.setitem(chapter_selector.CHAPTERS, "computer", chapters)
+    today = date(2026, 8, 8)
+    history = [
+        {"chapter": "one", "selected_for": (today - timedelta(days=1)).isoformat()},
+        {"chapter": "two", "selected_for": (today - timedelta(days=2)).isoformat()},
+        {"chapter": "three", "selected_for": (today - timedelta(days=3)).isoformat()},
+        {"chapter": "one", "selected_for": (today - timedelta(days=7)).isoformat()},
+        {"chapter": "two", "selected_for": (today - timedelta(days=7)).isoformat()},
+        {"chapter": "three", "selected_for": (today - timedelta(days=7)).isoformat()},
+    ]
+
+    assert chapter_selector.select_alternate_chapter(
+        "computer", today, "one", history=history, retry_index=1
+    ) == "two"
 
 
 def test_chapter_history_record_updates_legacy_table_without_unique_constraint(

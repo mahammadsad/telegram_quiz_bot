@@ -31,19 +31,22 @@ def select_chapter(subject_key: str, target_date: date, history: list[dict] | No
         if chapter not in used and chapter != last:
             return chapter
 
-    due = []
+    # Spaced repetition is based on a chapter's latest selection. Historical
+    # duplicates must not make a recently attempted chapter appear due again.
+    previous_dates: dict[str, date] = {}
     for chapter, used_on in normalized_history:
+        previous_dates.setdefault(chapter, used_on)
+
+    due = []
+    for chapter, used_on in previous_dates.items():
         if chapter == last:
             continue
         age = (target_date - used_on).days
-        if age in SPACED_REPETITION_OFFSETS and chapter not in due:
+        if age in SPACED_REPETITION_OFFSETS:
             due.append(chapter)
     if due:
         return due[0]
 
-    previous_dates: dict[str, date] = {}
-    for chapter, used_on in normalized_history:
-        previous_dates.setdefault(chapter, used_on)
     candidates = [chapter for chapter in catalogue if chapter != last]
     return min(candidates, key=lambda chapter: previous_dates.get(chapter, date.min))
 
@@ -61,9 +64,16 @@ def select_alternate_chapter(
         if history is None
         else list(history)
     )
-    rows.append({"chapter": current_chapter, "selected_for": target_date.isoformat()})
+    catalogue = CHAPTERS[subject_key]
+    # Keep the failed anchor as the newest local row throughout this bounded
+    # walk. Alternate markers use smaller offsets below, so the selector's
+    # immediate-repeat exclusion cannot cycle back to the failed anchor.
+    rows.append({
+        "chapter": current_chapter,
+        "selected_for": (target_date + timedelta(days=len(catalogue) + 1)).isoformat(),
+    })
     selected = current_chapter
-    steps = min(max(0, retry_index) + 1, max(1, len(CHAPTERS[subject_key]) - 1))
+    steps = min(max(0, retry_index) + 1, max(1, len(catalogue) - 1))
     for offset in range(steps):
         selected = select_chapter(subject_key, target_date, rows)
         # Synthetic future ordering exists only inside this pure selection call.
