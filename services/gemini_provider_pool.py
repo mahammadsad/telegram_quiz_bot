@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import random
+import re
 import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -134,8 +135,12 @@ class GeminiProviderPool:
                     status = _safe_status(exc)
                     attempts.append({"provider": provider.label, "model": model, "category": category, "status": status})
                     LOG.warning(
-                        "GEMINI_PROVIDER_FAILURE provider=%s model=%s error_category=%s status=%s",
-                        provider.label, model, category, status or "unknown",
+                        "GEMINI_PROVIDER_FAILURE provider=%s model=%s error_category=%s status=%s detail=%s",
+                        provider.label,
+                        model,
+                        category,
+                        status or "unknown",
+                        _safe_error_detail(exc),
                     )
                     if (
                         category == MODEL_UNAVAILABLE
@@ -253,6 +258,19 @@ def _safe_status(exc: Exception) -> int | None:
         return int(value) if value is not None else None
     except (TypeError, ValueError):
         return None
+
+
+def _safe_error_detail(exc: Exception) -> str:
+    """Retain provider validation clues without logging credentials or payloads."""
+    detail = " ".join(str(exc).split())
+    detail = re.sub(r"https?://\S+", "<url>", detail, flags=re.IGNORECASE)
+    detail = re.sub(r"\b[A-Za-z0-9_-]{20,}\b", "<redacted>", detail)
+    detail = re.sub(
+        r"(?i)(api[_ -]?key|authorization|bearer)(\s*[:=]?\s*)\S+",
+        r"\1\2<redacted>",
+        detail,
+    )
+    return detail[:500] or type(exc).__name__
 
 
 def _retry_after(exc: Exception | None) -> float | None:

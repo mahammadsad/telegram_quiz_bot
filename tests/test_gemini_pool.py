@@ -129,3 +129,20 @@ def test_logs_never_contain_keys(caplog):
     generate(pool)
     assert "primary-secret" not in caplog.text
     assert "secondary-secret" not in caplog.text
+
+
+def test_provider_error_detail_preserves_reason_but_redacts_sensitive_values(caplog):
+    secret = "AIzaSyExampleCredentialValue123456789"
+    error = ApiError(
+        400,
+        f"INVALID_ARGUMENT schema has too many states; api_key={secret} "
+        "https://example.test/request?key=also-secret",
+    )
+    pool, _ = make_pool([error], ["unused"])
+
+    with pytest.raises(GeminiGenerationError):
+        generate(pool)
+
+    assert "schema has too many states" in caplog.text
+    assert secret not in caplog.text
+    assert "also-secret" not in caplog.text
