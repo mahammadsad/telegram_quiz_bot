@@ -143,7 +143,7 @@ class GeminiProviderPool:
                         _safe_error_detail(exc),
                     )
                     if (
-                        category == MODEL_UNAVAILABLE
+                        category in (MODEL_UNAVAILABLE, NON_RETRYABLE)
                         and preferred_model is None
                         and not model_fallback_used
                         and self.fallback_model != model

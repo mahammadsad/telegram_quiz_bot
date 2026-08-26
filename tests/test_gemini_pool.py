@@ -85,12 +85,31 @@ def test_invalid_primary_key_immediately_uses_secondary():
 
 
 def test_bad_request_and_safety_do_not_call_secondary():
-    for error in (ApiError(400, "INVALID_ARGUMENT"), ApiError(500, "safety blocked_reason")):
-        pool, clients = make_pool([error], ["unused"])
+    for errors in (
+        [ApiError(400, "INVALID_ARGUMENT"), ApiError(400, "INVALID_ARGUMENT")],
+        [ApiError(500, "safety blocked_reason")],
+    ):
+        pool, clients = make_pool(errors, ["unused"])
         with pytest.raises(GeminiGenerationError) as caught:
             generate(pool)
         assert not caught.value.retryable
         assert len(clients["secondary-secret"].models.calls) == 0
+
+
+def test_bad_request_uses_configured_model_fallback_once():
+    pool, clients = make_pool(
+        [ApiError(400, "INVALID_ARGUMENT"), "[]"],
+        ["unused"],
+    )
+
+    _, metadata = generate(pool)
+
+    assert metadata["provider"] == "primary"
+    assert metadata["model"] == "gemini-2.5-flash"
+    assert [call["model"] for call in clients["primary-secret"].models.calls] == [
+        "gemini-3.1-flash-lite",
+        "gemini-2.5-flash",
+    ]
 
 
 def test_both_providers_exhausted_is_retryable():
