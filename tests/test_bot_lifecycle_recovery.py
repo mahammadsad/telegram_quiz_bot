@@ -15,6 +15,7 @@ from database.contract import (
     PLATFORM_CONTRACT_REQUIRED_CHECKS,
     PLATFORM_CONTRACT_VERSION,
 )
+from errors import QuizContentCollisionError
 from services.gemini_provider_pool import GeminiGenerationError
 from services.inventory_quiz_service import InventoryQuiz
 from services.question_verification import CHECK_FIELDS
@@ -445,6 +446,44 @@ def test_checksum_failure_status_is_preserved_and_never_posted(monkeypatch, vali
         bot.run_subject_quiz("history", target_date=date(2026, 7, 10))
     assert ("status", "generation_failed") not in events
     assert not any(event[0] == "telegram" for event in events)
+
+
+def test_collision_retry_rotation_uses_stable_daily_anchor(monkeypatch, valid_questions):
+    existing = {
+        "status": "generation_failed",
+        "chapter": "পূর্বের বিকল্প অধ্যায়",
+    }
+    setup_run(monkeypatch, valid_questions, existing_run=existing)
+    monkeypatch.setattr(
+        bot.quiz_pack_service,
+        "record_quiz_pack",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            QuizContentCollisionError("historical collision")
+        ),
+    )
+    calls = []
+    monkeypatch.setattr(
+        bot.chapter_selector,
+        "select_alternate_chapter",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or "পরবর্তী অধ্যায়",
+    )
+    monkeypatch.setattr(bot, "send_failure_alert", lambda *args, **kwargs: None)
+
+    with pytest.raises(QuizContentCollisionError, match="historical collision"):
+        bot.run_subject_quiz(
+            "history",
+            target_date=date(2026, 7, 10),
+            durable_job_id="11111111-1111-4111-8111-111111111111",
+            durable_worker_id="worker-1",
+            durable_retry_count=4,
+        )
+
+    assert calls == [
+        (
+            ("history", date(2026, 7, 10), "আধুনিক ভারত"),
+            {"retry_index": 4},
+        )
+    ]
 
 
 def test_public_static_export_contains_no_answer_key(monkeypatch, tmp_path, valid_questions):

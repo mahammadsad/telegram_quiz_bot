@@ -944,10 +944,19 @@ def run_subject_quiz(
                         "retryable": bool(getattr(exc, "retryable", False)),
                     }
                     if category == "quiz_content_collision":
+                        # Durable retries persist the last attempted chapter on
+                        # quiz_runs. Anchor the retry index to the day's stable
+                        # history-based selection instead of that moving value;
+                        # otherwise successive offsets form a triangular walk
+                        # and can cycle back to the chapter that just failed.
+                        rotation_anchor = chapter_selector.select_chapter(
+                            subject_key,
+                            target_date,
+                        )
                         alternate = chapter_selector.select_alternate_chapter(
                             subject_key,
                             target_date,
-                            chapter,
+                            rotation_anchor,
                             retry_index=durable_retry_count,
                         )
                         failure_fields["chapter"] = alternate
