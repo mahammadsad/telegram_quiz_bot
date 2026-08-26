@@ -173,3 +173,22 @@ def reconcile_unknown(
         },
     ).execute()
     return as_row(result.data, "reconcile_quiz_job_unknown")
+
+
+def requeue_blocked(
+    *,
+    job_id: str,
+    actor: str,
+    reason: str,
+    expected_error_code: str,
+) -> Row:
+    result = get_client().rpc(
+        "requeue_blocked_quiz_job",
+        {
+            "p_job_id": job_id,
+            "p_actor": actor,
+            "p_reason": reason,
+            "p_expected_error_code": expected_error_code,
+        },
+    ).execute()
+    return as_row(result.data, "requeue_blocked_quiz_job")

@@ -61,6 +61,90 @@ def connect(database_url: str) -> psycopg.Connection:
     return psycopg.connect(database_url, row_factory=dict_row)
 
 
+def test_blocked_quiz_operator_recovery_is_atomic_and_audited(
+    database_url: str,
+) -> None:
+    quiz_id = "20500101-computer"
+    with connect(database_url) as connection:
+        connection.execute(
+            """
+            insert into public.quiz_runs (
+                quiz_id, quiz_date, subject_key, subject_display_name,
+                internal_subject, chapter, status, question_count,
+                retryable, last_error_category
+            ) values (
+                %s, date '2050-01-01', 'computer', 'কম্পিউটার',
+                'Computer', 'Operating Systems', 'generation_failed', 0,
+                false, 'non_retryable_request'
+            )
+            """,
+            (quiz_id,),
+        )
+        job = connection.execute(
+            """
+            insert into public.quiz_jobs (
+                quiz_id, logical_date, subject_key, due_at, status,
+                retry_count, last_error_category, last_error_code,
+                blocking_reason, configuration_hash, code_sha
+            ) values (
+                %s, date '2050-01-01', 'computer', now(), 'blocked',
+                2, 'non_retryable_request', 'GeminiGenerationError',
+                'Provider rejected the request.', repeat('a', 64), 'integration-test'
+            ) returning id
+            """,
+            (quiz_id,),
+        ).fetchone()
+        assert job
+
+        recovered = connection.execute(
+            """
+            select public.requeue_blocked_quiz_job(%s, %s, %s, %s) as result
+            """,
+            (
+                job["id"],
+                "integration-operator",
+                "Corrected provider request contract passed staging.",
+                "GeminiGenerationError",
+            ),
+        ).fetchone()["result"]
+        assert recovered["status"] == "retry_wait"
+        assert recovered["retry_count"] == 2
+
+        persisted = connection.execute(
+            "select * from public.quiz_jobs where id = %s",
+            (job["id"],),
+        ).fetchone()
+        assert persisted["status"] == "retry_wait"
+        assert persisted["next_retry_at"] is not None
+        assert persisted["blocking_reason"] is None
+        assert persisted["retry_count"] == 2
+
+        event = connection.execute(
+            """
+            select * from public.quiz_job_events
+            where job_id = %s and event_type = 'operator_requeued'
+            """,
+            (job["id"],),
+        ).fetchone()
+        assert event
+        assert event["from_status"] == "blocked"
+        assert event["to_status"] == "retry_wait"
+        assert event["attempt_number"] == 2
+        assert event["detail"]["actor"] == "integration-operator"
+
+        with pytest.raises(psycopg.errors.RaiseException, match="only a blocked"):
+            connection.execute(
+                "select public.requeue_blocked_quiz_job(%s, %s, %s, %s)",
+                (
+                    job["id"],
+                    "integration-operator",
+                    "A duplicate recovery must fail closed.",
+                    "GeminiGenerationError",
+                ),
+            )
+        connection.rollback()
+
+
 @pytest.fixture(scope="module")
 def catalogue(database_url: str) -> Catalogue:
     with psycopg.connect(database_url, row_factory=dict_row, autocommit=True) as connection:
