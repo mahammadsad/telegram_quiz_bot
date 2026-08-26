@@ -1129,6 +1129,15 @@ def test_generation_repair_has_specific_batch_wide_duplicate_and_balance_guidanc
     assert "entity-relation-answer tuples pairwise" in bot._repair_generation_prompt(
         "base", "micro_topic"
     )
+    assert "at least four distinct supplied" in bot._repair_generation_prompt(
+        "base", "source_diversity"
+    )
+    assert "No source_document_id may appear more than three times" in bot._repair_generation_prompt(
+        "base", "source_diversity"
+    )
+    assert "No micro_topic_key may appear more than three times" in bot._repair_generation_prompt(
+        "base", "micro_topic_diversity"
+    )
 
 
 def test_recent_generation_exclusions_include_canonical_knowledge_identity(monkeypatch):

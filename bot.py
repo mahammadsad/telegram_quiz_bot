@@ -236,6 +236,15 @@ _VALIDATION_REPAIR_HINTS = {
         "For every question, copy source_document_id character-for-character from one supplied "
         "verified source fact and use the micro_topic_key attached to that same source."
     ),
+    "source_diversity": (
+        "Redistribute all ten questions across at least four distinct supplied "
+        "source_document_id values. No source_document_id may appear more than three times, "
+        "and each question must remain directly supported by its selected source fact."
+    ),
+    "micro_topic_diversity": (
+        "Redistribute all ten questions across at least four distinct available "
+        "micro_topic_key values. No micro_topic_key may appear more than three times."
+    ),
 }
 
 
