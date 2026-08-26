@@ -54,7 +54,7 @@ def make_pool(primary, secondary, **extra):
 
 
 def generate(pool):
-    return pool.generate_subject_quiz(prompt="safe prompt", response_schema={"type": "ARRAY"})
+    return pool.generate_subject_quiz(prompt="safe prompt", response_schema={"type": "array"})
 
 
 def test_primary_success_never_calls_secondary():
@@ -62,7 +62,10 @@ def test_primary_success_never_calls_secondary():
     text, metadata = generate(pool)
     assert text == "[]" and metadata["provider"] == "primary"
     assert len(clients["secondary-secret"].models.calls) == 0
-    assert clients["primary-secret"].models.calls[0]["config"].temperature == 0.3
+    config = clients["primary-secret"].models.calls[0]["config"]
+    assert config.temperature == 0.3
+    assert config.response_json_schema == {"type": "array"}
+    assert config.response_schema is None
 
 
 @pytest.mark.parametrize("error", [ApiError(429, "RESOURCE_EXHAUSTED"), ApiError(503), TimeoutError("socket timeout")])

@@ -218,7 +218,10 @@ class GeminiProviderPool:
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
-                response_schema=response_schema,
+                # This is a standards-shaped JSON Schema. Using the dedicated
+                # field avoids the older OpenAPI-schema coercion path, which
+                # can reject otherwise valid nested enum/minItems contracts.
+                response_json_schema=response_schema,
                 temperature=settings.GEMINI_FACTUAL_TEMPERATURE,
             ),
         )

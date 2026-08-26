@@ -149,6 +149,10 @@ staging test has passed. Source-code inspection alone is not sufficient.
   quiz, reconciled its stored Telegram acknowledgement after schema drift was
   repaired, and a guarded retry returned `QUIZ_ALREADY_POSTED` without a
   duplicate message or chapter-history row.
+- [x] The exact `e4815e4` staging release generated, independently verified and
+  privately posted the ten-question English quiz in guarded run `32922619905`;
+  an answer-free deployed smoke passed for `20260826-english`, and retry
+  `32922722535` returned `QUIZ_ALREADY_POSTED` without regeneration or reposting.
 - [ ] Staging end-to-end quiz lifecycle passes without answer leakage.
 - [x] Screenshots cover all four Android widths, dashboard identity,
   out-of-top-ten rank, revision feedback, loading, retry/error, and empty
