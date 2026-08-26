@@ -93,6 +93,26 @@ def test_collision_rotation_advances_across_durable_retries(monkeypatch):
     assert later not in {"one", first}
 
 
+def test_collision_rotation_advances_after_full_catalogue_coverage(monkeypatch):
+    chapters = ("one", "two", "three", "four", "five")
+    monkeypatch.setitem(chapter_selector.CHAPTERS, "computer", chapters)
+    today = date(2026, 8, 8)
+    history = [
+        {"chapter": chapter, "selected_for": date(2026, 7, index + 1).isoformat()}
+        for index, chapter in enumerate(chapters)
+    ]
+
+    first = chapter_selector.select_alternate_chapter(
+        "computer", today, "five", history=history, retry_index=0
+    )
+    later = chapter_selector.select_alternate_chapter(
+        "computer", today, "five", history=history, retry_index=2
+    )
+
+    assert first == "one"
+    assert later == "three"
+
+
 def test_chapter_history_record_updates_legacy_table_without_unique_constraint(
     monkeypatch,
 ):

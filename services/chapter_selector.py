@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
 from config.settings import SPACED_REPETITION_OFFSETS
 from config.subjects import get_subject
@@ -64,9 +64,15 @@ def select_alternate_chapter(
     rows.append({"chapter": current_chapter, "selected_for": target_date.isoformat()})
     selected = current_chapter
     steps = min(max(0, retry_index) + 1, max(1, len(CHAPTERS[subject_key]) - 1))
-    for _ in range(steps):
+    for offset in range(steps):
         selected = select_chapter(subject_key, target_date, rows)
-        rows.append({"chapter": selected, "selected_for": target_date.isoformat()})
+        # Synthetic future ordering exists only inside this pure selection call.
+        # It makes each previously chosen alternate the latest local choice so
+        # the next iteration advances even when the real catalogue is fully used.
+        rows.append({
+            "chapter": selected,
+            "selected_for": (target_date + timedelta(days=offset + 1)).isoformat(),
+        })
     return selected
 
 
