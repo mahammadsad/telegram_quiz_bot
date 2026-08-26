@@ -140,8 +140,6 @@ def _mcq_response_schema(
 ) -> dict[str, Any]:
     """Constrain generated identifiers to the exact reviewed grounding bundle."""
     schema = deepcopy(MCQ_JSON_SCHEMA)
-    schema["minItems"] = QUESTION_COUNT
-    schema["maxItems"] = QUESTION_COUNT
     item = schema["items"]
     properties = item["properties"]
     properties["subject_key"]["enum"] = [bundle.subject_key]

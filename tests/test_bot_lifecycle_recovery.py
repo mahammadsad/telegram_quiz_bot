@@ -1086,7 +1086,8 @@ def test_generation_schema_constrains_exact_grounding_identifiers():
 
     assert schema["type"] == "array"
     assert item["type"] == "object"
-    assert schema["minItems"] == schema["maxItems"] == 10
+    assert "minItems" not in schema
+    assert "maxItems" not in schema
     assert properties["subject_key"]["enum"] == [bundle.subject_key]
     assert properties["chapter"]["enum"] == ["history:modern-india"]
     assert properties["micro_topic_key"]["enum"] == sorted(bundle.topic_keys)
