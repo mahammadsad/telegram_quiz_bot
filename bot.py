@@ -38,6 +38,7 @@ from config.settings import (
     supabase_project_ref_matches,
 )
 from config.subjects import QUIZ_SUBJECTS, get_subject
+from config.syllabus import get_chapter
 from database.contract import (
     DATABASE_CONTRACT_KEY,
     DATABASE_CONTRACT_VERSION,
@@ -144,7 +145,9 @@ def _mcq_response_schema(
     item = schema["items"]
     properties = item["properties"]
     properties["subject_key"]["enum"] = [bundle.subject_key]
-    properties["chapter"]["enum"] = [bundle.chapter]
+    properties["chapter"]["enum"] = [
+        get_chapter(bundle.subject_key, bundle.chapter).key
+    ]
     topic_keys = bundle.topic_keys or {bundle.micro_topic_key}
     properties["micro_topic_key"]["enum"] = sorted(topic_keys)
     if bundle.source_required:
@@ -245,6 +248,7 @@ def build_mcq_prompt(
     recent_exclusions: list[dict] | None = None,
 ) -> str:
     subject = get_subject(subject_key, require_quiz_enabled=True)
+    chapter_key = get_chapter(subject_key, chapter).key
     available_topics = [(row.key, row.name) for row in bundle.available_topics]
     exclusions = recent_exclusions or []
     shared = f"""You are an expert Bengali question setter for Indian and West Bengal competitive exams.
@@ -252,6 +256,7 @@ Create exactly 10 MCQs for the single scheduled subject and chapter below.
 Canonical subject key: {subject.key}
 Internal subject: {subject.internal_subject}
 Chapter: {chapter}
+Canonical chapter key: {chapter_key}
 Available curated micro-topics:
 {json.dumps(available_topics, ensure_ascii=False, separators=(",", ":"))}
 Recent questions and canonical identities that MUST NOT be repeated or paraphrased (JSON):
@@ -263,7 +268,7 @@ Rules:
 3. Bengali question text, a short Bengali explanation, and a detailed Bengali explanation are mandatory.
 4. English tests may contain English tested text; Bengali instructions and explanations remain mandatory.
 5. Supply exactly four unique non-empty options and correct_index 0..3.
-6. Every object must repeat subject_key exactly as {subject.key} and chapter exactly as {chapter}, and use one available micro_topic_key exactly.
+6. Every object must repeat subject_key exactly as {subject.key} and chapter exactly as the canonical key {chapter_key}, and use one available micro_topic_key exactly. The server maps that key back to the reviewed chapter display name.
 7. Use exactly 3 easy, 5 medium, and 2 hard questions.
 8. Balance correct_index across all four positions: two positions appear twice and two positions appear three times. Avoid predictable sequences.
 9. Every question must test a distinct fact or relationship. Do not paraphrase the same fact into multiple questions, repeat the same question-answer relationship, truncate, reveal an answer, or introduce ambiguity.

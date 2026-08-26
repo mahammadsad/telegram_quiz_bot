@@ -1088,7 +1088,7 @@ def test_generation_schema_constrains_exact_grounding_identifiers():
     assert item["type"] == "object"
     assert schema["minItems"] == schema["maxItems"] == 10
     assert properties["subject_key"]["enum"] == [bundle.subject_key]
-    assert properties["chapter"]["enum"] == [bundle.chapter]
+    assert properties["chapter"]["enum"] == ["history:modern-india"]
     assert properties["micro_topic_key"]["enum"] == sorted(bundle.topic_keys)
     assert properties["source_document_id"]["enum"] == sorted(bundle.source_ids)
     assert item["required"].count("source_document_id") == 1
