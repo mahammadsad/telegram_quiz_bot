@@ -1078,6 +1078,16 @@ def test_generation_prompt_requires_normalized_option_values_to_be_distinct():
     assert "audit all 40 options" in basic_repair
 
 
+def test_source_backed_prompt_assigns_every_question_to_reviewed_evidence():
+    bundle = grounding_bundle()
+    prompt = bot.build_mcq_prompt("history", "আধুনিক ভারত", bundle)
+
+    assert "Mandatory source allocation by array position" in prompt
+    assert prompt.count('"question_number":') == 10
+    assert prompt.count(f'"source_document_id":"{bundle.documents[0].id}"') >= 10
+    assert "Do not output question_number" in prompt
+
+
 def test_generation_schema_constrains_exact_grounding_identifiers():
     bundle = grounding_bundle()
     schema = bot._mcq_response_schema(bundle)
