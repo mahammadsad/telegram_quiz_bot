@@ -108,8 +108,8 @@ staging test has passed. Source-code inspection alone is not sufficient.
 ## Final release evidence
 
 - [x] Local Python suite: 628 passed and 37 expected database tests skipped;
-  CI run `32944613381` passed all 665 tests against disposable PostgreSQL 17 at
-  release `34e53ab`, including the audited blocked-job recovery migration.
+  CI run `32981014135` passed all 670 tests against disposable PostgreSQL 17 at
+  release `65b3b4e`, including blocked-job recovery and durable retry rotation.
 - [x] Local Ruff, configured mypy (90 source files), full-history scanner,
   browser JavaScript execution, and whitespace gates pass.
 - [x] Local Playwright suite: 140 passed across all four required Android
@@ -177,8 +177,8 @@ staging test has passed. Source-code inspection alone is not sufficient.
 - [ ] Production environment ownership is reviewed before migration/deployment.
 - [ ] A reversible production migration and rollback/recovery plan is approved.
 - [x] Production `/health/ready` and answer-free critical public flows passed the
-  fail-closed deployed smoke on 2026-08-26 at exact release `36daa07` in run
-  `32979274884`; Tests run `32978993467` and Security run `32978993171` passed.
+  fail-closed deployed smoke on 2026-08-26 at exact release `65b3b4e` in run
+  `32981828237`; Tests run `32981014135` and Security run `32981014299` passed.
 - [x] Release notes, staging/Telegram/mobile guides, database runbook, production
   rollback guide, and non-programmer verification instructions describe the
   current gates without claiming pending hosted results.
