@@ -149,7 +149,9 @@ def _mcq_response_schema(
     topic_keys = bundle.topic_keys or {bundle.micro_topic_key}
     properties["micro_topic_key"]["enum"] = sorted(topic_keys)
     if bundle.source_required:
-        properties["source_document_id"]["enum"] = sorted(bundle.source_ids)
+        properties["source_document_id"]["enum"] = list(
+            _source_aliases(bundle).values()
+        )
         item["required"].append("source_document_id")
     else:
         # Source-optional timeless quizzes must omit this field. Keeping it as
@@ -157,6 +159,17 @@ def _mcq_response_schema(
         # and permits the model to invent a citation the server will discard.
         properties.pop("source_document_id")
     return schema
+
+
+def _source_aliases(
+    bundle: source_grounding.GroundingBundle,
+) -> dict[str, str]:
+    """Create short model-facing aliases for exact reviewed source IDs."""
+    aliases: dict[str, str] = {}
+    for document in bundle.documents:
+        if document.id not in aliases:
+            aliases[document.id] = f"s{len(aliases) + 1}"
+    return aliases
 
 _GENERATION_VALIDATION_REPAIR_LIMIT = 1
 _VALIDATION_REASON_CODES = (
@@ -286,10 +299,18 @@ Rules:
 14. Within each question, make all four options use the same visible answer type and script pattern. The correct option must not be the only numeric, Latin, Bengali, or mixed-script option. Before returning, privately remove option labels, whitespace, punctuation, and script-only number formatting from every option: all four normalized values must be non-empty and pairwise different. For numerical questions, each option must represent a different mathematical value; do not restate one value using Bengali versus Arabic digits, a unit-only variant, or a label-only variant.
 """
     if bundle.source_required:
+        source_aliases = _source_aliases(bundle)
+        prompt_facts = [
+            {
+                **row,
+                "source_document_id": source_aliases[row["source_document_id"]],
+            }
+            for row in bundle.prompt_facts()
+        ]
         source_slot_plan = [
             {
                 "question_number": index,
-                "source_document_id": document.id,
+                "source_document_id": source_aliases[document.id],
                 "micro_topic_key": document.micro_topic_key or bundle.micro_topic_key,
             }
             for index, document in enumerate(
@@ -304,7 +325,7 @@ Rules:
             shared
             + f"""
 Verified source facts (JSON):
-{json.dumps(bundle.prompt_facts(), ensure_ascii=False, separators=(",", ":"))}
+{json.dumps(prompt_facts, ensure_ascii=False, separators=(",", ":"))}
 Mandatory source allocation by array position (JSON):
 {json.dumps(source_slot_plan, ensure_ascii=False, separators=(",", ":"))}
 15. Use only the verified source facts above. Do not use model memory or infer an unstated fact.
@@ -436,6 +457,8 @@ def _enrich_generated_questions(
 ) -> list:
     enriched = []
     source_by_id = {document.id: document for document in grounding_bundle.documents}
+    for source_id, alias in _source_aliases(grounding_bundle).items():
+        source_by_id[alias] = source_by_id[source_id]
     topic_by_key = {topic.key: topic for topic in grounding_bundle.available_topics}
     for item in raw:
         if isinstance(item, dict):
@@ -445,7 +468,7 @@ def _enrich_generated_questions(
                 {
                     **item,
                     "source_document_id": (
-                        str(item.get("source_document_id") or "").strip() if grounding_bundle.source_required else ""
+                        source.id if source and grounding_bundle.source_required else ""
                     ),
                     "subject_key": subject_key,
                     "chapter": chapter,

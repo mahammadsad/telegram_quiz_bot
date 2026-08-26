@@ -1084,7 +1084,8 @@ def test_source_backed_prompt_assigns_every_question_to_reviewed_evidence():
 
     assert "Mandatory source allocation by array position" in prompt
     assert prompt.count('"question_number":') == 10
-    assert prompt.count(f'"source_document_id":"{bundle.documents[0].id}"') >= 10
+    assert prompt.count('"source_document_id":"s1"') >= 10
+    assert bundle.documents[0].id not in prompt
     assert "Do not output question_number" in prompt
 
 
@@ -1101,7 +1102,7 @@ def test_generation_schema_constrains_exact_grounding_identifiers():
     assert properties["subject_key"]["enum"] == [bundle.subject_key]
     assert properties["chapter"]["enum"] == ["history:modern-india"]
     assert properties["micro_topic_key"]["enum"] == sorted(bundle.topic_keys)
-    assert properties["source_document_id"]["enum"] == sorted(bundle.source_ids)
+    assert properties["source_document_id"]["enum"] == ["s1"]
     assert item["required"].count("source_document_id") == 1
     assert properties["options"]["minItems"] == 4
     assert properties["options"]["maxItems"] == 4
