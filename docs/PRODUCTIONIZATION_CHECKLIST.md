@@ -107,8 +107,9 @@ staging test has passed. Source-code inspection alone is not sufficient.
 
 ## Final release evidence
 
-- [x] Local Python suite: 622 passed, 36 skipped; the skips are the expected
-  database cases without `TEST_DATABASE_URL`.
+- [x] Local Python suite: 628 passed and 37 expected database tests skipped;
+  CI run `32944613381` passed all 665 tests against disposable PostgreSQL 17 at
+  release `34e53ab`, including the audited blocked-job recovery migration.
 - [x] Local Ruff, configured mypy (90 source files), full-history scanner,
   browser JavaScript execution, and whitespace gates pass.
 - [x] Local Playwright suite: 140 passed across all four required Android
@@ -153,6 +154,15 @@ staging test has passed. Source-code inspection alone is not sufficient.
   privately posted the ten-question English quiz in guarded run `32922619905`;
   an answer-free deployed smoke passed for `20260826-english`, and retry
   `32922722535` returned `QUIZ_ALREADY_POSTED` without regeneration or reposting.
+- [x] Guarded staging run `32943314315` on release `34fce08` generated,
+  independently verified, atomically persisted and privately posted the
+  ten-question Computer quiz after the Gemini schema serving-state repair.
+  Retry `32943501370` returned `QUIZ_ALREADY_POSTED` without generation or a
+  second Telegram message. Both staging health endpoints returned HTTP 200.
+- [x] Operator recovery migration `20260826080000` passed the full disposable
+  PostgreSQL chain and 665-test suite in run `32944613381`, then reported a
+  ready staging contract with `operator_recovery=true`, no permission failures,
+  service-role-only execution, and no advisor warnings or errors.
 - [ ] Staging end-to-end quiz lifecycle passes without answer leakage.
 - [x] Screenshots cover all four Android widths, dashboard identity,
   out-of-top-ten rank, revision feedback, loading, retry/error, and empty

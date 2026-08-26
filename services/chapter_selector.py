@@ -53,15 +53,21 @@ def select_alternate_chapter(
     target_date: date,
     current_chapter: str,
     history: list[dict] | None = None,
+    retry_index: int = 0,
 ) -> str:
-    """Choose another catalogue chapter after a generated-content collision."""
+    """Choose a distinct alternate across durable collision retries."""
     rows = (
         chapter_history_repo.list_for_subject(subject_key)
         if history is None
         else list(history)
     )
     rows.append({"chapter": current_chapter, "selected_for": target_date.isoformat()})
-    return select_chapter(subject_key, target_date, rows)
+    selected = current_chapter
+    steps = min(max(0, retry_index) + 1, max(1, len(CHAPTERS[subject_key]) - 1))
+    for _ in range(steps):
+        selected = select_chapter(subject_key, target_date, rows)
+        rows.append({"chapter": selected, "selected_for": target_date.isoformat()})
+    return selected
 
 
 def _as_date(value) -> date | None:

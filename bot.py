@@ -747,6 +747,7 @@ def run_subject_quiz(
     pool: GeminiProviderPool | None = None,
     durable_job_id: str | None = None,
     durable_worker_id: str | None = None,
+    durable_retry_count: int = 0,
 ) -> RunOutcome:
     subject = get_subject(subject_key, require_quiz_enabled=True)
     router = validate_runtime_config(require_gemini=False)
@@ -755,6 +756,8 @@ def run_subject_quiz(
     quiz_id = build_quiz_id(target_date, subject_key)
     if bool(durable_job_id) != bool(durable_worker_id):
         raise ValueError("Durable job ID and worker ID must be supplied together.")
+    if durable_retry_count < 0:
+        raise ValueError("Durable retry count cannot be negative.")
     worker_id = durable_worker_id or _worker_id()
     run = quiz_runs_repo.get(quiz_id)
     if run and run.get("status") == "posted" and not force_regenerate:
@@ -945,6 +948,7 @@ def run_subject_quiz(
                             subject_key,
                             target_date,
                             chapter,
+                            retry_index=durable_retry_count,
                         )
                         failure_fields["chapter"] = alternate
                         LOG.warning(

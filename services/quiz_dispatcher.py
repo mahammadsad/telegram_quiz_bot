@@ -114,6 +114,7 @@ def dispatch_due_jobs(
                 target_date=job_logical_date,
                 durable_job_id=job_id,
                 durable_worker_id=worker_id,
+                durable_retry_count=int(job.get("retry_count") or 0),
             )
             outcome_text = str(outcome)
             if outcome == RunOutcome.ALREADY_POSTED:

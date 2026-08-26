@@ -45,7 +45,7 @@ Status meanings:
 
 - `ruff check .`: pass.
 - `mypy`: success, 90 configured production source files.
-- Local `pytest -q`: **622 passed, 36 skipped**, one upstream Starlette/httpx deprecation warning; disposable-database integration remains a CI gate.
+- Local `pytest -q`: **628 passed, 37 skipped**, one upstream Starlette/httpx deprecation warning; CI run `32944613381` passed all **665** tests against disposable PostgreSQL 17.
 - Playwright: **140 passed** across the four supported Android viewports.
 - `pip-audit -r requirements.lock`: no known vulnerabilities.
 - `bandit -r . -lll`: no high-severity findings.

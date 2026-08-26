@@ -76,6 +76,23 @@ def test_collision_rotation_moves_to_another_unseen_chapter():
     assert alternate in chapter_selector.CHAPTERS["miscellaneous"]
 
 
+def test_collision_rotation_advances_across_durable_retries(monkeypatch):
+    chapters = ("one", "two", "three", "four", "five")
+    monkeypatch.setitem(chapter_selector.CHAPTERS, "computer", chapters)
+    today = date(2026, 8, 8)
+
+    first = chapter_selector.select_alternate_chapter(
+        "computer", today, "one", history=[], retry_index=0
+    )
+    later = chapter_selector.select_alternate_chapter(
+        "computer", today, "one", history=[], retry_index=2
+    )
+
+    assert first == "two"
+    assert later == "four"
+    assert later not in {"one", first}
+
+
 def test_chapter_history_record_updates_legacy_table_without_unique_constraint(
     monkeypatch,
 ):

@@ -12,6 +12,7 @@ def _jobs(specs):
             "logical_date": spec["logical_date"],
             "subject_key": spec["subject_key"],
             "code_sha": "sha",
+            "retry_count": index,
         }
         for index, spec in enumerate(specs)
     ]
@@ -113,7 +114,7 @@ def test_midnight_catchup_runs_each_job_for_its_own_logical_date(monkeypatch):
     )
 
     def runner(subject, **kwargs):
-        targets.append(kwargs["target_date"])
+        targets.append((kwargs["target_date"], kwargs["durable_retry_count"]))
         return RunOutcome.GENERATED_AND_POSTED
 
     result = quiz_dispatcher.dispatch_due_jobs(
@@ -123,7 +124,7 @@ def test_midnight_catchup_runs_each_job_for_its_own_logical_date(monkeypatch):
     )
 
     assert result.logical_date == date(2026, 8, 9)
-    assert targets == [date(2026, 8, 8)]
+    assert targets == [(date(2026, 8, 8), 0)]
 
 
 def test_global_health_keeps_unclaimed_dead_letter_red():
