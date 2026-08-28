@@ -5,9 +5,9 @@ permissions:
 
 on:
   schedule:
-    # GitHub documents higher delay/drop risk at busy hour boundaries.
-    - cron: "7,22,37,52 * * * *"
-    - cron: "11 15 * * *"
+    # Supabase Cron is primary; these are delayed-event recovery heartbeats.
+    - cron: "43 * * * *"
+    - cron: "26 15 * * *"
   workflow_dispatch:
     inputs:
       mode:

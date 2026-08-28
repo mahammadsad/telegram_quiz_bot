@@ -65,6 +65,10 @@ PRODUCTION_LEDGER_SOURCE_MD5: dict[str, tuple[str, str]] = {
         "20260827040000",
         "b8ca0e0c5320733f6ec6ad3a4260de8a",
     ),
+    "durable_primary_scheduler": (
+        "20260828211539",
+        "022a4a02595b0c5e0e3eacddd2d04ea7",
+    ),
 }
 
 

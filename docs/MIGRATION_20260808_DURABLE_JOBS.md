@@ -19,10 +19,11 @@ due subjects from running.
    expired generating lease, and an expired posting lease.
 5. Confirm exactly 13 unique jobs, no duplicate claims, normal retry recovery,
    `posting_unknown` quarantine, and an append-only event history.
-6. Deploy the same tested commit to production, then enable the two-cron
-   workflow (`7,22,37,52 * * * *` heartbeat and `11 15 * * *` completeness).
-   These retain the 15-minute cadence while avoiding GitHub's documented
-   high-load boundary at the start of the hour.
+6. Deploy the same tested commit to production, then configure the Supabase
+   Cron primary heartbeat (`4,19,34,49 * * * *`) and daily completeness gate
+   (`11 15 * * *`). Keep GitHub Actions at `43 * * * *` and `26 15 * * *` only
+   as a staggered recovery path because GitHub scheduled events have no
+   delivery SLA.
 
 ## Rollback
 

@@ -1,11 +1,11 @@
-"""Low-cost heartbeat cadence for the durable PostgreSQL dispatcher."""
+"""GitHub recovery cadence for the durable PostgreSQL dispatcher."""
 
 from config.subjects import QUIZ_SUBJECTS
 
-# GitHub may delay or drop scheduled events during high-load boundaries. Keep
-# the same 15-minute cadence, but stagger it away from the top of the hour.
-DISPATCHER_CRON = "7,22,37,52 * * * *"
-COMPLETENESS_CRON = "11 15 * * *"
+# Supabase Cron owns the 15-minute primary heartbeat. GitHub's scheduler can be
+# delayed or dropped, so retain it only as a staggered, hourly recovery path.
+DISPATCHER_CRON = "43 * * * *"
+COMPLETENESS_CRON = "26 15 * * *"
 RECOVERY_CRON = COMPLETENESS_CRON
 
 
