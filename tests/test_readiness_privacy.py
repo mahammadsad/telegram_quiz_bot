@@ -331,6 +331,7 @@ def test_readiness_fails_closed_when_primary_scheduler_needs_renewal(monkeypatch
             "dispatch_job_ready": True,
             "completeness_job_ready": True,
             "reconcile_job_ready": True,
+            "recent_rejected_requests": 0,
         },
     )
 

@@ -414,6 +414,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                     and primary_scheduler.get("dispatch_job_ready") is True
                     and primary_scheduler.get("completeness_job_ready") is True
                     and primary_scheduler.get("reconcile_job_ready") is True
+                    and primary_scheduler.get("recent_rejected_requests") == 0
                 )
             )
             source_rollout_ready = bool(
