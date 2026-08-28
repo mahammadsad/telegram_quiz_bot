@@ -202,6 +202,12 @@ _VALIDATION_REASON_CODES = (
 )
 
 _VALIDATION_REPAIR_HINTS = {
+    "bengali_text": (
+        "For every non-English question, rewrite the question field as a complete, meaningful "
+        "Bengali sentence containing Bengali Unicode letters. Numbers, formulas, symbols, or "
+        "Latin abbreviations may remain inside it, but they cannot replace the Bengali wording. "
+        "Audit all ten question fields before returning."
+    ),
     "duplicate_options": (
         "For every question, rewrite all four options as four distinct answers after removing "
         "labels, punctuation, whitespace, units, and Bengali-versus-Arabic digit formatting. "

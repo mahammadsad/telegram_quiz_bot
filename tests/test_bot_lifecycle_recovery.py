@@ -1117,6 +1117,13 @@ def test_generation_prompt_requires_normalized_option_values_to_be_distinct():
     assert "audit all 40 options" in basic_repair
 
 
+def test_generation_repair_requires_bengali_sentence_in_every_question():
+    repaired = bot._repair_generation_prompt("base", "bengali_text")
+
+    assert "complete, meaningful Bengali sentence" in repaired
+    assert "Audit all ten question fields" in repaired
+
+
 def test_source_backed_prompt_assigns_every_question_to_reviewed_evidence():
     bundle = grounding_bundle()
     prompt = bot.build_mcq_prompt("history", "আধুনিক ভারত", bundle)
