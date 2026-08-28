@@ -60,6 +60,11 @@ PRODUCTION_LEDGER_SOURCE_MD5: dict[str, tuple[str, str]] = {
     "learner_report_status_projection": ("20260823065257", "e4de3dc550bf911651011134e6d9a463"),
     "durable_reminder_consent_delivery": ("20260824033823", "ea17591b8070d6ef1708acac43ef74cf"),
     "fair_content_replenishment_claims": ("20260824052500", "0bab7058c930df4b2d532123dcefc94f"),
+    "operator_blocked_quiz_recovery": ("20260826080000", "af474c52612e3876d9fc6fb63ce01354"),
+    "deduplicate_open_content_replenishment_jobs": (
+        "20260827040000",
+        "b8ca0e0c5320733f6ec6ad3a4260de8a",
+    ),
 }
 
 
