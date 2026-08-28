@@ -2,8 +2,10 @@
 
 from config.subjects import QUIZ_SUBJECTS
 
-DISPATCHER_CRON = "*/15 * * * *"
-COMPLETENESS_CRON = "0 15 * * *"
+# GitHub may delay or drop scheduled events during high-load boundaries. Keep
+# the same 15-minute cadence, but stagger it away from the top of the hour.
+DISPATCHER_CRON = "7,22,37,52 * * * *"
+COMPLETENESS_CRON = "11 15 * * *"
 RECOVERY_CRON = COMPLETENESS_CRON
 
 

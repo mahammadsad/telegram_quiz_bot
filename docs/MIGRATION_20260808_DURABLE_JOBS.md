@@ -20,7 +20,9 @@ due subjects from running.
 5. Confirm exactly 13 unique jobs, no duplicate claims, normal retry recovery,
    `posting_unknown` quarantine, and an append-only event history.
 6. Deploy the same tested commit to production, then enable the two-cron
-   workflow (`*/15 * * * *` heartbeat and `0 15 * * *` completeness).
+   workflow (`7,22,37,52 * * * *` heartbeat and `11 15 * * *` completeness).
+   These retain the 15-minute cadence while avoiding GitHub's documented
+   high-load boundary at the start of the hour.
 
 ## Rollback
 
