@@ -1333,6 +1333,11 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
         lambda: {
             "ready": True,
             "phase_c_inventory_migration_version": bot.PHASE_C_INVENTORY_MIGRATION_VERSION,
+            "replenishment_backlog_migration_version": (
+                bot.CONTENT_REPLENISHMENT_BACKLOG_MIGRATION_VERSION
+            ),
+            "open_job_uniqueness_ready": True,
+            "duplicate_open_job_count": 0,
             "function_permission_failures": [],
         },
     )
@@ -1471,7 +1476,16 @@ def test_database_preflight_fails_closed_on_old_or_misgranted_contract(monkeypat
     monkeypatch.setattr(
         bot.schema_contract_repo,
         "get_phase_c_inventory_contract",
-        lambda: {"ready": True, "phase_c_inventory_migration_version": bot.PHASE_C_INVENTORY_MIGRATION_VERSION, "function_permission_failures": []},
+        lambda: {
+            "ready": True,
+            "phase_c_inventory_migration_version": bot.PHASE_C_INVENTORY_MIGRATION_VERSION,
+            "replenishment_backlog_migration_version": (
+                bot.CONTENT_REPLENISHMENT_BACKLOG_MIGRATION_VERSION
+            ),
+            "open_job_uniqueness_ready": True,
+            "duplicate_open_job_count": 0,
+            "function_permission_failures": [],
+        },
     )
     monkeypatch.setattr(
         bot.schema_contract_repo,

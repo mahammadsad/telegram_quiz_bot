@@ -40,6 +40,7 @@ from config.settings import (
 from config.subjects import QUIZ_SUBJECTS, get_subject
 from config.syllabus import get_chapter
 from database.contract import (
+    CONTENT_REPLENISHMENT_BACKLOG_MIGRATION_VERSION,
     DATABASE_CONTRACT_KEY,
     DATABASE_CONTRACT_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
@@ -1353,6 +1354,10 @@ def validate_database_schema() -> None:
         and phase_c_content.get("question_variants") is True
         and phase_c_inventory.get("ready") is True
         and phase_c_inventory.get("phase_c_inventory_migration_version") == PHASE_C_INVENTORY_MIGRATION_VERSION
+        and phase_c_inventory.get("replenishment_backlog_migration_version")
+        == CONTENT_REPLENISHMENT_BACKLOG_MIGRATION_VERSION
+        and phase_c_inventory.get("open_job_uniqueness_ready") is True
+        and phase_c_inventory.get("duplicate_open_job_count") == 0
         and phase_c_candidate.get("ready") is True
         and phase_c_candidate.get("stable_identity_parity") is True
         and phase_c_candidate.get("phase_c_candidate_migration_version") == PHASE_C_CANDIDATE_MIGRATION_VERSION

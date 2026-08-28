@@ -131,6 +131,11 @@ def _configure_ready_dependencies(monkeypatch) -> None:
         lambda: {
             "ready": True,
             "phase_c_inventory_migration_version": (readiness_service.PHASE_C_INVENTORY_MIGRATION_VERSION),
+            "replenishment_backlog_migration_version": (
+                readiness_service.CONTENT_REPLENISHMENT_BACKLOG_MIGRATION_VERSION
+            ),
+            "open_job_uniqueness_ready": True,
+            "duplicate_open_job_count": 0,
             "function_permission_failures": [],
         },
     )

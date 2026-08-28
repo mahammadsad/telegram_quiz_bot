@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 
 import psycopg
 import pytest
+from psycopg.errors import UniqueViolation
 from psycopg.rows import dict_row
 
 pytestmark = pytest.mark.database_integration
@@ -56,4 +57,44 @@ def test_replenishment_claims_rotate_across_subject_backlogs(database_url: str) 
         assert len(second_subjects) == 3
         assert first_subjects.isdisjoint(second_subjects)
         assert first_subjects | second_subjects == set(subjects)
+        connection.rollback()
+
+
+def test_only_one_open_replenishment_job_exists_per_target(database_url: str) -> None:
+    now = datetime.now(timezone.utc)
+    with psycopg.connect(database_url) as connection:
+        connection.execute(
+            """
+            insert into public.content_replenishment_jobs (
+                logical_date, subject_key, micro_topic_id, due_at
+            ) values (date '2041-01-01', 'computer', null, %s)
+            """,
+            (now,),
+        )
+        with pytest.raises(UniqueViolation):
+            with connection.transaction():
+                connection.execute(
+                    """
+                    insert into public.content_replenishment_jobs (
+                        logical_date, subject_key, micro_topic_id, due_at
+                    ) values (date '2041-01-02', 'computer', null, %s)
+                    """,
+                    (now,),
+                )
+        index_ready, duplicate_count = connection.execute(
+            """
+            select
+                to_regclass('public.idx_content_replenishment_one_open_target') is not null,
+                count(*)
+            from (
+                select 1
+                from public.content_replenishment_jobs
+                where status in ('due', 'claimed', 'running', 'retry_wait')
+                group by subject_key, micro_topic_id
+                having count(*) > 1
+            ) duplicates
+            """
+        ).fetchone()
+        assert index_ready is True
+        assert duplicate_count == 0
         connection.rollback()
