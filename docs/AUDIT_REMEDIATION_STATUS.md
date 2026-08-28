@@ -19,7 +19,7 @@ Status meanings:
 | P1-02 | P1 | Publication fails when a source-less question is checked by the same model without another evidence basis. New inventory must carry a machine-checkable proof: evidence-backed subjects copy one exact contiguous atomic span from the cited verified source and prove that it contains the canonical source-language answer but no distractor proof value; conceptual mathematics and reasoning may use this exact-evidence path while calculations and puzzles still require a deterministic solver. Positionally aligned canonical proof values permit a Bengali display translation/transliteration while the independent verifier checks the displayed mapping. Generated canonical claims cannot substitute for source evidence. English and Bengali response schemas constrain the requested language artifacts, while the server derives the reviewed question form and source-proved rule identity from the cited micro-topic and exact source span and preserves both artifacts across every validation pass. Mathematics has 25 exact solver families and reasoning has fourteen bounded solver families. Invalid spans, parameters, language artifacts, ambiguous answers, unsupported families and contradictory traces fail closed. Protected runs `32899639051`, `32900294697` and `32900931320` safely accepted Mathematics 4, Reasoning 5, Bengali 3 and English 4 candidates after these changes. | **Partial** | `services/content_replenishment_service.py`, `services/deterministic_verification.py`, `services/question_validation.py`, `services/question_verification.py`, response schemas and focused proof/language/projection tests. | Mandatory approved citations for every applicable daily path and solver coverage for the remaining quantitative/logic families are not complete. Keep unproved inventory out of production approval. |
 | P1-03 | P1 | PIB ingestion is hardened; official RBI RSS and ISRO press-release adapters use strict host, redirect, content-type, size, date, provenance, exact-span and freshness controls. ISRO ingestion reads only first-party HTML press text—never PDFs or third-party summaries—and is supplementary, so one source outage does not discard other valid authorities. A live read-only canary accepted two current ISRO releases and safely skipped/stopped at two inapplicable or expired pages. Approved refreshes now persist each independently validated official row even when the incoming batch alone lacks full chapter breadth; the immediately following database readback remains the strict all-chapter deployment gate. Production run `32870394903` preserved three verified ISRO rows during an RBI outage, then confirmed 31 approved chapters and 120 source documents were ready. This prevents a temporary authority outage from discarding healthy rows while production coverage is still current. Current-affairs chapter/category breadth remains limited. | **Partial** | `scripts/refresh_current_affairs_sources.py`, `.github/workflows/current-affairs-sources.yml`; PIB/RBI/ISRO parser, host-confusion, expiry, provenance, exact-span, partial-refresh and event tests. | Add further reviewed official adapters and category/chapter coverage before claiming complete breadth; source-rights review remains mandatory for every new source family. Keep PDF-only or metadata-only releases out unless a separately reviewed extraction/provenance policy is approved. |
 | P1-04 | P1 | Heartbeats query global due state and fail on missing, overdue, blocked, retry-exhausted, unknown or dead-lettered jobs. The 2026-08-23 production dispatcher surfaced actionable Computer/Mathematics/English failures while safely posting Miscellaneous and Reasoning. Individual generation failures alert operators, and the once-daily completeness gate sends one bounded answer-free summary only to the configured private Telegram admin chat; it never falls back to the public learner chat. Production canary `32688442842` passed configuration and database preflight, sent the private alert, and then deliberately failed its gate because the in-progress day was incomplete. | **Partial / deployed** | `services/quiz_dispatcher.py`, `services/quiz_dispatch_runtime.py`, `bot.py`; dead-letter/overdue, private-alert and bounded-summary tests, production dispatcher evidence, repaired-main preflight and private-alert canary. | Observe a complete 13/13 normal day. Static fallback artifacts are answer-free but are not a proven live origin fallback; a durable independently served fallback requires an approved storage/control-plane design. |
-| P1-05 | P1 | Render remains on the free plan and GitHub Actions remains the scheduler. | **Awaiting external action** | `render.yaml`, `.github/workflows/main.yml`. | Platform owner must select and fund an always-on worker/database/edge cron, move primary dispatch to it, keep Actions as recovery, and verify SLA/alerts. No paid plan was enabled automatically. |
+| P1-05 | P1 | Render remains on the free plan and GitHub Actions remains the scheduler. After the prior round-boundary cron produced multi-hour gaps, the no-cost recovery heartbeat was staggered to minutes 7/22/37/52 and completeness to 15:11 UTC. This follows GitHub's documented mitigation for scheduled events that may be delayed or dropped during high-load hour boundaries. The workflow is active on the default branch, but no scheduled heartbeat was observed during the first five hours after the change despite intervening pushes; only manual recovery ran. | **Partial / mitigation deployed, reliability unproved** | `config/schedule.py`, `.github/workflows/main.yml`, schedule/deployment contract tests; [GitHub scheduled-workflow guidance](https://docs.github.com/en/actions/how-tos/troubleshoot-workflows#scheduled-workflows-running-at-unexpected-times); workflow/API readback on 28 August. | Staggering cannot provide a delivery SLA and the observed scheduler gap remains actionable. Platform owner must still select and fund an always-on worker/database/edge cron, move primary dispatch to it, keep Actions as recovery, and verify SLA/alerts. No paid plan was enabled automatically. |
 | P1-06 | P1 | Unconditional AdSense loading is removed; the Bengali hub, mock, practice, dashboard and settings pages load versioned external CSS/JS, CSP blocks inline scripts and styles, and dynamic progress uses semantic controls/SVG attributes rather than inline styles. Browser/PWA fallbacks now use the parent Citizen Affairs editorial red, link blue, canvas and text palette while Telegram theme variables retain precedence inside the Mini App. The quiz introduction keeps its campaign-tagged parent-site CTA before start. | **Partial** | `docs/BRAND_IDENTITY.md`, `miniapp-shell.js`, `index.css`/`index.js`, `mock.css`/`mock.js`, `practice.css`/`practice.js`, `dashboard.css`/`dashboard.js`, `settings.css`/`settings.js`, `legal.css`, `app.py`; brand-contract, route, CSP and mobile-browser checks pass. | Keep third-party ads off authenticated/timed pages. Reassess any future inline style requirement before weakening CSP. |
 | P1-07 | P1 | Draft privacy/terms pages, authenticated export, deletion request/cancel, grace period and pseudonymous audit records are implemented. | **Partial / awaiting external action** | `privacy.html`, `terms.html`, privacy service/repository, `20260820120000_privacy_rights.sql`, `settings.html`; privacy tests pass. | Legal/controller/contact placeholders require qualified review. Do not enable deletion processing until backups, retention scope and restore/rollback are approved and tested. Consent history beyond existing preferences remains incomplete. |
 | P1-08 | P1 | Vulnerable locks are updated (`cryptography 50.0.0`, `h2 4.4.1`); FastAPI, GenAI, database/client tooling and browser-test locks are refreshed; RSS uses `defusedxml` with size/type/redirect/host/time limits; security automation includes direct-requirement/lockfile parity checks. GitHub secret scanning, push protection and Dependabot security updates are enabled. | **Implemented** | requirements/locks, `scripts/check_lockfile_parity.py`, refresh script, Dependabot/security workflow and verified repository security settings; Ruff, pytest, mypy, high-severity Bandit and npm audit pass locally where noted below. | Review Dependabot/CodeQL findings as part of each release. Local `pip-audit` can be network-bound; GitHub Security is the release gate. |
@@ -43,9 +43,9 @@ Status meanings:
 
 ## 28 August production checkpoint
 
-- Release `af04c97` is live on both Render services. Main Tests run
-  `33162629879`, Security run `33162629911`, staging preflight
-  `33162939648`, and canonical answer-free deployment smoke `33162942494`
+- Release `d262a46` is live on both Render services. Main Tests run
+  `33163559923`, Security run `33163560070`, staging preflight
+  `33164013282`, and canonical answer-free deployment smoke `33164016801`
   passed against the exact release.
 - Migration `20260827040000_deduplicate_open_content_replenishment_jobs.sql`
   converted 1,954 redundant open replenishment rows into retained,
@@ -57,23 +57,31 @@ Status meanings:
   targets, accepted 16 independently gated candidates, rejected 24 unsafe or
   duplicate candidates, and completed with 103 open jobs for 103 distinct
   targets and no active lease.
+- Larger bounded production replenishment run `33164314150` completed
+  successfully across 25 distinct targets, accepted 66 independently gated
+  candidates and safely rejected 81. The durable backlog remained bounded at
+  103 open jobs for 103 distinct targets, with zero active leases after the
+  run.
 - Production and staging stored the two newest migration sources as one exact
   statement each. Their byte identities matched the repository
   (`af474c52612e3876d9fc6fb63ce01354` and
   `b8ca0e0c5320733f6ec6ad3a4260de8a`) before guarded ledger-only version
   reconciliation. The
   production ledger now has exactly 51 version/name/source-pinned migrations
-  with no local/remote mismatch.
-- Normal recovery dispatches `33162078817` and `33163060699` increased the
+  with no local/remote mismatch. Read-only production plan `33163582403`
+  independently reported the remote database up to date.
+- Normal recovery dispatches beginning with `33162078817` increased the
   27 August ledger from 8/13 to 11/13 posted and the in-progress 28 August
-  ledger to 6/13 posted. Rejected near-duplicate or unverifiable batches stayed
-  in durable retry and were not force-posted.
+  ledger to 9/13 posted. Run `33187325324` used release `6c955c1`, generated,
+  independently verified and posted Current Affairs as Telegram message 2555.
+  Reasoning and Mathematics validation failures plus History and Environment
+  historical collisions stayed in durable retry; none was force-posted.
 
 ## Verification evidence
 
 - `ruff check .`: pass.
 - `mypy`: success, 90 configured production source files.
-- Local `pytest -q`: **635 passed, 38 skipped**, one upstream Starlette/httpx deprecation warning; CI runs `33162251045` and `33162629879` passed the disposable PostgreSQL 17 migration chain, full test suite and mobile-browser gate for release `af04c97`.
+- Local `pytest -q`: **636 passed, 38 skipped**, one upstream Starlette/httpx deprecation warning; CI runs `33162251045` and `33162629879` passed the disposable PostgreSQL 17 migration chain, full test suite and mobile-browser gate for release `af04c97`.
 - Playwright: **140 passed** across the four supported Android viewports.
 - `pip-audit -r requirements.lock`: no known vulnerabilities.
 - `bandit -r . -lll`: no high-severity findings.

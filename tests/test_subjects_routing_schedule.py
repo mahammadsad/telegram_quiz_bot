@@ -90,6 +90,9 @@ def test_quiz_ids_are_subject_scoped_and_legacy_readable():
 def test_canonical_subject_times_and_heartbeat_actions_are_distinct():
     assert len(CRON_TO_SUBJECT) == 13
     assert SUBJECT_CRONS == tuple(CRON_TO_SUBJECT)
+    assert DISPATCHER_CRON == "7,22,37,52 * * * *"
+    assert COMPLETENESS_CRON == "11 15 * * *"
+    assert "0" not in DISPATCHER_CRON.split()[0].split(",")
     assert scheduled_action(DISPATCHER_CRON) == ("dispatch-due-jobs", None)
     assert scheduled_action(COMPLETENESS_CRON) == ("daily-completeness", None)
     for cron in CRON_TO_SUBJECT:

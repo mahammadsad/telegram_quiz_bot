@@ -107,9 +107,9 @@ staging test has passed. Source-code inspection alone is not sufficient.
 
 ## Final release evidence
 
-- [x] Local Python suite: 628 passed and 37 expected database tests skipped;
-  CI run `32981014135` passed all 670 tests against disposable PostgreSQL 17 at
-  release `65b3b4e`, including blocked-job recovery and durable retry rotation.
+- [x] Local Python suite: 636 passed and 38 expected hosted database tests
+  skipped; CI run `33162629879` passed the full suite, disposable PostgreSQL 17
+  migration chain and mobile-browser gate at release `af04c97`.
 - [x] Local Ruff, configured mypy (90 source files), full-history scanner,
   browser JavaScript execution, and whitespace gates pass.
 - [x] Local Playwright suite: 140 passed across all four required Android
@@ -186,6 +186,21 @@ staging test has passed. Source-code inspection alone is not sufficient.
 - [x] Production `/health/ready` and answer-free critical public flows passed the
   fail-closed deployed smoke on 2026-08-26 at exact release `65b3b4e` in run
   `32981828237`; Tests run `32981014135` and Security run `32981014299` passed.
+- [x] Production backlog migration `20260827040000` retained 1,954 superseded
+  rows as audit history, left 103 unique open replenishment targets and passed a
+  normal five-target replenishment run with 16 accepted and 24 safely rejected
+  candidates. Production migration plan `33163582403` verified all 51 pinned
+  source identities and reported the remote database up to date.
+- [x] Bounded 25-target replenishment run `33164314150` completed successfully
+  with 66 accepted and 81 safely rejected candidates; its post-run readback
+  remained 103 open jobs for 103 distinct targets with no active leases.
+- [ ] Observe a real scheduled dispatcher heartbeat. The workflow is active and
+  its heartbeat is staggered away from busy hour boundaries, but no scheduled
+  event appeared in the first five hours; manual recovery `33187325324` posted
+  Current Affairs and left four fail-closed content retries.
+- [x] Exact release `d262a46` passed Tests `33163559923` and Security
+  `33163560070`; both Render services report ready with the bounded-backlog
+  contract and no answer fields in the public readiness payload.
 - [x] Release notes, staging/Telegram/mobile guides, database runbook, production
   rollback guide, and non-programmer verification instructions describe the
   current gates without claiming pending hosted results.

@@ -95,9 +95,21 @@ MCQ_JSON_SCHEMA: dict[str, Any] = {
     "items": {
         "type": "object",
         "properties": {
-            "question": {"type": "string"},
+            "question": {
+                "type": "string",
+                "description": (
+                    "A complete meaningful Bengali sentence containing Bengali Unicode letters; "
+                    "an English test excerpt, formula, sequence, symbol, or abbreviation may appear "
+                    "only alongside the Bengali wording."
+                ),
+            },
             "options": {
                 "type": "array",
+                "description": (
+                    "Exactly four genuinely different answer values of the same visible type; "
+                    "labels, punctuation, whitespace, units, or Bengali-versus-Arabic digit "
+                    "formatting must not be their only difference."
+                ),
                 "items": {"type": "string"},
                 "minItems": 4,
                 "maxItems": 4,

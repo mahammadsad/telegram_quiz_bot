@@ -1117,6 +1117,14 @@ def test_generation_prompt_requires_normalized_option_values_to_be_distinct():
     assert "audit all 40 options" in basic_repair
 
 
+def test_generation_schema_reinforces_language_and_distinct_option_contracts():
+    properties = bot.MCQ_JSON_SCHEMA["items"]["properties"]
+
+    assert "Bengali Unicode letters" in properties["question"]["description"]
+    assert "four genuinely different answer values" in properties["options"]["description"]
+    assert "Bengali-versus-Arabic digit" in properties["options"]["description"]
+
+
 def test_generation_repair_requires_bengali_sentence_in_every_question():
     repaired = bot._repair_generation_prompt("base", "bengali_text")
 
