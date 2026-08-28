@@ -59,6 +59,7 @@ from telegram.routing import ForumRouter, ForumRoutingError
 
 LOG = logging.getLogger("services.readiness")
 _CACHE: tuple[float, "Readiness"] | None = None
+PRIMARY_SCHEDULER_PROJECT_REF = "tizxodkcpglmxgtwepor"
 
 
 @dataclass(frozen=True, slots=True)
@@ -104,6 +105,9 @@ class Readiness:
             "sourceOptionalGenerationMigrationVersion": (SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION),
             "dailyAttemptTimingMigrationVersion": DAILY_ATTEMPT_TIMING_MIGRATION_VERSION,
             "primarySchedulerMigrationVersion": PRIMARY_SCHEDULER_MIGRATION_VERSION,
+            "primarySchedulerRequired": (
+                EXPECTED_SUPABASE_PROJECT_REF == PRIMARY_SCHEDULER_PROJECT_REF
+            ),
             "productionConfigVersion": PRODUCTION_CONFIG_VERSION,
             "productionConfigHash": PRODUCTION_CONFIG_HASH,
         }
@@ -398,16 +402,19 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and daily_attempt_timing.get("client_response_times_untrusted") is True
             )
             checks["primaryScheduler"] = bool(
-                primary_scheduler.get("ready") is True
-                and primary_scheduler.get("migration_version")
-                == PRIMARY_SCHEDULER_MIGRATION_VERSION
-                and primary_scheduler.get("pg_cron_ready") is True
-                and primary_scheduler.get("pg_net_ready") is True
-                and primary_scheduler.get("credential_present") is True
-                and primary_scheduler.get("credential_outside_renewal_window") is True
-                and primary_scheduler.get("dispatch_job_ready") is True
-                and primary_scheduler.get("completeness_job_ready") is True
-                and primary_scheduler.get("reconcile_job_ready") is True
+                EXPECTED_SUPABASE_PROJECT_REF != PRIMARY_SCHEDULER_PROJECT_REF
+                or (
+                    primary_scheduler.get("ready") is True
+                    and primary_scheduler.get("migration_version")
+                    == PRIMARY_SCHEDULER_MIGRATION_VERSION
+                    and primary_scheduler.get("pg_cron_ready") is True
+                    and primary_scheduler.get("pg_net_ready") is True
+                    and primary_scheduler.get("credential_present") is True
+                    and primary_scheduler.get("credential_outside_renewal_window") is True
+                    and primary_scheduler.get("dispatch_job_ready") is True
+                    and primary_scheduler.get("completeness_job_ready") is True
+                    and primary_scheduler.get("reconcile_job_ready") is True
+                )
             )
             source_rollout_ready = bool(
                 contract.get("source_rollout_migration_version") == SOURCE_ROLLOUT_MIGRATION_VERSION

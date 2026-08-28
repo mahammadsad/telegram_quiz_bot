@@ -314,6 +314,11 @@ def test_readiness_requires_exact_leaderboard_privacy_contract(monkeypatch) -> N
 def test_readiness_fails_closed_when_primary_scheduler_needs_renewal(monkeypatch) -> None:
     _configure_ready_dependencies(monkeypatch)
     monkeypatch.setattr(
+        readiness_service,
+        "EXPECTED_SUPABASE_PROJECT_REF",
+        readiness_service.PRIMARY_SCHEDULER_PROJECT_REF,
+    )
+    monkeypatch.setattr(
         readiness_service.schema_contract_repo,
         "get_primary_scheduler_contract",
         lambda: {
