@@ -36,9 +36,11 @@ jobs:
       - name: Verify canonical release
         env:
           SMOKE_TELEGRAM_INIT_DATA: ${{ secrets.SMOKE_TELEGRAM_INIT_DATA }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
         run: >-
           python -m scripts.deployed_smoke
           --base-url "${{ inputs.base_url }}"
           --expected-commit "${{ inputs.expected_commit }}"
           --quiz-id "${{ inputs.quiz_id }}"
           ${{ inputs.authenticated && '--authenticated' || '' }}
+          ${{ inputs.authenticated && inputs.base_url == 'https://telegram-quiz-bot-staging.onrender.com' && '--generate-staging-init-data' || '' }}

@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
+import hmac
+import json
 import os
+import time
 import uuid
-from urllib.parse import urljoin
+from urllib.parse import urlencode, urljoin, urlparse
 
 import requests
 
@@ -20,6 +24,8 @@ PUBLIC_PATHS = (
     "health/live",
     "health/ready",
 )
+STAGING_HOST = "telegram-quiz-bot-staging.onrender.com"
+SYNTHETIC_STAGING_USER_ID = 9_007_199_254_740_001
 
 
 def main() -> int:
@@ -28,6 +34,7 @@ def main() -> int:
     parser.add_argument("--expected-commit")
     parser.add_argument("--quiz-id")
     parser.add_argument("--authenticated", action="store_true")
+    parser.add_argument("--generate-staging-init-data", action="store_true")
     args = parser.parse_args()
     base = args.base_url.rstrip("/") + "/"
     if not base.startswith("https://"):
@@ -54,14 +61,50 @@ def main() -> int:
         if quiz.headers.get("X-Answer-Free-Payload") != "1":
             raise SystemExit("Quiz response is missing the answer-free contract header.")
 
+    init_data = os.environ.get("SMOKE_TELEGRAM_INIT_DATA", "").strip()
+    if args.generate_staging_init_data:
+        if not args.authenticated or urlparse(base).hostname != STAGING_HOST:
+            raise SystemExit("Synthetic initData generation is restricted to authenticated staging smoke.")
+        bot_token = os.environ.get("TELEGRAM_BOT_TOKEN", "").strip()
+        if not bot_token:
+            raise SystemExit("Synthetic staging smoke requires TELEGRAM_BOT_TOKEN.")
+        init_data = build_synthetic_staging_init_data(bot_token)
     if args.authenticated:
-        _authenticated_smoke(session, base, args.quiz_id)
+        _authenticated_smoke(session, base, args.quiz_id, init_data)
     print("deployed_smoke=passed")
     return 0
 
 
-def _authenticated_smoke(session: requests.Session, base: str, quiz_id: str | None) -> None:
-    init_data = os.environ.get("SMOKE_TELEGRAM_INIT_DATA", "").strip()
+def build_synthetic_staging_init_data(bot_token: str, *, auth_date: int | None = None) -> str:
+    """Create short-lived signed initData for the reserved staging-only actor."""
+
+    values = {
+        "auth_date": str(auth_date if auth_date is not None else int(time.time())),
+        "query_id": f"staging-smoke-{uuid.uuid4()}",
+        "user": json.dumps(
+            {
+                "id": SYNTHETIC_STAGING_USER_ID,
+                "first_name": "Citizen Affairs",
+                "last_name": "Synthetic QA",
+                "username": "citizen_affairs_staging_smoke",
+                "language_code": "bn",
+            },
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ),
+    }
+    data_check_string = "\n".join(f"{key}={values[key]}" for key in sorted(values))
+    secret = hmac.new(b"WebAppData", bot_token.encode(), hashlib.sha256).digest()
+    values["hash"] = hmac.new(secret, data_check_string.encode(), hashlib.sha256).hexdigest()
+    return urlencode(values)
+
+
+def _authenticated_smoke(
+    session: requests.Session,
+    base: str,
+    quiz_id: str | None,
+    init_data: str,
+) -> None:
     if not init_data or not quiz_id:
         raise SystemExit("Authenticated smoke requires quiz ID and synthetic Telegram initData.")
     attempt_id = str(uuid.uuid4())
