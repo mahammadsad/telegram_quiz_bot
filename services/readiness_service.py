@@ -46,6 +46,7 @@ from database.contract import (
     PLATFORM_CONTRACT_MIGRATION_VERSION,
     PLATFORM_CONTRACT_VERSION,
     POST_FINALIZATION_MIGRATION_VERSION,
+    PRIMARY_SCHEDULER_MIGRATION_VERSION,
     QUIZ_JOBS_MIGRATION_VERSION,
     QUIZ_QUALITY_MIGRATION_VERSION,
     REQUIRED_MIGRATION_VERSION,
@@ -102,6 +103,7 @@ class Readiness:
             "phaseEQuestionQualityMigrationVersion": (PHASE_E_QUESTION_QUALITY_MIGRATION_VERSION),
             "sourceOptionalGenerationMigrationVersion": (SOURCE_OPTIONAL_GENERATION_MIGRATION_VERSION),
             "dailyAttemptTimingMigrationVersion": DAILY_ATTEMPT_TIMING_MIGRATION_VERSION,
+            "primarySchedulerMigrationVersion": PRIMARY_SCHEDULER_MIGRATION_VERSION,
             "productionConfigVersion": PRODUCTION_CONFIG_VERSION,
             "productionConfigHash": PRODUCTION_CONFIG_HASH,
         }
@@ -134,6 +136,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
         "questionQualityAdministration": False,
         "sourceOptionalGeneration": False,
         "dailyAttemptTiming": False,
+        "primaryScheduler": False,
         "activeQuizRetrieval": False,
     }
     failures: list[str] = []
@@ -229,6 +232,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 phase_e_question_quality = schema_contract_repo.get_phase_e_question_quality_contract()
                 source_optional_generation = schema_contract_repo.get_source_optional_generation_contract()
                 daily_attempt_timing = schema_contract_repo.get_daily_attempt_timing_contract()
+                primary_scheduler = schema_contract_repo.get_primary_scheduler_contract()
             except Exception as exc:
                 phase_c_content = {}
                 phase_c_inventory = {}
@@ -240,6 +244,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 phase_e_question_quality = {}
                 source_optional_generation = {}
                 daily_attempt_timing = {}
+                primary_scheduler = {}
                 LOG.warning(
                     "READINESS_PHASE_C_FAILURE category=%s",
                     type(exc).__name__,
@@ -392,6 +397,18 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and daily_attempt_timing.get("legacy_timing_untrusted") is True
                 and daily_attempt_timing.get("client_response_times_untrusted") is True
             )
+            checks["primaryScheduler"] = bool(
+                primary_scheduler.get("ready") is True
+                and primary_scheduler.get("migration_version")
+                == PRIMARY_SCHEDULER_MIGRATION_VERSION
+                and primary_scheduler.get("pg_cron_ready") is True
+                and primary_scheduler.get("pg_net_ready") is True
+                and primary_scheduler.get("credential_present") is True
+                and primary_scheduler.get("credential_outside_renewal_window") is True
+                and primary_scheduler.get("dispatch_job_ready") is True
+                and primary_scheduler.get("completeness_job_ready") is True
+                and primary_scheduler.get("reconcile_job_ready") is True
+            )
             source_rollout_ready = bool(
                 contract.get("source_rollout_migration_version") == SOURCE_ROLLOUT_MIGRATION_VERSION
                 and contract.get("source_rollout_migration_applied") is True
@@ -429,6 +446,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and checks["questionQualityAdministration"]
                 and checks["sourceOptionalGeneration"]
                 and checks["dailyAttemptTiming"]
+                and checks["primaryScheduler"]
                 and float(contract.get("verification_threshold") or 0) == QUESTION_VERIFICATION_MIN_CONFIDENCE
             )
             active = schema_contract_repo.active_quiz_probe()
@@ -474,6 +492,8 @@ def assess(*, use_cache: bool = True) -> Readiness:
         failures.append("source_optional_generation")
     if not checks["dailyAttemptTiming"]:
         failures.append("daily_attempt_timing")
+    if not checks["primaryScheduler"]:
+        failures.append("primary_scheduler")
     if not checks["databasePermissions"]:
         failures.append("database_permissions")
     if not checks["activeQuizRetrieval"]:

@@ -93,6 +93,22 @@ def _configure_ready_dependencies(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         readiness_service.schema_contract_repo,
+        "get_primary_scheduler_contract",
+        lambda: {
+            "ready": True,
+            "migration_version": readiness_service.PRIMARY_SCHEDULER_MIGRATION_VERSION,
+            "pg_cron_ready": True,
+            "pg_net_ready": True,
+            "credential_present": True,
+            "credential_outside_renewal_window": True,
+            "dispatch_job_ready": True,
+            "completeness_job_ready": True,
+            "reconcile_job_ready": True,
+            "recent_rejected_requests": 0,
+        },
+    )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
         "get_post_finalization_contract",
         lambda: {
             "ready": True,
@@ -293,6 +309,31 @@ def test_readiness_requires_exact_leaderboard_privacy_contract(monkeypatch) -> N
         result.public_payload()["leaderboardPrivacyRpcFixMigrationVersion"]
         == readiness_service.LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
     )
+
+
+def test_readiness_fails_closed_when_primary_scheduler_needs_renewal(monkeypatch) -> None:
+    _configure_ready_dependencies(monkeypatch)
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_primary_scheduler_contract",
+        lambda: {
+            "ready": False,
+            "migration_version": readiness_service.PRIMARY_SCHEDULER_MIGRATION_VERSION,
+            "pg_cron_ready": True,
+            "pg_net_ready": True,
+            "credential_present": True,
+            "credential_outside_renewal_window": False,
+            "dispatch_job_ready": True,
+            "completeness_job_ready": True,
+            "reconcile_job_ready": True,
+        },
+    )
+
+    result = readiness_service.assess(use_cache=False)
+
+    assert result.ready is False
+    assert result.checks["primaryScheduler"] is False
+    assert "primary_scheduler" in result.categories
 
 
 def test_readiness_fails_closed_for_unsafe_leaderboard_functions(monkeypatch) -> None:
