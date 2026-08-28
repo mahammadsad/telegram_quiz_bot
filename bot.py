@@ -548,9 +548,15 @@ def generate_mcqs(
     active_prompt = prompt
     generated: list[dict] | None = None
     for repair_number in range(_GENERATION_VALIDATION_REPAIR_LIMIT + 1):
+        repair_model = (
+            getattr(pool, "fallback_model", None)
+            if repair_number > 0
+            else None
+        )
         raw_text, call_metadata = pool.generate_subject_quiz(
             prompt=active_prompt,
             response_schema=_mcq_response_schema(grounding_bundle),
+            preferred_model=repair_model,
         )
         generation_history.append(call_metadata)
         validation_error: QuizValidationError | None = None

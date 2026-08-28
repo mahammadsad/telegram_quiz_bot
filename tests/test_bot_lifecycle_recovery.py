@@ -562,6 +562,7 @@ def test_semantically_invalid_json_gets_one_full_repair(valid_questions, caplog)
     class Pool:
         def __init__(self):
             self.calls = []
+            self.fallback_model = "repair-model"
 
         def generate_subject_quiz(self, **kwargs):
             self.calls.append(kwargs)
@@ -596,6 +597,8 @@ def test_semantically_invalid_json_gets_one_full_repair(valid_questions, caplog)
 
     assert len(clean) == 10
     assert len(pool.calls) == 3
+    assert pool.calls[0]["preferred_model"] is None
+    assert pool.calls[1]["preferred_model"] == "repair-model"
     assert "difficulty_distribution" in pool.calls[1]["prompt"]
     assert invalid[0]["question"] not in pool.calls[1]["prompt"]
     assert "difficulty_distribution" in caplog.text
