@@ -69,6 +69,10 @@ PRODUCTION_LEDGER_SOURCE_MD5: dict[str, tuple[str, str]] = {
         "20260828211539",
         "022a4a02595b0c5e0e3eacddd2d04ea7",
     ),
+    "dashboard_rpc_transaction_mode": (
+        "20260829031810",
+        "a471a2859bdb35f4e19142a6fb3366d9",
+    ),
 }
 
 

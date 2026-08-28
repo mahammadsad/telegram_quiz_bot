@@ -39,6 +39,7 @@ FAIR_CONTENT_REPLENISHMENT_MIGRATION_VERSION = "20260824052500"
 OPERATOR_QUIZ_RECOVERY_MIGRATION_VERSION = "20260826080000"
 CONTENT_REPLENISHMENT_BACKLOG_MIGRATION_VERSION = "20260827040000"
 PRIMARY_SCHEDULER_MIGRATION_VERSION = "20260828211539"
+DASHBOARD_TRANSACTION_MIGRATION_VERSION = "20260829031810"
 PLATFORM_CONTRACT_KEY = "telegram_quiz_platform"
 PLATFORM_CONTRACT_VERSION = "1.0.0"
 PLATFORM_CONTRACT_REQUIRED_CHECKS = (
@@ -62,6 +63,7 @@ PLATFORM_CONTRACT_REQUIRED_CHECKS = (
     "advisorHardening",
     "postUnknownRecovery",
 )
-# Later additive learner features do not replace the established fail-closed
-# scheduler platform contract. Their rollout must not interrupt quiz posting.
-LATEST_MIGRATION_VERSION = PRIMARY_SCHEDULER_MIGRATION_VERSION
+# Additive learner migrations do not replace the established fail-closed
+# scheduler platform contract. The latest identifier still tracks the complete
+# ordered migration chain used by deployment preflight.
+LATEST_MIGRATION_VERSION = DASHBOARD_TRANSACTION_MIGRATION_VERSION

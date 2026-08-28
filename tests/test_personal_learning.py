@@ -19,6 +19,9 @@ PRACTICE_MIGRATION = ROOT / "supabase" / "migrations" / "20260718193329_personal
 SUBJECT_PROJECTION_MIGRATION = ROOT / "supabase" / "migrations" / "20260718193333_canonical_subject_learning_projections.sql"
 PROJECTION_HOTFIX_MIGRATION = ROOT / "supabase" / "migrations" / "20260729140552_personal_learning_projection_hotfix.sql"
 PHASE_E_MIGRATION = ROOT / "supabase" / "migrations" / "20260808140909_phase_e_personal_knowledge_mastery.sql"
+DASHBOARD_TRANSACTION_MIGRATION = (
+    ROOT / "supabase" / "migrations" / "20260829031810_dashboard_rpc_transaction_mode.sql"
+)
 client = TestClient(api_module.app)
 
 
@@ -60,6 +63,14 @@ def test_personalized_learning_migration_is_private_atomic_and_answer_free():
     )[0]
     assert "correct_option" not in due_rpc
     assert "correct_option" not in wrong_rpc
+
+
+def test_dashboard_v2_uses_a_writable_postgrest_transaction() -> None:
+    sql = DASHBOARD_TRANSACTION_MIGRATION.read_text(encoding="utf-8").lower()
+
+    assert "alter function public.get_user_learning_dashboard_v2(uuid) volatile" in sql
+    assert "grant" not in sql
+    assert "security definer" not in sql
 
 
 def test_legacy_review_foreign_keys_are_forward_fixed_to_cascade():
