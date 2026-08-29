@@ -99,7 +99,13 @@ staging test has passed. Source-code inspection alone is not sufficient.
 - [x] Compare generated and persisted checksums for that certified pack.
 - [x] Test posting once in a private Telegram topic; reconcile the acknowledged
   message without reposting after the history-uniqueness drift was repaired.
-- [ ] Test first attempt, retry, retake, ranking, report, bookmark, and revision.
+- [x] Test first attempt, idempotent retry, owned-result recovery, retake,
+  viewer-aware ranking, bookmark create/read/remove, and due revision using the
+  reserved staging-only synthetic Telegram actor (`33232580040`).
+- [x] Test report submission and learner-owned status readback with the reserved
+  staging-only actor. The canary exposed the missing status projection, the
+  tracked migration was restored with exact source-hash parity, and the one
+  synthetic report, event and case were removed under exact-ID guards.
 - [ ] Activate one chapter, observe one complete scheduled cycle, then proceed one
   chapter at a time.
 - [ ] Repeat the same gate for every other subject. The five intentionally inactive
@@ -107,9 +113,9 @@ staging test has passed. Source-code inspection alone is not sufficient.
 
 ## Final release evidence
 
-- [x] Local Python suite: 636 passed and 38 expected hosted database tests
-  skipped; CI run `33162629879` passed the full suite, disposable PostgreSQL 17
-  migration chain and mobile-browser gate at release `af04c97`.
+- [x] Local Python suite: 644 passed and 38 expected hosted database tests
+  skipped; CI run `33232433337` passed the full suite, disposable PostgreSQL 17
+  migration chain and mobile-browser gate at release `5202bf1`.
 - [x] Local Ruff, configured mypy (90 source files), full-history scanner,
   browser JavaScript execution, and whitespace gates pass.
 - [x] Local Playwright suite: 140 passed across all four required Android
@@ -194,13 +200,18 @@ staging test has passed. Source-code inspection alone is not sufficient.
 - [x] Bounded 25-target replenishment run `33164314150` completed successfully
   with 66 accepted and 81 safely rejected candidates; its post-run readback
   remained 103 open jobs for 103 distinct targets with no active leases.
-- [ ] Observe a real scheduled dispatcher heartbeat. The workflow is active and
-  its heartbeat is staggered away from busy hour boundaries, but no scheduled
-  event appeared in the first five hours; manual recovery `33187325324` posted
-  Current Affairs and left four fail-closed content retries.
+- [x] Observe a real primary dispatcher heartbeat. Production Supabase Cron ran
+  at the exact 21:34 UTC boundary on 28 August, its audited HTTP request received
+  GitHub 204, and workflow `33213118196` completed successfully. GitHub's native
+  schedule is retained only as an hourly recovery path. Production readiness
+  also fails on credential renewal, missing jobs or reconciled HTTP rejection.
 - [x] Exact release `d262a46` passed Tests `33163559923` and Security
   `33163560070`; both Render services report ready with the bounded-backlog
   contract and no answer fields in the public readiness payload.
+- [x] Exact release `5202bf1` passed Tests `33232433337`, Security
+  `33232433338`, production answer-free smoke `33232581875`, staging
+  authenticated lifecycle smoke `33232580040`, and production migration plan
+  `33232523903`. Both Render services are live at the exact release.
 - [x] Release notes, staging/Telegram/mobile guides, database runbook, production
   rollback guide, and non-programmer verification instructions describe the
   current gates without claiming pending hosted results.

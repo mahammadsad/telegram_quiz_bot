@@ -27,10 +27,27 @@ due subjects from running.
 
 ## Rollback
 
-Disable the new scheduled workflow first. Roll back application code while
-leaving the additive tables and functions in place; older code does not depend
-on them. Do not drop job history during an incident. Reconcile any
-`posting_unknown` rows before allowing retries or returning to automated sends.
+Unschedule `citizen-affairs-primary-dispatch`,
+`citizen-affairs-daily-completeness`, and
+`citizen-affairs-scheduler-reconcile` first. Restore the hourly GitHub recovery
+workflow to a 15-minute cadence if the database scheduler cannot be repaired
+immediately. Roll back application code while leaving the additive tables and
+functions in place; older code does not depend on them. Do not drop job or
+dispatch-request history during an incident. Reconcile any `posting_unknown`
+rows before allowing retries or returning to automated sends.
+
+## Primary scheduler credential renewal
+
+Production Vault stores `github_scheduler_token` and
+`github_scheduler_token_expires_at`; staging must not store either secret or
+run the production scheduler. The contract intentionally reports not-ready 48
+hours before expiry. Rotate the fine-grained/classic token without logging it,
+update both exact Vault secrets, then call
+`private.configure_primary_scheduler()` and verify
+`public.get_primary_scheduler_contract()` reports every readiness flag true.
+Finally invoke one normal `dispatch-due-jobs` heartbeat, reconcile its HTTP
+response, and require GitHub to return HTTP 204. Never place the token in a
+migration, application environment, workflow log, or public schema.
 
 ## Operator queries
 
