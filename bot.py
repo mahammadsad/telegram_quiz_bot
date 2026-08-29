@@ -817,9 +817,14 @@ def run_subject_quiz(
                 chapter,
             )
             return RunOutcome.SOURCE_NOT_READY
+        # Independently verified inventory remains preferable even when the
+        # chapter also permits source-optional live generation. The inventory
+        # RPC only returns questions with current reviewed source evidence, so
+        # using it here strengthens (rather than weakens) that fallback path
+        # and avoids spending model quota on content already approved for use.
         inventory_quiz = (
             None
-            if force_regenerate or not grounding_bundle.source_required
+            if force_regenerate
             else inventory_quiz_service.load_verified_inventory_quiz(
                 subject_key,
                 chapter,
@@ -968,12 +973,20 @@ def run_subject_quiz(
                         "generation_attempt_count": len(safe_attempts),
                         "retryable": bool(getattr(exc, "retryable", False)),
                     }
-                    if category == "quiz_content_collision":
+                    rotate_chapter = bool(getattr(exc, "retryable", False)) and category in {
+                        "quiz_content_collision",
+                        "validation_failed",
+                    }
+                    if rotate_chapter:
                         # Durable retries persist the last attempted chapter on
                         # quiz_runs. Anchor the retry index to the day's stable
                         # history-based selection instead of that moving value;
                         # otherwise successive offsets form a triangular walk
                         # and can cycle back to the chapter that just failed.
+                        # Retryable deterministic validation failures rotate as
+                        # well: repeatedly asking a model to repair the same
+                        # exhausted chapter consumed every retry while other
+                        # reviewed chapters and inventory remained available.
                         rotation_anchor = chapter_selector.select_chapter(
                             subject_key,
                             target_date,
@@ -986,9 +999,10 @@ def run_subject_quiz(
                         )
                         failure_fields["chapter"] = alternate
                         LOG.warning(
-                            "QUIZ_COLLISION_ROTATED_CHAPTER subject=%s quiz_id=%s from=%s to=%s",
+                            "QUIZ_RETRY_ROTATED_CHAPTER subject=%s quiz_id=%s category=%s from=%s to=%s",
                             subject_key,
                             quiz_id,
+                            category,
                             chapter,
                             alternate,
                         )

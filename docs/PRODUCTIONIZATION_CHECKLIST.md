@@ -225,6 +225,11 @@ staging test has passed. Source-code inspection alone is not sufficient.
   and also reconciled HTTP 204. Production answer-free smoke `33246990772` and
   staging authenticated lifecycle smoke `33247147412` passed at the exact
   release.
+- [x] The isolated Render staging service rolled back to retained release
+  `5202bf1` while additive migrations remained applied. Liveness, readiness and
+  authenticated lifecycle smoke `33247470362` passed. Staging was then restored
+  to exact release `ba2567f`; liveness, readiness and authenticated lifecycle
+  smoke `33247559612` passed again.
 - [x] Release notes, staging/Telegram/mobile guides, database runbook, production
   rollback guide, and non-programmer verification instructions describe the
   current gates without claiming pending hosted results.

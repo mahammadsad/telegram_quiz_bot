@@ -18,6 +18,7 @@ from database.contract import (
 from errors import QuizContentCollisionError
 from services.gemini_provider_pool import GeminiGenerationError
 from services.inventory_quiz_service import InventoryQuiz
+from services.question_validation import QuizValidationError
 from services.question_verification import CHECK_FIELDS
 from services.quiz_lifecycle import DailyHealthReport, RunOutcome
 from services.source_grounding import GroundingBundle, SourceDocument
@@ -196,6 +197,59 @@ def test_verified_inventory_posts_when_gemini_is_unavailable(monkeypatch, valid_
     ) == "generated_and_posted"
     ready = next(event for event in events if event[:2] == ("status", "ready"))
     assert ready[1] == "ready"
+
+
+def test_source_optional_chapter_prefers_source_backed_verified_inventory(
+    monkeypatch,
+    valid_questions,
+):
+    events, _ = setup_run(monkeypatch, valid_questions)
+    source_id = valid_questions[0]["source_document_id"]
+    topic = (
+        valid_questions[0]["micro_topic_id"],
+        valid_questions[0]["micro_topic_key"],
+    )
+    bundle = grounding_bundle()
+    source_optional_bundle = GroundingBundle(
+        subject_key=bundle.subject_key,
+        chapter=bundle.chapter,
+        micro_topic_id=bundle.micro_topic_id,
+        micro_topic_key=bundle.micro_topic_key,
+        micro_topic_name=bundle.micro_topic_name,
+        documents=(),
+    )
+    monkeypatch.setattr(
+        bot.source_grounding,
+        "load_generation_bundle",
+        lambda *args, **kwargs: source_optional_bundle,
+    )
+    monkeypatch.setattr(
+        bot.inventory_quiz_service,
+        "load_verified_inventory_quiz",
+        lambda *args, **kwargs: InventoryQuiz(
+            questions=valid_questions,
+            relaxed_constraints=(),
+            source_ids={source_id},
+            source_topics={source_id: topic},
+        ),
+    )
+    monkeypatch.setattr(
+        bot,
+        "_require_gemini_provider",
+        lambda: pytest.fail("Gemini configuration must not be required"),
+    )
+    monkeypatch.setattr(
+        bot,
+        "generate_mcqs",
+        lambda *args, **kwargs: pytest.fail("Gemini generation must not run"),
+    )
+
+    assert bot.run_subject_quiz(
+        "history", target_date=date(2026, 7, 10)
+    ) == "generated_and_posted"
+    save_kwargs = next(event[1] for event in events if event[0] == "save_pack")
+    assert save_kwargs["source_required"] is True
+    assert save_kwargs["allowed_source_ids"] == {source_id}
 
 
 def test_save_export_and_ready_state_precede_telegram(monkeypatch, valid_questions):
@@ -482,6 +536,51 @@ def test_collision_retry_rotation_uses_stable_daily_anchor(monkeypatch, valid_qu
         (
             ("history", date(2026, 7, 10), "আধুনিক ভারত"),
             {"retry_index": 4},
+        )
+    ]
+
+
+def test_retryable_validation_failure_rotates_from_stable_daily_anchor(
+    monkeypatch,
+    valid_questions,
+):
+    existing = {
+        "status": "generation_failed",
+        "chapter": "পূর্বের ব্যর্থ অধ্যায়",
+    }
+    setup_run(monkeypatch, valid_questions, existing_run=existing)
+    monkeypatch.setattr(
+        bot,
+        "generate_mcqs",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            QuizValidationError(
+                "duplicate options",
+                retryable=True,
+                reason_code="duplicate_options",
+            )
+        ),
+    )
+    calls = []
+    monkeypatch.setattr(
+        bot.chapter_selector,
+        "select_alternate_chapter",
+        lambda *args, **kwargs: calls.append((args, kwargs)) or "পরবর্তী অধ্যায়",
+    )
+    monkeypatch.setattr(bot, "send_failure_alert", lambda *args, **kwargs: None)
+
+    with pytest.raises(QuizValidationError, match="duplicate options"):
+        bot.run_subject_quiz(
+            "history",
+            target_date=date(2026, 7, 10),
+            durable_job_id="11111111-1111-4111-8111-111111111111",
+            durable_worker_id="worker-1",
+            durable_retry_count=3,
+        )
+
+    assert calls == [
+        (
+            ("history", date(2026, 7, 10), "আধুনিক ভারত"),
+            {"retry_index": 3},
         )
     ]
 
