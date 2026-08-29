@@ -192,3 +192,30 @@ def requeue_blocked(
         },
     ).execute()
     return as_row(result.data, "requeue_blocked_quiz_job")
+
+
+def requeue_validation_dead_letter(
+    *,
+    job_id: str,
+    actor: str,
+    reason: str,
+    expected_error_code: str,
+    expected_retry_count: int,
+    expected_chapter: str,
+    replacement_chapter: str,
+    release_sha: str,
+) -> Row:
+    result = get_client().rpc(
+        "requeue_validation_dead_letter",
+        {
+            "p_job_id": job_id,
+            "p_actor": actor,
+            "p_reason": reason,
+            "p_expected_error_code": expected_error_code,
+            "p_expected_retry_count": expected_retry_count,
+            "p_expected_chapter": expected_chapter,
+            "p_replacement_chapter": replacement_chapter,
+            "p_release_sha": release_sha,
+        },
+    ).execute()
+    return as_row(result.data, "requeue_validation_dead_letter")

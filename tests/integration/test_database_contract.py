@@ -145,6 +145,133 @@ def test_blocked_quiz_operator_recovery_is_atomic_and_audited(
         connection.rollback()
 
 
+def test_validation_dead_letter_recovery_preserves_attempts_and_rotates_chapter(
+    database_url: str,
+) -> None:
+    quiz_id = "20500102-mathematics"
+    with connect(database_url) as connection:
+        chapters = connection.execute(
+            """
+            select name
+            from public.quiz_chapters
+            where subject_key = 'mathematics'
+              and active
+              and rotation_enabled
+            order by name
+            limit 2
+            """
+        ).fetchall()
+        assert len(chapters) == 2
+        expected_chapter = chapters[0]["name"]
+        replacement_chapter = chapters[1]["name"]
+        release_sha = "b" * 40
+        connection.execute(
+            """
+            insert into public.quiz_runs (
+                quiz_id, quiz_date, subject_key, subject_display_name,
+                internal_subject, chapter, status, question_count,
+                retryable, last_error_category
+            ) values (
+                %s, date '2050-01-02', 'mathematics', 'গণিত',
+                'Mathematics', %s, 'generation_failed', 0,
+                true, 'validation_failed'
+            )
+            """,
+            (quiz_id, expected_chapter),
+        )
+        job = connection.execute(
+            """
+            insert into public.quiz_jobs (
+                quiz_id, logical_date, subject_key, due_at, status,
+                retry_count, last_error_category, last_error_code,
+                blocking_reason, configuration_hash, code_sha
+            ) values (
+                %s, date '2050-01-02', 'mathematics', now(), 'dead_letter',
+                8, 'validation_failed', 'QuizValidationError',
+                'Deterministic validation failed.', repeat('a', 64), repeat('a', 40)
+            ) returning id
+            """,
+            (quiz_id,),
+        ).fetchone()
+        assert job
+
+        recovered = connection.execute(
+            """
+            select public.requeue_validation_dead_letter(
+                %s, %s, %s, %s, %s, %s, %s, %s
+            ) as result
+            """,
+            (
+                job["id"],
+                "integration-operator",
+                "Retry rotation passed the certified release gate.",
+                "QuizValidationError",
+                8,
+                expected_chapter,
+                replacement_chapter,
+                release_sha,
+            ),
+        ).fetchone()["result"]
+        assert recovered["status"] == "retry_wait"
+        assert recovered["retry_count"] == 8
+        assert recovered["chapter"] == replacement_chapter
+
+        persisted = connection.execute(
+            """
+            select status, retry_count, blocking_reason, code_sha
+            from public.quiz_jobs where id = %s
+            """,
+            (job["id"],),
+        ).fetchone()
+        assert persisted == {
+            "status": "retry_wait",
+            "retry_count": 8,
+            "blocking_reason": None,
+            "code_sha": release_sha,
+        }
+        run = connection.execute(
+            "select chapter, status, question_count from public.quiz_runs where quiz_id = %s",
+            (quiz_id,),
+        ).fetchone()
+        assert run == {
+            "chapter": replacement_chapter,
+            "status": "generation_failed",
+            "question_count": 0,
+        }
+        event = connection.execute(
+            """
+            select from_status, to_status, attempt_number, detail
+            from public.quiz_job_events
+            where job_id = %s and event_type = 'operator_validation_requeued'
+            """,
+            (job["id"],),
+        ).fetchone()
+        assert event["from_status"] == "dead_letter"
+        assert event["to_status"] == "retry_wait"
+        assert event["attempt_number"] == 8
+        assert event["detail"]["release_sha"] == release_sha
+
+        with pytest.raises(psycopg.errors.RaiseException, match="only a validation dead letter"):
+            connection.execute(
+                """
+                select public.requeue_validation_dead_letter(
+                    %s, %s, %s, %s, %s, %s, %s, %s
+                )
+                """,
+                (
+                    job["id"],
+                    "integration-operator",
+                    "Duplicate recovery must fail closed.",
+                    "QuizValidationError",
+                    8,
+                    expected_chapter,
+                    replacement_chapter,
+                    release_sha,
+                ),
+            )
+        connection.rollback()
+
+
 @pytest.fixture(scope="module")
 def catalogue(database_url: str) -> Catalogue:
     with psycopg.connect(database_url, row_factory=dict_row, autocommit=True) as connection:

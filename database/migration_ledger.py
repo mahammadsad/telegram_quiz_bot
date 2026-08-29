@@ -85,6 +85,10 @@ PRODUCTION_LEDGER_SOURCE_MD5: dict[str, tuple[str, str]] = {
         "20260829152100",
         "fdf579cd3c01a8753f365e1d18b7c23a",
     ),
+    "guarded_validation_dead_letter_recovery": (
+        "20260829163136",
+        "9eac16f908e3b760049efae42244f8c9",
+    ),
 }
 
 
