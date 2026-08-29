@@ -22,6 +22,9 @@ PHASE_E_MIGRATION = ROOT / "supabase" / "migrations" / "20260808140909_phase_e_p
 DASHBOARD_TRANSACTION_MIGRATION = (
     ROOT / "supabase" / "migrations" / "20260829031810_dashboard_rpc_transaction_mode.sql"
 )
+BOOKMARK_PROJECTION_MIGRATION = (
+    ROOT / "supabase" / "migrations" / "20260829091919_bookmark_question_identity_projection.sql"
+)
 client = TestClient(api_module.app)
 
 
@@ -71,6 +74,16 @@ def test_dashboard_v2_uses_a_writable_postgrest_transaction() -> None:
     assert "alter function public.get_user_learning_dashboard_v2(uuid) volatile" in sql
     assert "grant" not in sql
     assert "security definer" not in sql
+
+
+def test_bookmark_projection_uses_the_practice_question_identity_contract() -> None:
+    sql = BOOKMARK_PROJECTION_MIGRATION.read_text(encoding="utf-8").lower()
+
+    assert "jsonb_build_object('questionid', entry.value->'id')" in sql
+    assert "entry.value - 'id'" in sql
+    assert "'sourcetype', 'bookmark'" in sql
+    assert "security invoker" in sql
+    assert "grant execute on function public.get_user_bookmarks(uuid) to service_role" in sql
 
 
 def test_legacy_review_foreign_keys_are_forward_fixed_to_cascade():

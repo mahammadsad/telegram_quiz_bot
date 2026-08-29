@@ -73,6 +73,10 @@ PRODUCTION_LEDGER_SOURCE_MD5: dict[str, tuple[str, str]] = {
         "20260829031810",
         "a471a2859bdb35f4e19142a6fb3366d9",
     ),
+    "bookmark_question_identity_projection": (
+        "20260829091919",
+        "ce721bd2fb27738e6b1769e34deb4d31",
+    ),
 }
 
 

@@ -1122,6 +1122,14 @@ def test_dashboard_and_due_reviews_preserve_object_response_shape(
             "select public.get_user_due_reviews(%s, 100, 0) as payload",
             (user_id,),
         ).fetchone()["payload"]
+        connection.execute(
+            "select public.set_user_bookmark(%s, 'question', %s, true)",
+            (user_id, question_id),
+        )
+        bookmarks = connection.execute(
+            "select public.get_user_bookmarks(%s) as payload",
+            (user_id,),
+        ).fetchone()["payload"]
         connection.rollback()
 
     assert isinstance(dashboard, dict)
@@ -1134,6 +1142,10 @@ def test_dashboard_and_due_reviews_preserve_object_response_shape(
     assert due["sourceType"] == "due"
     assert due["total"] >= 1
     assert due["rows"][0]["subjectKey"] == "history"
+    assert bookmarks["mode"] == "practice"
+    assert bookmarks["sourceType"] == "bookmark"
+    assert bookmarks["questions"][0]["questionId"] == str(question_id)
+    assert "id" not in bookmarks["questions"][0]
 
 
 def test_same_stem_versions_and_identical_reuse(database_url: str, versioned_quizzes: dict) -> None:

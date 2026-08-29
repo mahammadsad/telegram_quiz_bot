@@ -120,15 +120,121 @@ def _authenticated_smoke(
         json={"initData": init_data, "attemptId": attempt_id, "answers": [None] * 10},
         timeout=30,
     )
-    if submit.status_code != 200 or submit.json().get("timingSource") != "server":
+    first_result = submit.json() if submit.status_code == 200 else {}
+    if first_result.get("timingSource") != "server":
         raise SystemExit("Authenticated idempotent submission failed.")
+    replay = session.post(
+        urljoin(base, f"api/quiz/{quiz_id}/submit"),
+        json={"initData": init_data, "attemptId": attempt_id, "answers": [None] * 10},
+        timeout=30,
+    )
+    replay_result = replay.json() if replay.status_code == 200 else {}
+    first_stable = {key: value for key, value in first_result.items() if key != "idempotentReplay"}
+    replay_stable = {key: value for key, value in replay_result.items() if key != "idempotentReplay"}
+    if (
+        first_result.get("idempotentReplay") is not False
+        or replay_result.get("idempotentReplay") is not True
+        or replay_stable != first_stable
+    ):
+        raise SystemExit("Authenticated submission replay was not idempotent.")
+    recovered = session.get(
+        urljoin(base, f"api/quiz/{quiz_id}/attempt/{attempt_id}"),
+        headers={"X-Telegram-Init-Data": init_data},
+        timeout=30,
+    )
+    if recovered.status_code != 200 or recovered.json().get("attemptId") != attempt_id:
+        raise SystemExit("Authenticated attempt recovery failed.")
+
+    retake_id = str(uuid.uuid4())
+    retake_start = session.post(
+        urljoin(base, f"api/quiz/{quiz_id}/attempts/start"),
+        json={"initData": init_data, "attemptId": retake_id},
+        timeout=30,
+    )
+    if retake_start.status_code != 200 or retake_start.json().get("timingTrusted") is not True:
+        raise SystemExit("Authenticated retake start failed.")
+    retake = session.post(
+        urljoin(base, f"api/quiz/{quiz_id}/submit"),
+        json={"initData": init_data, "attemptId": retake_id, "answers": [None] * 10},
+        timeout=30,
+    )
+    if retake.status_code != 200 or retake.json().get("attemptNumber", 0) < 2:
+        raise SystemExit("Authenticated retake submission failed.")
+
+    auth_headers = {"X-Telegram-Init-Data": init_data}
+    leaderboard = session.get(
+        urljoin(base, f"api/quiz/{quiz_id}/leaderboard?limit=10&offset=0"),
+        headers=auth_headers,
+        timeout=30,
+    )
+    current_user = leaderboard.json().get("currentUser") if leaderboard.status_code == 200 else None
+    if not isinstance(current_user, dict) or current_user.get("isCurrentUser") is not True:
+        raise SystemExit("Authenticated viewer-aware leaderboard failed.")
+
+    review = first_result.get("review")
+    question_id = review[0].get("questionId") if isinstance(review, list) and review else None
+    if not question_id:
+        raise SystemExit("Authenticated result omitted its private review identity.")
+    bookmark_url = urljoin(base, "api/me/bookmarks")
+    bookmark_payload = {
+        "initData": init_data,
+        "itemType": "question",
+        "itemId": question_id,
+        "active": True,
+    }
+    bookmarked = session.post(bookmark_url, json=bookmark_payload, timeout=30)
+    if bookmarked.status_code != 200:
+        raise SystemExit("Authenticated bookmark creation failed.")
+    bookmark_list = session.get(bookmark_url, headers=auth_headers, timeout=30)
+    questions = bookmark_list.json().get("questions") if bookmark_list.status_code == 200 else None
+    if not isinstance(questions, list) or not any(row.get("questionId") == question_id for row in questions):
+        raise SystemExit("Authenticated bookmark readback failed.")
+    bookmark_payload["active"] = False
+    removed = session.post(bookmark_url, json=bookmark_payload, timeout=30)
+    if removed.status_code != 200:
+        raise SystemExit("Authenticated bookmark cleanup failed.")
+
+    due = session.get(
+        urljoin(base, "api/me/reviews/due?limit=20&offset=0"),
+        headers=auth_headers,
+        timeout=30,
+    )
+    due_payload = due.json() if due.status_code == 200 else {}
+    due_rows = due_payload.get("rows")
+    if due_payload.get("mode") != "revision" or not isinstance(due_rows, list) or not due_rows:
+        raise SystemExit("Authenticated revision queue failed.")
+    due_question_id = due_rows[0].get("questionId")
+    if not due_question_id:
+        raise SystemExit("Authenticated revision queue omitted its question identity.")
+    practice = session.post(
+        urljoin(base, f"api/me/practice/{due_question_id}"),
+        json={
+            "initData": init_data,
+            "attemptId": str(uuid.uuid4()),
+            "selectedIndex": 0,
+            "sourceType": "due",
+            "mode": "revision",
+            "markedForReview": False,
+        },
+        timeout=30,
+    )
+    if practice.status_code != 200 or practice.json().get("mode") != "revision":
+        raise SystemExit("Authenticated revision submission failed.")
+
     dashboard = session.get(
         urljoin(base, "api/me/dashboard"),
-        headers={"X-Telegram-Init-Data": init_data},
+        headers=auth_headers,
         timeout=30,
     )
     if dashboard.status_code != 200:
         raise SystemExit("Authenticated dashboard smoke failed.")
+    preferences = session.get(
+        urljoin(base, "api/me/preferences"),
+        headers=auth_headers,
+        timeout=30,
+    )
+    if preferences.status_code != 200 or preferences.json().get("preferredLanguage") != "bn":
+        raise SystemExit("Authenticated preference readback failed.")
 
 
 if __name__ == "__main__":
