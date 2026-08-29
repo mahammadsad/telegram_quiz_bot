@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import logging
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from config.settings import QUIZ_DIFFICULTY_DISTRIBUTION
 from services.question_inventory import AssemblyResult, InventoryExhausted, assemble_verified_quiz
-from services.question_validation import QuizValidationError, validate_questions
+from services.question_validation import (
+    QuizValidationError,
+    validate_question_candidate,
+    validate_questions,
+)
 from storage import content_inventory_repo
 
 LOG = logging.getLogger("services.inventory_quiz")
@@ -39,11 +45,28 @@ def load_verified_inventory_quiz(
         chapter_candidates = [
             dict(row) for row in candidates if str(row.get("topic") or "") == chapter
         ]
+        chapter_candidates, rejection_counts = _individually_valid_candidates(
+            chapter_candidates,
+            subject_key,
+            chapter,
+        )
+        if rejection_counts:
+            LOG.warning(
+                "VERIFIED_INVENTORY_CANDIDATES_REJECTED subject=%s chapter=%s counts=%s",
+                subject_key,
+                chapter,
+                dict(sorted(rejection_counts.items())),
+            )
         history = content_inventory_repo.list_recent_usage(
             subject_key,
             since=current - timedelta(days=180),
         )
-        assembled = assemble_verified_quiz(chapter_candidates, history, now=current)
+        assembled = assemble_verified_quiz(
+            chapter_candidates,
+            history,
+            now=current,
+            difficulty_targets=QUIZ_DIFFICULTY_DISTRIBUTION,
+        )
         clean = _validate_assembled(assembled, subject_key, chapter)
     except (InventoryExhausted, QuizValidationError, RuntimeError, ValueError) as exc:
         LOG.info(
@@ -66,6 +89,39 @@ def load_verified_inventory_quiz(
         source_ids=set(source_topics),
         source_topics=source_topics,
     )
+
+
+def _individually_valid_candidates(
+    rows: list[dict[str, Any]],
+    subject_key: str,
+    chapter: str,
+) -> tuple[list[dict[str, Any]], Counter[str]]:
+    """Remove stale invalid rows without discarding the remaining safe inventory."""
+    valid: list[dict[str, Any]] = []
+    rejected: Counter[str] = Counter()
+    for row in rows:
+        try:
+            candidate = _database_row_to_candidate(row)
+            source_id = str(candidate.get("source_document_id") or "")
+            source_topics = {
+                source_id: (
+                    str(candidate.get("micro_topic_id") or ""),
+                    str(candidate.get("micro_topic_key") or ""),
+                )
+            }
+            validate_question_candidate(
+                candidate,
+                subject_key,
+                chapter,
+                allowed_source_ids={source_id},
+                allowed_source_topics=source_topics,
+                require_verification=True,
+            )
+        except (QuizValidationError, RuntimeError, ValueError) as exc:
+            rejected[getattr(exc, "reason_code", None) or type(exc).__name__] += 1
+            continue
+        valid.append(row)
+    return valid, rejected
 
 
 def _validate_assembled(

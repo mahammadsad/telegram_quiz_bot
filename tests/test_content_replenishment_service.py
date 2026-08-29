@@ -264,6 +264,7 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
     assert "contiguous span" in prompt
     assert "exact original spelling" in prompt
     assert "translation or transliteration" in prompt
+    assert "1 easy, 1 medium, and 1 hard" in prompt
 
     english_schema = content_replenishment_service._candidate_schema("english")
     english_properties = english_schema["items"]["properties"]

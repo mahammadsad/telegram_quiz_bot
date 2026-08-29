@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 from config.settings import (
     CONTENT_CHAPTER_COOLDOWN_DAYS,
@@ -67,6 +68,7 @@ def assemble_verified_quiz(
     now: datetime | None = None,
     count: int = QUESTION_COUNT,
     policy: RotationPolicy | None = None,
+    difficulty_targets: Mapping[str, int] | None = None,
 ) -> AssemblyResult:
     """Select the oldest safe inventory, relaxing rotation only as needed."""
     current = _utc(now or datetime.now(timezone.utc))
@@ -74,6 +76,20 @@ def assemble_verified_quiz(
     safe = [dict(row) for row in candidates if _is_safety_eligible(row, current)]
     if len(safe) < count:
         raise InventoryExhausted(f"Only {len(safe)} verified, supported candidates are available; {count} required.")
+    targets = Counter(difficulty_targets or {})
+    if targets:
+        if any(value < 0 for value in targets.values()) or sum(targets.values()) != count:
+            raise ValueError("Difficulty targets must be non-negative and total the requested quiz size.")
+        available = Counter(str(row.get("difficulty") or "") for row in safe)
+        shortages = {
+            difficulty: required - available[difficulty]
+            for difficulty, required in targets.items()
+            if available[difficulty] < required
+        }
+        if shortages:
+            raise InventoryExhausted(
+                f"Verified inventory cannot satisfy difficulty targets; shortages={shortages}."
+            )
     ordered = sorted(safe, key=_candidate_order)
     history = [dict(row) for row in recent_usage]
     selected: list[dict[str, Any]] = []
@@ -86,6 +102,15 @@ def assemble_verified_quiz(
         for candidate in ordered:
             candidate_id = _candidate_id(candidate)
             if candidate_id in selected_ids:
+                continue
+            difficulty = str(candidate.get("difficulty") or "")
+            if targets and (
+                difficulty not in targets
+                or sum(
+                    1 for row in selected if row.get("difficulty") == difficulty
+                )
+                >= targets[difficulty]
+            ):
                 continue
             violations = _rotation_violations(
                 candidate,

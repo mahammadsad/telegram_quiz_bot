@@ -90,3 +90,62 @@ def test_invalid_inventory_fails_closed_for_gemini_fallback(monkeypatch, valid_q
     assert inventory_quiz_service.load_verified_inventory_quiz(
         "history", "আধুনিক ভারত", now=NOW
     ) is None
+
+
+def test_invalid_candidate_is_quarantined_without_discarding_valid_pack(
+    monkeypatch, valid_questions, caplog
+) -> None:
+    rows = database_rows(valid_questions)
+    invalid = deepcopy(rows[0])
+    invalid.update({
+        "id": "question-invalid",
+        "eligible_at": "2026-07-01T00:00:00+00:00",
+        "option_a": "Option A: একই উত্তর",
+        "option_b": "Option B: একই উত্তর",
+    })
+    monkeypatch.setattr(
+        inventory_quiz_service.content_inventory_repo,
+        "list_verified_candidates",
+        lambda *args, **kwargs: [invalid, *rows],
+    )
+    monkeypatch.setattr(
+        inventory_quiz_service.content_inventory_repo,
+        "list_recent_usage",
+        lambda *args, **kwargs: [],
+    )
+
+    result = inventory_quiz_service.load_verified_inventory_quiz(
+        "history", "আধুনিক ভারত", now=NOW
+    )
+
+    assert result is not None
+    assert len(result.questions) == 10
+    assert all(item["question_id"] != "question-invalid" for item in result.questions)
+    assert "options_materially_duplicate" in caplog.text
+
+
+def test_malformed_candidate_is_quarantined_before_mapping(monkeypatch, valid_questions) -> None:
+    rows = database_rows(valid_questions)
+    malformed = deepcopy(rows[0])
+    malformed.update({
+        "id": "question-malformed",
+        "correct_option": "Z",
+        "eligible_at": "2026-07-01T00:00:00+00:00",
+    })
+    monkeypatch.setattr(
+        inventory_quiz_service.content_inventory_repo,
+        "list_verified_candidates",
+        lambda *args, **kwargs: [malformed, *rows],
+    )
+    monkeypatch.setattr(
+        inventory_quiz_service.content_inventory_repo,
+        "list_recent_usage",
+        lambda *args, **kwargs: [],
+    )
+
+    result = inventory_quiz_service.load_verified_inventory_quiz(
+        "history", "আধুনিক ভারত", now=NOW
+    )
+
+    assert result is not None
+    assert len(result.questions) == 10

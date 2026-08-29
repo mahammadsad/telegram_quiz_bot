@@ -554,12 +554,18 @@ def _candidate_prompt(
         )
     else:
         required_proofs = "evidence_span_single_answer"
+    difficulty_mix = {
+        3: "1 easy, 1 medium, and 1 hard",
+        4: "1 easy, 2 medium, and 1 hard",
+        5: "2 easy, 2 medium, and 1 hard",
+    }[batch_size]
     return f"""Create exactly {batch_size} independent Bengali MCQ candidates for verified inventory.
 Subject key: {subject.key}
 Chapter: {chapter}
 Verified facts: {json.dumps(bundle.prompt_facts(), ensure_ascii=False, separators=(",", ":"))}
 Required language_question_form values for this subject: {required_forms}.
 Required proof_family values for this subject: {required_proofs}.
+Required difficulty mix for this batch: {difficulty_mix}. Use each difficulty label exactly as specified.
 
 Return only one JSON array. Every candidate must cite one supplied source_document_id,
 use only its explicit fact, contain four unique options, one correct_index, Bengali

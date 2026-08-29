@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -99,6 +100,36 @@ def test_fewer_than_ten_safe_candidates_fails_closed() -> None:
     rows.append(candidate(99, inventory_status="quarantined"))
     with pytest.raises(InventoryExhausted, match="Only 9 verified"):
         assemble_verified_quiz(rows, [], now=NOW)
+
+
+def test_assembler_enforces_requested_difficulty_mix() -> None:
+    rows = [
+        candidate(index, difficulty="easy" if index < 6 else "medium" if index < 11 else "hard")
+        for index in range(13)
+    ]
+    result = assemble_verified_quiz(
+        rows,
+        [],
+        now=NOW,
+        difficulty_targets={"easy": 3, "medium": 5, "hard": 2},
+    )
+    assert Counter(row["difficulty"] for row in result.questions) == Counter(
+        {"easy": 3, "medium": 5, "hard": 2}
+    )
+
+
+def test_assembler_fails_closed_when_difficulty_inventory_is_short() -> None:
+    rows = [
+        candidate(index, difficulty="easy" if index < 5 else "medium")
+        for index in range(12)
+    ]
+    with pytest.raises(InventoryExhausted, match="difficulty targets"):
+        assemble_verified_quiz(
+            rows,
+            [],
+            now=NOW,
+            difficulty_targets={"easy": 3, "medium": 5, "hard": 2},
+        )
 
 
 def test_inventory_days_and_replenishment_batches_are_reported() -> None:
