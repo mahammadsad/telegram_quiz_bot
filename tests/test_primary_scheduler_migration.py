@@ -1,6 +1,9 @@
 from pathlib import Path
 
-from database.contract import PRIMARY_SCHEDULER_MIGRATION_VERSION
+from database.contract import (
+    PG_NET_SCHEMA_HARDENING_MIGRATION_VERSION,
+    PRIMARY_SCHEDULER_MIGRATION_VERSION,
+)
 
 ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = (
@@ -8,6 +11,12 @@ MIGRATION = (
     / "supabase"
     / "migrations"
     / f"{PRIMARY_SCHEDULER_MIGRATION_VERSION}_durable_primary_scheduler.sql"
+)
+HARDENING_MIGRATION = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / f"{PG_NET_SCHEMA_HARDENING_MIGRATION_VERSION}_pg_net_extension_schema_hardening.sql"
 )
 
 
@@ -50,3 +59,16 @@ def test_primary_scheduler_is_fail_closed_before_activation() -> None:
     assert sql.index("create or replace function private.configure_primary_scheduler()") < sql.index(
         "perform cron.schedule"
     )
+
+
+def test_pg_net_schema_hardening_is_guarded_and_preserves_the_installed_version() -> None:
+    sql = HARDENING_MIGRATION.read_text(encoding="utf-8").lower()
+
+    assert "v_extension_schema <> 'public'" in sql
+    assert "private.scheduler_dispatch_requests" in sql
+    assert "outcome = 'queued'" in sql
+    assert "net.http_request_queue" in sql
+    assert "drop extension pg_net" in sql
+    assert "create extension pg_net with schema extensions version %l" in sql
+    assert "v_extension_version" in sql
+    assert "pg_net was not recreated in the extensions schema" in sql
