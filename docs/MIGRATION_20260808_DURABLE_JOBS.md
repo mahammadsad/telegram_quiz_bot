@@ -49,6 +49,17 @@ Finally invoke one normal `dispatch-due-jobs` heartbeat, reconcile its HTTP
 response, and require GitHub to return HTTP 204. Never place the token in a
 migration, application environment, workflow log, or public schema.
 
+`pg_net` extension ownership belongs to the `extensions` schema. Migration
+`20260829094700_pg_net_extension_schema_hardening.sql` preserves the installed
+version and refuses to recreate the non-relocatable extension while an audited
+scheduler request or a pg_net HTTP request is queued. Do not move it back to
+`public`; if that guard fails, reconcile the outstanding request and rerun the
+same migration rather than bypassing the queue check.
+Recreating pg_net also resets `net.http_request_queue_id_seq`; migration
+`20260829152100_pg_net_request_sequence_continuity.sql` advances it to the
+retained scheduler audit maximum without lowering a newer sequence. Verify the
+first subsequent request receives a new ID and reconciles to GitHub HTTP 204.
+
 ## Operator queries
 
 Daily completeness:

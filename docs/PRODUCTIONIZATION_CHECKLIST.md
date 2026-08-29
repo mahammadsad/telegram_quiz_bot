@@ -113,9 +113,9 @@ staging test has passed. Source-code inspection alone is not sufficient.
 
 ## Final release evidence
 
-- [x] Local Python suite: 644 passed and 38 expected hosted database tests
-  skipped; CI run `33232433337` passed the full suite, disposable PostgreSQL 17
-  migration chain and mobile-browser gate at release `5202bf1`.
+- [x] Local Python suite: 646 passed and 38 expected hosted database tests
+  skipped; CI run `33233527778` passed the prior 645-test suite, disposable
+  PostgreSQL 17 migration chain and mobile-browser gate at release `52dab7e`.
 - [x] Local Ruff, configured mypy (90 source files), full-history scanner,
   browser JavaScript execution, and whitespace gates pass.
 - [x] Local Playwright suite: 140 passed across all four required Android
@@ -212,6 +212,11 @@ staging test has passed. Source-code inspection alone is not sufficient.
   `33232433338`, production answer-free smoke `33232581875`, staging
   authenticated lifecycle smoke `33232580040`, and production migration plan
   `33232523903`. Both Render services are live at the exact release.
+- [x] Release `52dab7e` passed Tests `33233527778`, Security `33233527787`
+  and read-only production migration plan `33233615706`. The guarded pg_net
+  ownership migration matched repository MD5 in staging and production,
+  preserved each installed version, retained worker/readiness health and
+  cleared the only non-informational Supabase security-advisor finding.
 - [x] Release notes, staging/Telegram/mobile guides, database runbook, production
   rollback guide, and non-programmer verification instructions describe the
   current gates without claiming pending hosted results.

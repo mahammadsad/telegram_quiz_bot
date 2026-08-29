@@ -81,6 +81,10 @@ PRODUCTION_LEDGER_SOURCE_MD5: dict[str, tuple[str, str]] = {
         "20260829094700",
         "4c3411cfee52734a924723cbc0f61aea",
     ),
+    "pg_net_request_sequence_continuity": (
+        "20260829152100",
+        "fdf579cd3c01a8753f365e1d18b7c23a",
+    ),
 }
 
 
