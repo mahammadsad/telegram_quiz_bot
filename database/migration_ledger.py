@@ -89,6 +89,14 @@ PRODUCTION_LEDGER_SOURCE_MD5: dict[str, tuple[str, str]] = {
         "20260829163136",
         "9eac16f908e3b760049efae42244f8c9",
     ),
+    "source_optional_stable_replenishment": (
+        "20260830095000",
+        "ab3f913d9af0afa1db75a6599e3e0ae2",
+    ),
+    "return_new_replenishment_jobs": (
+        "20260830095800",
+        "ba1b9f9bdd908631d317103767c18f16",
+    ),
 }
 
 
