@@ -284,8 +284,10 @@ def test_delivery_slo_script_supports_the_documented_direct_invocation() -> None
 def test_content_replenishment_archives_answer_free_capacity_report() -> None:
     path = WORKFLOW_DIR / "content-replenishment.yml"
     workflow = _load_yaml(path)
+    trigger = workflow.get("on") or workflow.get(True)
 
     assert workflow["permissions"] == {"contents": "read"}
+    assert trigger["schedule"] == [{"cron": "20 17,23 * * *"}]
     job = workflow["jobs"]["replenish"]
     source = path.read_text(encoding="utf-8")
     assert "python -m scripts.report_question_inventory" in source
