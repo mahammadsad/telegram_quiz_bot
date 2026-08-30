@@ -2,7 +2,9 @@ name: Verified content replenishment
 
 on:
   schedule:
-    - cron: "20 */6 * * *"
+    # Keep provider-heavy background generation outside the 07:00–19:00 IST
+    # learner delivery window. Manual bounded runs remain available.
+    - cron: "20 17,23 * * *"
   workflow_dispatch:
     inputs:
       target:
