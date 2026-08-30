@@ -49,4 +49,16 @@ jobs:
       - name: Replenish verified question inventory
         run: python -m scripts.replenish_question_inventory --limit "$LIMIT"
       - name: Report inventory days and replenishment gap
-        run: python -m scripts.report_question_inventory
+        run: |
+          mkdir -p reports
+          python -m scripts.report_question_inventory \
+            | tee reports/question-inventory.json
+
+      - name: Archive answer-free inventory capacity report
+        if: always()
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: question-inventory-${{ github.run_id }}
+          path: reports/question-inventory.json
+          if-no-files-found: warn
+          retention-days: 30

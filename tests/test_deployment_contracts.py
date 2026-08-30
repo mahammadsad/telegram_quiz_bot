@@ -281,6 +281,20 @@ def test_delivery_slo_script_supports_the_documented_direct_invocation() -> None
     assert "sys.path.insert(0, str(ROOT))" in source
 
 
+def test_content_replenishment_archives_answer_free_capacity_report() -> None:
+    path = WORKFLOW_DIR / "content-replenishment.yml"
+    workflow = _load_yaml(path)
+
+    assert workflow["permissions"] == {"contents": "read"}
+    job = workflow["jobs"]["replenish"]
+    source = path.read_text(encoding="utf-8")
+    assert "python -m scripts.report_question_inventory" in source
+    assert "reports/question-inventory.json" in source
+    assert job["steps"][-1]["if"] == "always()"
+    assert job["steps"][-1]["with"]["retention-days"] == 30
+    assert "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f" in source
+
+
 def test_question_calibration_workflow_is_read_only_private_and_pinned() -> None:
     path = WORKFLOW_DIR / "question-calibration.yml"
     workflow = _load_yaml(path)
