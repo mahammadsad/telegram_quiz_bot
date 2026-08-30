@@ -115,16 +115,25 @@ Status meanings:
 - Bounded production replenishment `33292750041` claimed 25 distinct targets,
   accepted 76 independently gated candidates, rejected 132 unsafe or duplicate
   candidates, completed seven targets and retained eighteen for bounded retry.
-  The post-run eligible reserves range from 8.3 to 14.6 days by subject with
-  zero repeated exposure and zero same-quiz duplicates in the measured 30-day
-  window. Mathematics Geometry now has 23 easy, 25 medium and four hard eligible
-  candidates, which is enough to satisfy the exact 4/4/2 daily distribution.
+  Follow-up bounded runs `33293161441` and `33293489270` accepted another 98
+  and 74 candidates while rejecting 103 and 137 respectively; unsupported or
+  duplicate material remained out of inventory. Eligible reserves now range
+  from 9.6 to 16.1 days by subject, Mathematics reached 12.5 days, and the
+  measured 30-day window still has zero repeated exposure and zero same-quiz
+  duplicates. Mathematics Geometry has 23 easy, 25 medium and four hard eligible
+  candidates, which is enough to satisfy the exact 3/5/2 daily distribution.
 - A live staging readiness probe exposed one transient contract-read failure:
   eleven otherwise healthy checks were collapsed into one false group and the
   endpoint briefly returned 503. Direct readback showed every staging contract
   ready and the next uncached request returned 200. Contract reads now retry
   once independently and persistent failures remain isolated and fail-closed;
   one unavailable contract can no longer erase evidence from ten healthy ones.
+  Release `730232e` passed Tests `33293428980` and Security `33293428923`, is
+  live on production deploy `dep-da9rf65g1s2s73b9vrc0` and staging deploy
+  `dep-da9rf6942hec738nnuv0`, and passed production smoke `33293609917` plus
+  authenticated staging lifecycle smoke `33293611267`. Three consecutive
+  uncached readiness probes on each service returned HTTP 200 with no failed
+  checks.
 
 ### 29 August production scheduler checkpoint
 
@@ -215,7 +224,7 @@ Status meanings:
 
 - `ruff check .`: pass.
 - `mypy`: success, 90 configured production source files.
-- Local `pytest -q`: **656 passed, 39 skipped**, one upstream Starlette/httpx deprecation warning; CI run `33264153842` passed the disposable PostgreSQL 17 migration chain, full suite and mobile-browser gate for release `5de72c1`.
+- Local `pytest -q`: **656 passed, 39 skipped**, one upstream Starlette/httpx deprecation warning; CI run `33293428980` passed the disposable PostgreSQL 17 migration chain, full suite and mobile-browser gate for release `730232e`.
 - Playwright: **140 passed** across the four supported Android viewports.
 - `pip-audit -r requirements.lock`: no known vulnerabilities.
 - `bandit -r . -lll`: no high-severity findings.
