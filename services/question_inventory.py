@@ -165,6 +165,65 @@ def inventory_report(
     }
 
 
+def chapter_difficulty_report(
+    candidates: Iterable[dict[str, Any]],
+    chapters: Iterable[str],
+    difficulty_targets: Mapping[str, int],
+    *,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Report answer-free chapter capacity against the exact daily mix."""
+    current = _utc(now or datetime.now(timezone.utc))
+    expected_chapters = tuple(dict.fromkeys(str(chapter) for chapter in chapters if chapter))
+    targets = {
+        str(difficulty): int(required)
+        for difficulty, required in difficulty_targets.items()
+    }
+    if not expected_chapters:
+        raise ValueError("At least one runtime chapter is required.")
+    if not targets or any(required < 0 for required in targets.values()):
+        raise ValueError("Difficulty targets must be non-negative.")
+
+    counts: dict[str, Counter[str]] = {
+        chapter: Counter() for chapter in expected_chapters
+    }
+    expected = set(expected_chapters)
+    for row in candidates:
+        if not _is_safety_eligible(row, current):
+            continue
+        chapter = str(row.get("chapter") or row.get("topic") or "")
+        difficulty = str(row.get("difficulty") or "")
+        if chapter in expected and difficulty in targets:
+            counts[chapter][difficulty] += 1
+
+    gaps = []
+    for chapter in expected_chapters:
+        available = {
+            difficulty: counts[chapter][difficulty]
+            for difficulty in targets
+        }
+        shortages = {
+            difficulty: required - available[difficulty]
+            for difficulty, required in targets.items()
+            if available[difficulty] < required
+        }
+        if shortages:
+            gaps.append({
+                "chapter": chapter,
+                "available": available,
+                "shortages": shortages,
+            })
+
+    ready_chapters = len(expected_chapters) - len(gaps)
+    return {
+        "difficulty_targets": targets,
+        "total_chapters": len(expected_chapters),
+        "ready_chapters": ready_chapters,
+        "readiness_percent": round(ready_chapters / len(expected_chapters) * 100, 2),
+        "gaps": gaps,
+    }
+
+
 def replenishment_plan(
     verified_count: int,
     *,

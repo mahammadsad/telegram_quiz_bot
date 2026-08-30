@@ -5,13 +5,20 @@ from __future__ import annotations
 import json
 import time
 from datetime import datetime, timedelta, timezone
+from functools import partial
 from typing import Callable, TypeVar
 
 import httpx
 
-from config.settings import require_env, supabase_project_ref_matches
+from config.settings import (
+    QUIZ_DIFFICULTY_DISTRIBUTION,
+    require_env,
+    supabase_project_ref_matches,
+)
 from config.subjects import QUIZ_SUBJECTS
+from config.syllabus import CHAPTERS
 from services.question_inventory import (
+    chapter_difficulty_report,
     exposure_quality_report,
     inventory_report,
     replenishment_plan,
@@ -45,7 +52,8 @@ def main() -> int:
     for subject in QUIZ_SUBJECTS:
         subject_key = subject.key
         rows = _read_with_retry(
-            lambda subject_key=subject_key: content_inventory_repo.list_verified_candidates(
+            partial(
+                content_inventory_repo.list_verified_candidates,
                 subject_key,
                 now=now,
                 limit=1000,
@@ -61,13 +69,20 @@ def main() -> int:
             },
         )
         recent_usage = _read_with_retry(
-            lambda subject_key=subject_key: content_inventory_repo.list_recent_usage(
+            partial(
+                content_inventory_repo.list_recent_usage,
                 subject_key,
                 since=now - timedelta(days=30),
             )
         )
         report[subject_key] = {
             **capacity,
+            "chapter_difficulty": chapter_difficulty_report(
+                rows,
+                CHAPTERS[subject_key],
+                QUIZ_DIFFICULTY_DISTRIBUTION,
+                now=now,
+            ),
             "replenishment": replenishment_plan(int(capacity["verified"])),
             "exposure_quality_30d": exposure_quality_report(recent_usage),
         }

@@ -8,6 +8,7 @@ import pytest
 from services.question_inventory import (
     InventoryExhausted,
     assemble_verified_quiz,
+    chapter_difficulty_report,
     exposure_quality_report,
     inventory_report,
     replenishment_plan,
@@ -147,6 +148,59 @@ def test_inventory_days_and_replenishment_batches_are_reported() -> None:
         "missing_count": 20,
         "batch_size": 5,
         "batch_count": 4,
+    }
+
+
+def test_chapter_difficulty_report_exposes_exact_answer_free_gaps() -> None:
+    rows = [
+        candidate(
+            index,
+            chapter="chapter-ready",
+            difficulty="easy" if index < 3 else "medium" if index < 8 else "hard",
+        )
+        for index in range(10)
+    ]
+    rows.extend(
+        candidate(
+            20 + index,
+            chapter="chapter-short",
+            difficulty="easy" if index < 3 else "medium",
+        )
+        for index in range(8)
+    )
+    rows.append(
+        candidate(
+            99,
+            chapter="chapter-empty",
+            difficulty="hard",
+            inventory_status="quarantined",
+        )
+    )
+
+    report = chapter_difficulty_report(
+        rows,
+        ("chapter-ready", "chapter-short", "chapter-empty"),
+        {"easy": 3, "medium": 5, "hard": 2},
+        now=NOW,
+    )
+
+    assert report == {
+        "difficulty_targets": {"easy": 3, "medium": 5, "hard": 2},
+        "total_chapters": 3,
+        "ready_chapters": 1,
+        "readiness_percent": 33.33,
+        "gaps": [
+            {
+                "chapter": "chapter-short",
+                "available": {"easy": 3, "medium": 5, "hard": 0},
+                "shortages": {"hard": 2},
+            },
+            {
+                "chapter": "chapter-empty",
+                "available": {"easy": 0, "medium": 0, "hard": 0},
+                "shortages": {"easy": 3, "medium": 5, "hard": 2},
+            },
+        ],
     }
 
 

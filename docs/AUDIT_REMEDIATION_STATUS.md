@@ -122,6 +122,9 @@ Status meanings:
   measured 30-day window still has zero repeated exposure and zero same-quiz
   duplicates. Mathematics Geometry has 23 easy, 25 medium and four hard eligible
   candidates, which is enough to satisfy the exact 3/5/2 daily distribution.
+  The protected capacity report now exposes answer-free per-chapter counts and
+  shortages against that exact mix across every runtime chapter, so a large
+  subject-wide reserve can no longer hide a hard-question or chapter gap.
 - A live staging readiness probe exposed one transient contract-read failure:
   eleven otherwise healthy checks were collapsed into one false group and the
   endpoint briefly returned 503. Direct readback showed every staging contract
@@ -224,7 +227,7 @@ Status meanings:
 
 - `ruff check .`: pass.
 - `mypy`: success, 90 configured production source files.
-- Local `pytest -q`: **656 passed, 39 skipped**, one upstream Starlette/httpx deprecation warning; CI run `33293428980` passed the disposable PostgreSQL 17 migration chain, full suite and mobile-browser gate for release `730232e`.
+- Local `pytest -q`: **657 passed, 39 skipped**, one upstream Starlette/httpx deprecation warning; CI run `33293428980` passed the disposable PostgreSQL 17 migration chain, full suite and mobile-browser gate for release `730232e`.
 - Playwright: **140 passed** across the four supported Android viewports.
 - `pip-audit -r requirements.lock`: no known vulnerabilities.
 - `bandit -r . -lll`: no high-severity findings.
