@@ -119,6 +119,12 @@ Status meanings:
   zero repeated exposure and zero same-quiz duplicates in the measured 30-day
   window. Mathematics Geometry now has 23 easy, 25 medium and four hard eligible
   candidates, which is enough to satisfy the exact 4/4/2 daily distribution.
+- A live staging readiness probe exposed one transient contract-read failure:
+  eleven otherwise healthy checks were collapsed into one false group and the
+  endpoint briefly returned 503. Direct readback showed every staging contract
+  ready and the next uncached request returned 200. Contract reads now retry
+  once independently and persistent failures remain isolated and fail-closed;
+  one unavailable contract can no longer erase evidence from ten healthy ones.
 
 ### 29 August production scheduler checkpoint
 
@@ -209,7 +215,7 @@ Status meanings:
 
 - `ruff check .`: pass.
 - `mypy`: success, 90 configured production source files.
-- Local `pytest -q`: **654 passed, 39 skipped**, one upstream Starlette/httpx deprecation warning; CI run `33264153842` passed the disposable PostgreSQL 17 migration chain, full suite and mobile-browser gate for release `5de72c1`.
+- Local `pytest -q`: **656 passed, 39 skipped**, one upstream Starlette/httpx deprecation warning; CI run `33264153842` passed the disposable PostgreSQL 17 migration chain, full suite and mobile-browser gate for release `5de72c1`.
 - Playwright: **140 passed** across the four supported Android viewports.
 - `pip-audit -r requirements.lock`: no known vulnerabilities.
 - `bandit -r . -lll`: no high-severity findings.

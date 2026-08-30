@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 from config.settings import (
@@ -55,11 +56,56 @@ from database.contract import (
 )
 from database.platform_contract import failure_reasons as platform_contract_failure_reasons
 from storage import schema_contract_repo
+from storage.contracts import Row
 from telegram.routing import ForumRouter, ForumRoutingError
 
 LOG = logging.getLogger("services.readiness")
 _CACHE: tuple[float, "Readiness"] | None = None
 PRIMARY_SCHEDULER_PROJECT_REF = "tizxodkcpglmxgtwepor"
+
+
+def _read_contract_with_retry(
+    loader: Callable[[], Row],
+    *,
+    label: str,
+) -> Row:
+    """Retry one transient read without hiding a persistent contract failure."""
+    try:
+        return loader()
+    except Exception as exc:
+        LOG.info(
+            "READINESS_PROBE_RETRY probe=%s category=%s",
+            label,
+            type(exc).__name__,
+        )
+    try:
+        return loader()
+    except Exception as exc:
+        LOG.warning(
+            "READINESS_PROBE_FAILURE probe=%s category=%s",
+            label,
+            type(exc).__name__,
+        )
+        return {}
+
+
+def _read_active_quiz_with_retry() -> Row | None:
+    """Keep the active-row probe fail-closed after one transient retry."""
+    try:
+        return schema_contract_repo.active_quiz_probe()
+    except Exception as exc:
+        LOG.info(
+            "READINESS_PROBE_RETRY probe=active_quiz category=%s",
+            type(exc).__name__,
+        )
+    try:
+        return schema_contract_repo.active_quiz_probe()
+    except Exception as exc:
+        LOG.warning(
+            "READINESS_PROBE_FAILURE probe=active_quiz category=%s",
+            type(exc).__name__,
+        )
+        return None
 
 
 @dataclass(frozen=True, slots=True)
@@ -188,71 +234,74 @@ def assess(*, use_cache: bool = True) -> Readiness:
 
     if checks["environmentOwnership"] and SUPABASE_URL and SUPABASE_SERVICE_KEY:
         try:
-            contract = schema_contract_repo.get_contract()
-            checks["supabaseConnectivity"] = True
-            try:
-                platform_contract = schema_contract_repo.get_platform_contract()
-                checks["platformContract"] = not platform_contract_failure_reasons(
-                    platform_contract
-                )
-            except Exception as exc:
-                platform_contract = {}
-                LOG.warning(
-                    "READINESS_PLATFORM_CONTRACT_FAILURE category=%s",
-                    type(exc).__name__,
-                )
-            try:
-                privacy_contract = schema_contract_repo.get_leaderboard_privacy_contract()
-            except Exception as exc:
-                privacy_contract = {}
-                LOG.warning(
-                    "READINESS_LEADERBOARD_PRIVACY_FAILURE category=%s",
-                    type(exc).__name__,
-                )
-            try:
-                post_contract = schema_contract_repo.get_post_finalization_contract()
-            except Exception as exc:
-                post_contract = {}
-                LOG.warning(
-                    "READINESS_POST_FINALIZATION_FAILURE category=%s",
-                    type(exc).__name__,
-                )
-            try:
-                job_contract = schema_contract_repo.get_quiz_job_contract()
-            except Exception as exc:
-                job_contract = {}
-                LOG.warning(
-                    "READINESS_QUIZ_JOBS_FAILURE category=%s",
-                    type(exc).__name__,
-                )
-            try:
-                phase_c_content = schema_contract_repo.get_phase_c_content_contract()
-                phase_c_inventory = schema_contract_repo.get_phase_c_inventory_contract()
-                phase_c_candidate = schema_contract_repo.get_phase_c_candidate_contract()
-                phase_d_current_affairs = schema_contract_repo.get_phase_d_current_affairs_contract()
-                phase_e_personal_learning = schema_contract_repo.get_phase_e_personal_learning_contract()
-                phase_e_exam_configuration = schema_contract_repo.get_phase_e_exam_configuration_contract()
-                phase_e_previous_year_mock = schema_contract_repo.get_phase_e_previous_year_mock_contract()
-                phase_e_question_quality = schema_contract_repo.get_phase_e_question_quality_contract()
-                source_optional_generation = schema_contract_repo.get_source_optional_generation_contract()
-                daily_attempt_timing = schema_contract_repo.get_daily_attempt_timing_contract()
-                primary_scheduler = schema_contract_repo.get_primary_scheduler_contract()
-            except Exception as exc:
-                phase_c_content = {}
-                phase_c_inventory = {}
-                phase_c_candidate = {}
-                phase_d_current_affairs = {}
-                phase_e_personal_learning = {}
-                phase_e_exam_configuration = {}
-                phase_e_previous_year_mock = {}
-                phase_e_question_quality = {}
-                source_optional_generation = {}
-                daily_attempt_timing = {}
-                primary_scheduler = {}
-                LOG.warning(
-                    "READINESS_PHASE_C_FAILURE category=%s",
-                    type(exc).__name__,
-                )
+            contract = _read_contract_with_retry(
+                schema_contract_repo.get_contract,
+                label="application_contract",
+            )
+            checks["supabaseConnectivity"] = bool(contract)
+            platform_contract = _read_contract_with_retry(
+                schema_contract_repo.get_platform_contract,
+                label="platform_contract",
+            )
+            checks["platformContract"] = not platform_contract_failure_reasons(
+                platform_contract
+            )
+            privacy_contract = _read_contract_with_retry(
+                schema_contract_repo.get_leaderboard_privacy_contract,
+                label="leaderboard_privacy",
+            )
+            post_contract = _read_contract_with_retry(
+                schema_contract_repo.get_post_finalization_contract,
+                label="post_finalization",
+            )
+            job_contract = _read_contract_with_retry(
+                schema_contract_repo.get_quiz_job_contract,
+                label="durable_quiz_jobs",
+            )
+            phase_c_content = _read_contract_with_retry(
+                schema_contract_repo.get_phase_c_content_contract,
+                label="content_identity",
+            )
+            phase_c_inventory = _read_contract_with_retry(
+                schema_contract_repo.get_phase_c_inventory_contract,
+                label="verified_inventory",
+            )
+            phase_c_candidate = _read_contract_with_retry(
+                schema_contract_repo.get_phase_c_candidate_contract,
+                label="candidate_identity",
+            )
+            phase_d_current_affairs = _read_contract_with_retry(
+                schema_contract_repo.get_phase_d_current_affairs_contract,
+                label="current_affairs",
+            )
+            phase_e_personal_learning = _read_contract_with_retry(
+                schema_contract_repo.get_phase_e_personal_learning_contract,
+                label="personal_learning",
+            )
+            phase_e_exam_configuration = _read_contract_with_retry(
+                schema_contract_repo.get_phase_e_exam_configuration_contract,
+                label="exam_configuration",
+            )
+            phase_e_previous_year_mock = _read_contract_with_retry(
+                schema_contract_repo.get_phase_e_previous_year_mock_contract,
+                label="previous_year_mock",
+            )
+            phase_e_question_quality = _read_contract_with_retry(
+                schema_contract_repo.get_phase_e_question_quality_contract,
+                label="question_quality",
+            )
+            source_optional_generation = _read_contract_with_retry(
+                schema_contract_repo.get_source_optional_generation_contract,
+                label="source_optional_generation",
+            )
+            daily_attempt_timing = _read_contract_with_retry(
+                schema_contract_repo.get_daily_attempt_timing_contract,
+                label="daily_attempt_timing",
+            )
+            primary_scheduler = _read_contract_with_retry(
+                schema_contract_repo.get_primary_scheduler_contract,
+                label="primary_scheduler",
+            )
             permission_failures = (
                 (contract.get("function_permission_failures") or [])
                 + (contract.get("table_permission_failures") or [])
@@ -457,7 +506,7 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and checks["primaryScheduler"]
                 and float(contract.get("verification_threshold") or 0) == QUESTION_VERIFICATION_MIN_CONFIDENCE
             )
-            active = schema_contract_repo.active_quiz_probe()
+            active = _read_active_quiz_with_retry()
             checks["activeQuizRetrieval"] = bool(
                 active
                 and active.get("question_count") == 10

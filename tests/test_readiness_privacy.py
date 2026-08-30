@@ -70,6 +70,25 @@ def _configure_ready_dependencies(monkeypatch) -> None:
     )
     monkeypatch.setattr(
         readiness_service.schema_contract_repo,
+        "get_leaderboard_privacy_contract",
+        lambda: {
+            "ready": True,
+            "leaderboard_privacy_migration_version": (
+                readiness_service.LEADERBOARD_PRIVACY_MIGRATION_VERSION
+            ),
+            "leaderboard_privacy_rpc_fix_migration_version": (
+                readiness_service.LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION
+            ),
+            "leaderboard_privacy_migration_applied": True,
+            "identity_projection_ready": True,
+            "missing_functions": [],
+            "unsafe_function_definitions": [],
+            "function_configuration_failures": [],
+            "function_permission_failures": [],
+        },
+    )
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
         "active_quiz_probe",
         lambda: {
             "question_count": 10,
@@ -387,3 +406,53 @@ def test_readiness_fails_closed_when_platform_contract_is_missing(monkeypatch) -
     assert result.ready is False
     assert result.checks["platformContract"] is False
     assert "platform_contract" in result.categories
+
+
+def test_readiness_retries_one_transient_contract_failure(monkeypatch) -> None:
+    _configure_ready_dependencies(monkeypatch)
+    calls = 0
+    ready_contract = readiness_service.schema_contract_repo.get_phase_c_content_contract
+
+    def transient_content_contract():
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise TimeoutError("transient read")
+        return ready_contract()
+
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_phase_c_content_contract",
+        transient_content_contract,
+    )
+
+    result = readiness_service.assess(use_cache=False)
+
+    assert calls == 2
+    assert result.ready is True
+    assert result.checks["contentIdentity"] is True
+
+
+def test_readiness_isolates_a_persistent_contract_failure(monkeypatch) -> None:
+    _configure_ready_dependencies(monkeypatch)
+    calls = 0
+
+    def unavailable_content_contract():
+        nonlocal calls
+        calls += 1
+        raise TimeoutError("persistent read")
+
+    monkeypatch.setattr(
+        readiness_service.schema_contract_repo,
+        "get_phase_c_content_contract",
+        unavailable_content_contract,
+    )
+
+    result = readiness_service.assess(use_cache=False)
+
+    assert calls == 2
+    assert result.ready is False
+    assert result.checks["contentIdentity"] is False
+    assert result.checks["currentAffairsEvents"] is True
+    assert result.checks["personalKnowledgeMastery"] is True
+    assert "content_identity" in result.categories
