@@ -69,6 +69,7 @@ def assemble_verified_quiz(
     count: int = QUESTION_COUNT,
     policy: RotationPolicy | None = None,
     difficulty_targets: Mapping[str, int] | None = None,
+    balanced_answer_positions: bool = False,
 ) -> AssemblyResult:
     """Select the oldest safe inventory, relaxing rotation only as needed."""
     current = _utc(now or datetime.now(timezone.utc))
@@ -90,6 +91,32 @@ def assemble_verified_quiz(
             raise InventoryExhausted(
                 f"Verified inventory cannot satisfy difficulty targets; shortages={shortages}."
             )
+    position_targets: Counter[int] = Counter()
+    if balanced_answer_positions:
+        if count != QUESTION_COUNT:
+            raise ValueError(
+                "Balanced answer positions require the ten-question quiz contract."
+            )
+        available_positions = Counter(
+            position
+            for row in safe
+            if (position := _answer_position(row)) is not None
+        )
+        if any(available_positions[position] < 2 for position in range(4)):
+            raise InventoryExhausted(
+                "Verified inventory cannot balance correct answers across all four positions."
+            )
+        extra_positions = {
+            position
+            for position, _available in sorted(
+                available_positions.items(),
+                key=lambda item: (-item[1], item[0]),
+            )[:2]
+        }
+        position_targets.update({
+            position: 2 + int(position in extra_positions)
+            for position in range(4)
+        })
     ordered = sorted(safe, key=_candidate_order)
     history = [dict(row) for row in recent_usage]
     selected: list[dict[str, Any]] = []
@@ -112,6 +139,12 @@ def assemble_verified_quiz(
                 >= targets[difficulty]
             ):
                 continue
+            if position_targets:
+                position = _answer_position(candidate)
+                if position is None or sum(
+                    _answer_position(row) == position for row in selected
+                ) >= position_targets[position]:
+                    continue
             violations = _rotation_violations(
                 candidate,
                 history,
@@ -410,6 +443,18 @@ def _candidate_order(row: dict[str, Any]) -> tuple[Any, ...]:
         _parse_time(row.get("last_used_at")) or earliest,
         _parse_time(row.get("created_at")) or earliest,
         _candidate_id(row),
+    )
+
+
+def _answer_position(row: Mapping[str, Any]) -> int | None:
+    raw_index = row.get("correct_index")
+    if not isinstance(raw_index, bool) and isinstance(raw_index, int):
+        return raw_index if raw_index in range(4) else None
+    raw_option = str(row.get("correct_option") or "").strip().upper()
+    return (
+        "ABCD".find(raw_option)
+        if len(raw_option) == 1 and raw_option in "ABCD"
+        else None
     )
 
 
