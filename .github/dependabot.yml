@@ -18,3 +18,7 @@ updates:
       interval: weekly
     open-pull-requests-limit: 5
     labels: [dependencies, security]
+    groups:
+      codeql-action:
+        patterns:
+          - "github/codeql-action*"
