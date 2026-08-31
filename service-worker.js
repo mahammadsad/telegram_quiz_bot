@@ -1,7 +1,7 @@
 "use strict";
 
-const SHELL_CACHE = "quiz-miniapp-shell-v8.7.1-ui2";
-const ANSWER_FREE_CACHE = "quiz-answer-free-v8.7.1-ui2";
+const SHELL_CACHE = "quiz-miniapp-shell-v8.7.2-ui3";
+const ANSWER_FREE_CACHE = "quiz-answer-free-v8.7.2-ui3";
 const SHELL_NETWORK_TIMEOUT_MS = 30000;
 const BASE_URL = new URL("./", self.location.href);
 const BASE_PATH = BASE_URL.pathname;
@@ -60,31 +60,42 @@ self.addEventListener("install", (event) => {
 
 async function activateCurrentShell() {
   var keys = await caches.keys();
+  var replacesPreviousShell = keys.some((key) => (
+    key.startsWith("quiz-miniapp-shell-") && key !== SHELL_CACHE
+  ));
   await Promise.all(
     keys.filter((key) => ![SHELL_CACHE, ANSWER_FREE_CACHE].includes(key))
       .map((key) => caches.delete(key)),
   );
   await self.clients.claim();
 
+  // A first-time installation has no stale JavaScript to recover and must not
+  // reload the launch page. Only an actual shell upgrade needs this path.
+  if (!replacesPreviousShell) return;
+
   // Telegram can retain an already-open WebView after a new worker activates.
-  // Reload Telegram launch clients when this new worker activates so that stale in-memory JavaScript
-  // cannot keep exposing an old timeout/error contract. Browser/PWA tabs are
-  // left alone, and quiz drafts survive this one-time release reload in local
-  // storage.
+  // Reload Telegram launch clients when this new worker activates so that
+  // stale in-memory JavaScript cannot keep exposing an old timeout/error
+  // contract. Browser/PWA tabs are left alone, and quiz drafts survive this
+  // one-time release reload in local storage.
   var windowClients = await self.clients.matchAll({
     type: "window",
     includeUncontrolled: true,
   });
-  await Promise.all(windowClients.map(async (client) => {
+  windowClients.forEach((client) => {
     var clientUrl = new URL(client.url);
     if (clientUrl.origin !== self.location.origin) return;
     if (!/(?:^|&)tgWebAppData=/.test(clientUrl.hash.slice(1))) return;
     try {
-      await client.navigate(client.url);
+      // Do not await navigation from inside activate.waitUntil(): Chromium can
+      // wait for activation before finishing the navigation, which would make
+      // the two operations deadlock. Telegram's SDK retains launch parameters
+      // in session storage across this same-client recovery navigation.
+      void client.navigate(client.url).catch(() => {});
     } catch (_error) {
       // A closing Telegram WebView needs no recovery navigation.
     }
-  }));
+  });
 }
 
 self.addEventListener("activate", (event) => {

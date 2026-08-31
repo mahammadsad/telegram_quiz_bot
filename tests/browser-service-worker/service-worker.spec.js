@@ -1,6 +1,6 @@
 const { test, expect } = require("@playwright/test");
 
-const ACTIVE_SHELL_CACHE = "quiz-miniapp-shell-v8.7.1-ui2";
+const ACTIVE_SHELL_CACHE = "quiz-miniapp-shell-v8.7.2-ui3";
 
 async function openHarness(page) {
   await page.goto("/tests/browser-service-worker/harness.html");
@@ -117,7 +117,7 @@ test("answer-free projections enter the fallback cache only with the opt-in resp
       const url = `/api/quiz/sw-${probe}?probe=${probe}&answerFree=${answerFree ? "1" : "0"}&failAfter=1`;
       const firstResponse = await fetch(url, { cache: "no-store" });
       const first = await firstResponse.json();
-      const cache = await caches.open("quiz-answer-free-v8.7.1-ui2");
+      const cache = await caches.open("quiz-answer-free-v8.7.2-ui3");
       const cachedAfterSuccess = Boolean(await cache.match(url));
       const secondResponse = await fetch(url, { cache: "no-store" });
       const second = await secondResponse.json();
@@ -152,7 +152,7 @@ test("shell requests refresh stale cached assets from the network", async ({ pag
   await registerAndControl(page);
 
   const result = await page.evaluate(async () => {
-    const cache = await caches.open("quiz-miniapp-shell-v8.7.1-ui2");
+    const cache = await caches.open("quiz-miniapp-shell-v8.7.2-ui3");
     await cache.put(
       "/index.js",
       new Response("stale-cache-only-script", {
@@ -172,6 +172,46 @@ test("shell requests refresh stale cached assets from the network", async ({ pag
   expect(result.body).not.toContain("stale-cache-only-script");
   expect(result.body).toContain("screen-loading");
   expect(result.cachedBody).toBe(result.body);
+});
+
+test("a legacy Telegram shell refreshes once without stalling activation", async ({ page }) => {
+  let navigationRequests = 0;
+  page.on("request", (request) => {
+    const url = new URL(request.url());
+    if (
+      request.isNavigationRequest()
+      && url.pathname === "/tests/browser-service-worker/harness.html"
+    ) {
+      navigationRequests += 1;
+    }
+  });
+
+  await page.goto(
+    "/tests/browser-service-worker/harness.html#tgWebAppData=retained-test-launch",
+  );
+  await page.evaluate(async () => {
+    const legacy = await caches.open("quiz-miniapp-shell-v8.7.1-ui2");
+    await legacy.put("/index.js", new Response("legacy", { status: 200 }));
+    void navigator.serviceWorker.register(
+      "/service-worker.js?upgrade-recovery=8.7.2-ui3",
+      { scope: "/", updateViaCache: "none" },
+    );
+  });
+
+  await expect.poll(() => navigationRequests).toBe(2);
+  await expect.poll(async () => page.evaluate(() => ({
+    controlled: Boolean(navigator.serviceWorker.controller),
+    initData: window.harnessInitData,
+  }))).toEqual({
+    controlled: true,
+    initData: "retained-test-launch",
+  });
+  await page.waitForTimeout(500);
+  expect(navigationRequests).toBe(2);
+
+  const cacheNames = await page.evaluate(() => caches.keys());
+  expect(cacheNames).toContain(ACTIVE_SHELL_CACHE);
+  expect(cacheNames).not.toContain("quiz-miniapp-shell-v8.7.1-ui2");
 });
 
 test("activation removes old service-worker cache versions", async ({ page }) => {

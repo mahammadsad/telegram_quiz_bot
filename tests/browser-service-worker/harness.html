@@ -9,5 +9,13 @@
     <main>
       <h1>Service worker HTTPS regression harness</h1>
     </main>
+    <script>
+      // Telegram's SDK retains launch parameters in session storage so they
+      // survive a same-client service-worker recovery navigation. Mirror that
+      // behavior here without loading a third-party script in the HTTPS test.
+      const launchData = new URLSearchParams(location.hash.slice(1)).get("tgWebAppData");
+      if (launchData) sessionStorage.setItem("sw-harness-init-data", launchData);
+      window.harnessInitData = launchData || sessionStorage.getItem("sw-harness-init-data") || "";
+    </script>
   </body>
 </html>
