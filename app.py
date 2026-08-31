@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import os
+import re
+import time
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -39,6 +43,7 @@ from config.settings import (
 )
 from config.subjects import SUBJECTS
 from database.contract import APPLICATION_VERSION, REQUIRED_MIGRATION_VERSION
+from database.observability import begin_database_timings, reset_database_timings
 from routes.admin import build_admin_router
 from routes.catalog import build_catalog_router
 from routes.leaderboards import build_leaderboard_router
@@ -67,6 +72,9 @@ from telegram.auth import TelegramAuthError, verify_init_data
 from utils.quiz_ids import parse_quiz_id
 
 ROOT = Path(__file__).resolve().parent
+HTTP_LOG = logging.getLogger("app.http")
+REQUEST_ID_HEADER = "X-Request-ID"
+_REQUEST_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 app = FastAPI(title="WB Exam Quiz Pack API", version=APPLICATION_VERSION)
 # Backward-compatible import for older tests/operators; the value has one source.
 MIGRATION_VERSION = REQUIRED_MIGRATION_VERSION
@@ -78,7 +86,109 @@ if CORS_ALLOWED_ORIGINS:
         allow_credentials=False,
         allow_methods=["GET", "POST", "PUT", "OPTIONS"],
         allow_headers=["*"],
+        expose_headers=[REQUEST_ID_HEADER, "Server-Timing"],
     )
+
+
+def _request_id(request: Request) -> str:
+    supplied = request.headers.get(REQUEST_ID_HEADER, "")
+    if _REQUEST_ID_RE.fullmatch(supplied):
+        return supplied
+    return uuid.uuid4().hex
+
+
+def _route_template(request: Request) -> str:
+    """Return only developer-defined route metadata, never a user-supplied URL."""
+    route = request.scope.get("route")
+    template = getattr(route, "path", None)
+    if isinstance(template, str) and template.startswith("/"):
+        return template[:240]
+    return "<unmatched>"
+
+
+def _request_duration_ms(request: Request) -> float:
+    started_at = getattr(request.state, "request_started_at", None)
+    if not isinstance(started_at, float):
+        return 0.0
+    return max(0.0, (time.perf_counter() - started_at) * 1000)
+
+
+def _database_timings(request: Request) -> list[tuple[str, float]]:
+    value = getattr(request.state, "database_timings", None)
+    if not isinstance(value, list):
+        return []
+    return [
+        (label, duration_ms)
+        for label, duration_ms in value
+        if isinstance(label, str)
+        and isinstance(duration_ms, (int, float))
+        and not isinstance(duration_ms, bool)
+    ][:32]
+
+
+def _log_request(request: Request, *, status_code: int, duration_ms: float, outcome: str) -> None:
+    method = request.method.upper()
+    if not re.fullmatch(r"[A-Z]{1,16}", method):
+        method = "<invalid>"
+    record = {
+        "duration_ms": round(duration_ms, 2),
+        "event": "http_request",
+        "method": method,
+        "outcome": outcome,
+        "request_id": str(getattr(request.state, "request_id", "unknown")),
+        "route": _route_template(request),
+        "status": int(status_code),
+    }
+    database_timings = _database_timings(request)
+    if database_timings:
+        record["database_duration_ms"] = round(
+            sum(duration_ms for _, duration_ms in database_timings),
+            2,
+        )
+        record["database_operations"] = [
+            {"duration_ms": round(duration_ms, 2), "label": label}
+            for label, duration_ms in database_timings
+        ]
+    HTTP_LOG.info(json.dumps(record, ensure_ascii=True, separators=(",", ":"), sort_keys=True))
+
+
+def _set_observability_headers(
+    response: Response,
+    *,
+    request_id: str,
+    duration_ms: float,
+    database_timings: list[tuple[str, float]] | None = None,
+) -> None:
+    response.headers[REQUEST_ID_HEADER] = request_id
+    timing_values = [f"app;dur={duration_ms:.2f}"]
+    if database_timings:
+        database_duration_ms = sum(value for _, value in database_timings)
+        timing_values.append(f"db;dur={database_duration_ms:.2f}")
+    app_timing = ", ".join(timing_values)
+    existing = response.headers.get("Server-Timing", "").strip()
+    response.headers["Server-Timing"] = f"{existing}, {app_timing}" if existing else app_timing
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_response(request: Request, _exc: Exception) -> Response:
+    """Keep the default opaque 500 response while adding correlation metadata."""
+    request_id = str(getattr(request.state, "request_id", "")) or uuid.uuid4().hex
+    duration_ms = _request_duration_ms(request)
+    if not getattr(request.state, "request_observability_logged", False):
+        _log_request(
+            request,
+            status_code=500,
+            duration_ms=duration_ms,
+            outcome="unhandled_exception",
+        )
+    response = Response(content="Internal Server Error", status_code=500, media_type="text/plain")
+    _set_observability_headers(
+        response,
+        request_id=request_id,
+        duration_ms=duration_ms,
+        database_timings=_database_timings(request),
+    )
+    return response
 
 
 @app.middleware("http")
@@ -114,6 +224,45 @@ async def security_and_privacy_headers(request: Request, call_next):
         or request.method not in {"GET", "HEAD", "OPTIONS"}
     ):
         response.headers["Cache-Control"] = "no-store, private"
+    return response
+
+
+@app.middleware("http")
+async def request_observability(request: Request, call_next):
+    request.state.request_id = _request_id(request)
+    request.state.request_started_at = time.perf_counter()
+    request.state.request_observability_logged = False
+    database_timings, database_timing_token = begin_database_timings()
+    request.state.database_timings = database_timings
+    try:
+        response = await call_next(request)
+    except Exception:
+        duration_ms = _request_duration_ms(request)
+        _log_request(
+            request,
+            status_code=500,
+            duration_ms=duration_ms,
+            outcome="unhandled_exception",
+        )
+        request.state.request_observability_logged = True
+        reset_database_timings(database_timing_token)
+        raise
+
+    duration_ms = _request_duration_ms(request)
+    _set_observability_headers(
+        response,
+        request_id=request.state.request_id,
+        duration_ms=duration_ms,
+        database_timings=_database_timings(request),
+    )
+    _log_request(
+        request,
+        status_code=response.status_code,
+        duration_ms=duration_ms,
+        outcome="complete",
+    )
+    request.state.request_observability_logged = True
+    reset_database_timings(database_timing_token)
     return response
 
 

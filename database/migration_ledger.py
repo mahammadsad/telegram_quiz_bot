@@ -4,8 +4,10 @@ These hashes are MD5 only to retain the original Supabase ledger-audit format;
 they are integrity identifiers, not security primitives. The 37 historical
 sources were matched to production statement bytes. Later sources were matched
 by version/name after production-schema equivalence checks and then pinned from
-the applied release. Every entry was independently re-read from the production
-ledger on 2026-08-24. New migrations must not be added until that process repeats.
+the applied release. The historical set was independently re-read on 2026-08-24;
+the learner-bootstrap source was pinned after its gated production apply and
+contract verification on 2026-08-31. New migrations must not be added before
+their own production apply and verification succeeds.
 """
 
 from __future__ import annotations
@@ -96,6 +98,10 @@ PRODUCTION_LEDGER_SOURCE_MD5: dict[str, tuple[str, str]] = {
     "return_new_replenishment_jobs": (
         "20260830095800",
         "ba1b9f9bdd908631d317103767c18f16",
+    ),
+    "learner_bootstrap_latency_contract": (
+        "20260831011657",
+        "162ec1e833d4d79d39723e8f839abbb1",
     ),
 }
 

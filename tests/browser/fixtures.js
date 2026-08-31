@@ -673,6 +673,13 @@ async function installApiMocks(page, options = {}) {
     if (path === "/api/me/dashboard" && method === "GET") {
       return json(options.emptyDashboard ? {} : dashboardPayload());
     }
+    if (path === "/api/me/practice-bootstrap" && method === "GET") {
+      const requestedSource = url.searchParams.get("source") || source;
+      const queue = practiceQueue(requestedSource, {
+        empty: Boolean(options.emptyPractice),
+      });
+      return json({ ...queue, preferences: state.preferences });
+    }
     if (path === "/api/me/preferences" && method === "GET") {
       return json(state.preferences);
     }
@@ -798,6 +805,16 @@ async function assertBottomNavigationDoesNotCoverContent(page) {
     const navigation = document.querySelector(".bottom-nav, nav.bottom");
     const main = document.querySelector("main");
     if (!navigation || !main) return null;
+    const navigationStyle = getComputedStyle(navigation);
+    const navigationRect = navigation.getBoundingClientRect();
+    if (
+      navigationStyle.display === "none" ||
+      navigationStyle.visibility === "hidden" ||
+      navigationRect.width === 0 ||
+      navigationRect.height === 0
+    ) {
+      return { hidden: true };
+    }
     const candidates = Array.from(
       main.querySelectorAll("section, article, details, form"),
     ).filter((element) => {
@@ -818,6 +835,7 @@ async function assertBottomNavigationDoesNotCoverContent(page) {
     };
   });
   expect(geometry).not.toBeNull();
+  if (geometry.hidden) return;
   expect(geometry.contentBottom).toBeLessThanOrEqual(geometry.navigationTop + 1);
 }
 

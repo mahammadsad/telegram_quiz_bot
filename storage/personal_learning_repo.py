@@ -6,12 +6,17 @@ import uuid
 from typing import Any
 
 from database.client import get_client
+from database.observability import database_timing
 from errors import DatabaseIntegrityError
 from storage.contracts import raise_safe_rate_limit
 
 
 def dashboard(user_id: str) -> dict:
     return _rpc("get_user_learning_dashboard_v2", {"p_user_id": user_id})
+
+
+def dashboard_bootstrap(user_id: str) -> dict:
+    return _rpc("get_user_learning_dashboard_bootstrap", {"p_user_id": user_id})
 
 
 def due_reviews(user_id: str, *, limit: int, offset: int) -> dict:
@@ -132,6 +137,26 @@ def preferences(user_id: str) -> dict:
     return _rpc("get_user_preferences", {"p_user_id": user_id})
 
 
+def practice_bootstrap(
+    user_id: str,
+    *,
+    source_type: str,
+    subject_key: str | None,
+    limit: int,
+    offset: int,
+) -> dict:
+    return _rpc(
+        "get_user_practice_bootstrap",
+        {
+            "p_user_id": user_id,
+            "p_source_type": source_type,
+            "p_subject_key": subject_key,
+            "p_limit": limit,
+            "p_offset": offset,
+        },
+    )
+
+
 def save_preferences(user_id: str, payload: dict[str, Any]) -> dict:
     return _rpc(
         "save_user_preferences",
@@ -155,7 +180,8 @@ def save_preferences(user_id: str, payload: dict[str, Any]) -> dict:
 
 def _rpc(name: str, payload: dict[str, Any]) -> dict:
     try:
-        result = get_client().rpc(name, payload).execute()
+        with database_timing("personal." + name):
+            result = get_client().rpc(name, payload).execute()
     except Exception as exc:
         raise_safe_rate_limit(exc)
         raise

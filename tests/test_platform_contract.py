@@ -8,6 +8,7 @@ from database.contract import (
     DASHBOARD_TRANSACTION_MIGRATION_VERSION,
     FAIR_CONTENT_REPLENISHMENT_MIGRATION_VERSION,
     LATEST_MIGRATION_VERSION,
+    LEARNER_BOOTSTRAP_LATENCY_MIGRATION_VERSION,
     PG_NET_REQUEST_SEQUENCE_MIGRATION_VERSION,
     PG_NET_SCHEMA_HARDENING_MIGRATION_VERSION,
     PLATFORM_CONTRACT_KEY,
@@ -27,8 +28,9 @@ MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / f"{PLATFORM_CONTRACT_MIGRATION_VERSION}_platform_contract_v1.sql"
+    / f"{PLATFORM_CONTRACT_MIGRATION_VERSION}_learner_bootstrap_latency_contract.sql"
 )
+BASE_MIGRATION = ROOT / "supabase" / "migrations" / "20260822190025_platform_contract_v1.sql"
 
 
 def _ready_contract() -> dict:
@@ -44,7 +46,8 @@ def _ready_contract() -> dict:
 
 def test_platform_contract_remains_the_scheduler_gate_after_additive_migrations() -> None:
     assert MIGRATION.is_file()
-    assert LATEST_MIGRATION_VERSION == REPLENISHMENT_RETURN_CONTRACT_MIGRATION_VERSION
+    assert LATEST_MIGRATION_VERSION == LEARNER_BOOTSTRAP_LATENCY_MIGRATION_VERSION
+    assert REPLENISHMENT_RETURN_CONTRACT_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert SOURCE_OPTIONAL_REPLENISHMENT_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert VALIDATION_DEAD_LETTER_RECOVERY_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert PG_NET_REQUEST_SEQUENCE_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
@@ -55,19 +58,20 @@ def test_platform_contract_remains_the_scheduler_gate_after_additive_migrations(
     assert CONTENT_REPLENISHMENT_BACKLOG_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert FAIR_CONTENT_REPLENISHMENT_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert REMINDER_DELIVERY_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
-    assert PLATFORM_CONTRACT_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
+    assert PLATFORM_CONTRACT_MIGRATION_VERSION == LATEST_MIGRATION_VERSION
 
     source = MIGRATION.read_text(encoding="utf-8")
-    assert "create or replace function public.get_platform_contract_v1()" in source
+    assert "create function public.get_platform_contract_v1()" in source
     assert "security definer" in source
     assert "set search_path = ''" in source
     assert "revoke all on function public.get_platform_contract_v1()" in source
     assert "grant execute on function public.get_platform_contract_v1() to service_role" in source
-    assert "generator_provider" in source
-    assert "generator_model" in source
-    assert "supabase_migrations.schema_migrations" in source
+    contract_chain = source + BASE_MIGRATION.read_text(encoding="utf-8")
+    assert "generator_provider" in contract_chain
+    assert "generator_model" in contract_chain
+    assert "supabase_migrations.schema_migrations" in contract_chain
     for check in PLATFORM_CONTRACT_REQUIRED_CHECKS:
-        assert f"'{check}'" in source
+        assert f"'{check}'" in contract_chain
 
 
 def test_platform_contract_validator_accepts_only_exact_complete_contracts() -> None:

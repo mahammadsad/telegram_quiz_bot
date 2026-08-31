@@ -34,6 +34,8 @@ async function startWithTelegramMainButton(page) {
 }
 
 async function openSubmissionConfirmation(page) {
+  await page.locator("#question-map-toggle").click();
+  await expect(page.locator("#question-map-sheet")).toBeVisible();
   await page.locator(".nav-q").nth(9).click();
   await page.locator(".option").first().click();
   await page.evaluate(() => window.__triggerMainButton());
@@ -74,6 +76,7 @@ test("complete quiz lifecycle hides answers until submission and recovers the re
   await expect(page.locator("#q-index")).toContainText("২");
   await page.evaluate(() => window.__triggerBackButton());
   await expect(page.locator("#q-index")).toContainText("১");
+  await page.locator("#question-map-toggle").click();
   await page.locator(".nav-q").nth(4).click();
   await expect(page.locator("#q-index")).toContainText("৫");
   await page.keyboard.press("3");
@@ -201,6 +204,8 @@ test("Telegram MainButton and BackButton follow the current quiz screen", async 
   expect(state.backVisible).toBe(false);
 
   await startWithTelegramMainButton(page);
+  await expect(page.locator(".bottom-nav")).toBeHidden();
+  await expect(page.locator("#question-map-toggle")).toContainText("প্রশ্ন ১ / ১০");
   state = await page.evaluate(() => window.__mobileQa);
   expect(state.mainParams.text).toBe("পরবর্তী");
   expect(state.backVisible).toBe(false);
@@ -230,27 +235,28 @@ test("result revision action opens the due queue and activates revision navigati
   await page.locator("#btn-revise").click();
   await expect(page).toHaveURL(new RegExp(`/practice\\.html\\?source=due$`));
   await expect(page.locator("#title")).toContainText("আজকের পুনরাবৃত্তি");
-  await expect(page.locator("#nav-revision")).toHaveClass(/active/);
-  await expect(page.locator("#nav-practice")).not.toHaveClass(/active/);
+  await expect(page.locator("#source-due")).toHaveClass(/active/);
+  await expect(page.locator("#source-due")).toHaveAttribute("aria-current", "page");
   expect(api.practiceSubmissions).toHaveLength(0);
 });
 
 test("cross-page navigation preserves Telegram authentication and personal dashboard cards", async ({
   page,
 }) => {
-  await installTelegramMock(page, { requireLaunchHash: true });
+  await installTelegramMock(page, { requireLaunchHash: true, startParam: "" });
   await installApiMocks(page);
   const launchHash =
     "#tgWebAppData=deterministic-browser-test&tgWebAppVersion=9.6&tgWebAppPlatform=android";
-  await page.goto(`/index.html?quiz=${QUIZ_ID}${launchHash}`);
-  await expect(page.locator("#screen-intro")).toBeVisible();
+  await page.goto(`/index.html${launchHash}`);
+  await expect(page.locator("#screen-home")).toBeVisible();
 
   await page.locator(".bottom-nav").getByRole("link", { name: "অনুশীলন" }).click();
   await expect(page.locator("#practice")).toBeVisible();
   await expect(page.locator("#error")).toBeHidden();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe(launchHash);
 
-  await page.locator(".bottom").getByRole("link", { name: "পরিসংখ্যান" }).click();
+  await expect(page.locator(".bottom")).toBeHidden();
+  await page.goto(`/dashboard.html${launchHash}`);
   await expect(page.locator("#identity-card")).toBeVisible();
   await expect(page.locator("#bookmarks-card")).toHaveCount(0);
   await expect(page.locator("#bookmark-practice")).toBeVisible();
@@ -259,11 +265,12 @@ test("cross-page navigation preserves Telegram authentication and personal dashb
   await page.locator("#bookmark-practice").click();
   await expect(page.locator("#practice")).toBeVisible();
   await expect(page.locator("#title")).toContainText("বুকমার্ক অনুশীলন");
-  await expect(page.locator("#nav-practice")).toHaveClass(/active/);
-  await expect(page.locator("#nav-revision")).not.toHaveClass(/active/);
+  await expect(page.locator("#source-bookmark")).toHaveClass(/active/);
+  await expect(page.locator("#source-bookmark")).toHaveAttribute("aria-current", "page");
   await expect.poll(() => page.evaluate(() => location.hash)).toBe(launchHash);
 
-  await page.locator(".bottom").getByRole("link", { name: "পরিসংখ্যান" }).click();
+  await expect(page.locator(".bottom")).toBeHidden();
+  await page.goto(`/dashboard.html${launchHash}`);
   await expect(page.locator("#identity-card")).toBeVisible();
   await expect.poll(() => page.evaluate(() => location.hash)).toBe(launchHash);
   await expect(page.locator("#analytics")).toBeVisible();

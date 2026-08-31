@@ -25,7 +25,8 @@ test("root Mini App opens a useful preparation home without a quiz deep link", a
 
   await page.locator(`a[href*="${QUIZ_ID}"]`).click();
   await expect(page.locator("#screen-intro")).toBeVisible();
-  await expect(page.locator("#quiz-id-pill")).toContainText(QUIZ_ID);
+  await expect(page.locator("#quiz-id-pill")).not.toContainText(QUIZ_ID);
+  await expect(page.locator("#quiz-id-pill")).toHaveAttribute("data-quiz-id", QUIZ_ID);
 
   await assertNoHorizontalOverflow(page);
   await assertVisibleTouchTargets(page);

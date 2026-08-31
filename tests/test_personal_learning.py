@@ -25,6 +25,9 @@ DASHBOARD_TRANSACTION_MIGRATION = (
 BOOKMARK_PROJECTION_MIGRATION = (
     ROOT / "supabase" / "migrations" / "20260829091919_bookmark_question_identity_projection.sql"
 )
+BOOTSTRAP_MIGRATION = (
+    ROOT / "supabase" / "migrations" / "20260831011657_learner_bootstrap_latency_contract.sql"
+)
 client = TestClient(api_module.app)
 
 
@@ -84,6 +87,28 @@ def test_bookmark_projection_uses_the_practice_question_identity_contract() -> N
     assert "'sourcetype', 'bookmark'" in sql
     assert "security invoker" in sql
     assert "grant execute on function public.get_user_bookmarks(uuid) to service_role" in sql
+
+
+def test_learner_bootstrap_contract_is_private_throttled_and_single_round_trip() -> None:
+    sql = BOOTSTRAP_MIGRATION.read_text(encoding="utf-8").lower()
+
+    for function_name in (
+        "resolve_telegram_user_v2",
+        "get_user_learning_dashboard_bootstrap",
+        "get_user_practice_bootstrap",
+        "get_learner_bootstrap_latency_contract",
+    ):
+        assert f"function public.{function_name}" in sql
+    assert "p_touch_interval_seconds integer default 900" in sql
+    assert "on conflict (telegram_id) do update" in sql
+    assert "public.users.last_active <= v_now" in sql
+    assert "where public.users.username is distinct from excluded.username" in sql
+    assert "'dashboard', public.get_user_learning_dashboard_v2(p_user_id)" in sql
+    assert "'preferences', public.get_user_preferences(p_user_id)" in sql
+    assert "'queue', coalesce(v_queue" in sql
+    assert "security invoker" in sql
+    assert "from public, anon, authenticated" in sql
+    assert "to service_role" in sql
 
 
 def test_legacy_review_foreign_keys_are_forward_fixed_to_cascade():
@@ -252,30 +277,28 @@ def test_dashboard_study_plan_prioritizes_due_preferred_subject(monkeypatch) -> 
     monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
     monkeypatch.setattr(
         service.personal_learning_repo,
-        "dashboard",
+        "dashboard_bootstrap",
         lambda user_id: {
-            "dailyTarget": 30,
-            "todayAnswered": 18,
-            "revisionDueToday": 7,
-            "weakQuestions": 4,
-            "subjectRevisionCounts": [
-                {"subjectKey": "history", "due": 5},
-                {"subjectKey": "geography", "due": 2},
-                {"subjectKey": "science", "due": 9},
-            ],
-            "subjectPerformance": [
-                {"subjectKey": "history", "accuracy": 80},
-                {"subjectKey": "geography", "accuracy": 45},
-            ],
-        },
-    )
-    monkeypatch.setattr(
-        service.personal_learning_repo,
-        "preferences",
-        lambda user_id: {
-            "preferredSubjects": ["history", "geography", "invented"],
-            "targetExams": ["WBCS"],
-            "dailyQuestionTarget": 30,
+            "dashboard": {
+                "dailyTarget": 30,
+                "todayAnswered": 18,
+                "revisionDueToday": 7,
+                "weakQuestions": 4,
+                "subjectRevisionCounts": [
+                    {"subjectKey": "history", "due": 5},
+                    {"subjectKey": "geography", "due": 2},
+                    {"subjectKey": "science", "due": 9},
+                ],
+                "subjectPerformance": [
+                    {"subjectKey": "history", "accuracy": 80},
+                    {"subjectKey": "geography", "accuracy": 45},
+                ],
+            },
+            "preferences": {
+                "preferredSubjects": ["history", "geography", "invented"],
+                "targetExams": ["WBCS"],
+                "dailyQuestionTarget": 30,
+            },
         },
     )
 
@@ -298,7 +321,7 @@ def test_dashboard_study_plan_prioritizes_due_preferred_subject(monkeypatch) -> 
     }
 
 
-def test_study_plan_uses_target_exam_only_after_revision_and_weakness() -> None:
+def test_study_plan_prefers_subject_quiz_over_optional_target_exam() -> None:
     plan = service._study_plan(
         {"todayAnswered": 4, "revisionDueToday": 0, "weakQuestions": 0},
         {
@@ -308,10 +331,59 @@ def test_study_plan_uses_target_exam_only_after_revision_and_weakness() -> None:
         },
     )
 
-    assert plan["nextAction"] == "target_exam_mock"
-    assert plan["examKey"] == "SSC"
+    assert plan["nextAction"] == "preferred_subject_quiz"
+    assert plan["subjectKey"] == "mathematics"
+    assert plan["examKey"] is None
+    assert plan["reasonCode"] == "saved_preferred_subject"
     assert plan["remainingQuestions"] == 16
     assert plan["broadcastQuizPersonalized"] is False
+
+
+def test_study_plan_uses_optional_target_exam_when_no_subject_is_saved() -> None:
+    plan = service._study_plan(
+        {"todayAnswered": 4, "revisionDueToday": 0, "weakQuestions": 0},
+        {"preferredSubjects": [], "targetExams": ["SSC"], "dailyQuestionTarget": 20},
+    )
+
+    assert plan["nextAction"] == "target_exam_mock"
+    assert plan["subjectKey"] is None
+    assert plan["examKey"] == "SSC"
+    assert plan["reasonCode"] == "saved_target_exam"
+
+
+def test_study_plan_uses_broad_maintenance_when_no_fallback_is_saved() -> None:
+    plan = service._study_plan(
+        {"todayAnswered": 4, "revisionDueToday": 0, "weakQuestions": 0},
+        {"preferredSubjects": [], "targetExams": [], "dailyQuestionTarget": 20},
+    )
+
+    assert plan["nextAction"] == "broad_maintenance"
+    assert plan["subjectKey"] is None
+    assert plan["examKey"] is None
+    assert plan["reasonCode"] == "broad_maintenance"
+
+
+@pytest.mark.parametrize(
+    ("dashboard_payload", "expected_action"),
+    [
+        ({"todayAnswered": 4, "revisionDueToday": 2, "weakQuestions": 3}, "continue_due_revision"),
+        ({"todayAnswered": 4, "revisionDueToday": 0, "weakQuestions": 3}, "practice_weak_topics"),
+        ({"todayAnswered": 20, "revisionDueToday": 0, "weakQuestions": 0}, "goal_complete"),
+    ],
+)
+def test_study_plan_keeps_due_weak_and_goal_priorities_above_saved_fallbacks(
+    dashboard_payload: dict, expected_action: str
+) -> None:
+    plan = service._study_plan(
+        dashboard_payload,
+        {
+            "preferredSubjects": ["mathematics"],
+            "targetExams": ["SSC"],
+            "dailyQuestionTarget": 20,
+        },
+    )
+
+    assert plan["nextAction"] == expected_action
 
 
 def test_study_plan_marks_completed_daily_target_without_over_assignment() -> None:
@@ -377,6 +449,85 @@ def test_private_learning_endpoints_project_authenticated_user(monkeypatch):
     )
     assert mastery.status_code == 200
     assert mastery.json()["total"] == 4
+
+
+def test_practice_bootstrap_uses_one_authenticated_projection(monkeypatch) -> None:
+    monkeypatch.setattr(service.users_repo, "upsert_user", lambda user: {"id": "user-1"})
+    calls = []
+    monkeypatch.setattr(
+        service.personal_learning_repo,
+        "practice_bootstrap",
+        lambda user_id, **kwargs: calls.append((user_id, kwargs))
+        or {
+            "queue": {"mode": "revision", "sourceType": "weak_topic", "rows": []},
+            "preferences": {
+                "revisionSoundEnabled": False,
+                "revisionVibrationEnabled": True,
+            },
+        },
+    )
+
+    payload = service.practice_bootstrap(
+        {"id": 123},
+        source_type="weak_topic",
+        subject_key="history",
+        limit=500,
+        offset=-3,
+    )
+
+    assert payload == {
+        "mode": "revision",
+        "sourceType": "weak_topic",
+        "rows": [],
+        "preferences": {
+            "revisionSoundEnabled": False,
+            "revisionVibrationEnabled": True,
+        },
+    }
+    assert calls == [
+        (
+            "user-1",
+            {
+                "source_type": "weak_topic",
+                "subject_key": "history",
+                "limit": 100,
+                "offset": 0,
+            },
+        )
+    ]
+    service.practice_bootstrap(
+        {"id": 123},
+        source_type="weak_topic",
+        subject_key=None,
+        limit=20,
+        offset=0,
+    )
+    assert calls[-1][1]["subject_key"] is None
+
+
+def test_practice_bootstrap_route_validates_and_projects(monkeypatch) -> None:
+    monkeypatch.setattr(api_module, "verify_init_data", lambda *args: {"id": 123})
+    captured = {}
+    monkeypatch.setattr(
+        api_module.personal_learning_service,
+        "practice_bootstrap",
+        lambda user, **kwargs: captured.update(kwargs)
+        or {"mode": "revision", "sourceType": "due", "rows": []},
+    )
+
+    response = client.get(
+        "/api/me/practice-bootstrap?source=due&limit=100",
+        headers={"X-Telegram-Init-Data": "signed"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["sourceType"] == "due"
+    assert captured == {
+        "source_type": "due",
+        "subject_key": None,
+        "limit": 100,
+        "offset": 0,
+    }
 
 
 def test_daily_rollup_service_validates_range_and_serializes_dates(monkeypatch):

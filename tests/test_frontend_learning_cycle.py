@@ -92,13 +92,15 @@ def test_quiz_result_survives_refresh_and_retake_gets_a_new_identity():
 
 
 def test_practice_ui_keeps_answers_hidden_until_authenticated_post():
-    assert '"/api/me/wrong-questions?limit=100"' in PRACTICE
-    assert '"/api/me/reviews/due?limit=100"' in PRACTICE
+    assert '"/api/me/practice-bootstrap?source="' in PRACTICE
+    assert '"/api/me/preferences"' not in PRACTICE
     assert '"/api/me/practice/"' in PRACTICE
-    post = PRACTICE.split('miniappFetch(api("/api/me/practice/"', 1)[1]
+    post = PRACTICE.split('request("/api/me/practice/"', 1)[1]
     assert "selectedIndex:selected" in post
     assert "result.correctIndex" in post
     assert "rows[index].correctIndex" not in PRACTICE
+    assert 'id="submit" type="button" disabled' in PRACTICE
+    assert 'button.setAttribute("aria-pressed"' in PRACTICE
 
 
 def test_personal_dashboard_uses_private_sql_analytics_without_settings_controls():
@@ -173,14 +175,33 @@ def test_pwa_cache_is_fail_closed_for_answer_material() -> None:
     assert 'path.startsWith("/api/")' in WORKER
     for sensitive in ("attempt", "submit", "leaderboard", "correctIndex", "explanation"):
         assert sensitive not in WORKER.split("const SHELL_URLS", 1)[1].split("];", 1)[0]
-    assert 'fetchWithTimeout(request, {cache: "no-store"})' in WORKER
+    sensitive_branch = WORKER.split("if (isSensitiveApi(url))", 1)[1].split("}", 1)[0]
+    assert "event.respondWith" not in sensitive_branch
+    assert "caches.open" not in sensitive_branch
+    assert "cache.put" not in sensitive_branch
+    assert "cache.match" not in sensitive_branch
+    assert "ANSWER_FREE_NETWORK_TIMEOUT_MS" not in WORKER
+    assert 'fetch(request, {cache: "no-store"})' in WORKER
 
 
 def test_authenticated_learning_pages_bound_stalled_network_requests() -> None:
-    assert "window.miniappFetch = fetchWithTimeout" in SHELL
+    assert "window.miniappFetch = fetchWithPolicy" in SHELL
+    assert "window.miniappRequest = miniappRequest" in SHELL
+    assert "window.miniappErrorMessage = miniappErrorMessage" in SHELL
+    assert "window.miniappErrorCategories = ERROR_CATEGORIES" in SHELL
+    assert "FIRST_GET_TIMEOUT_MS = 30000" in SHELL
+    assert "SECOND_GET_TIMEOUT_MS = 12000" in SHELL
     assert "window.AbortController" in SHELL
     for source in (PRACTICE, DASHBOARD, SETTINGS, MOCK):
-        assert "miniappFetch(api(" in source
+        uses_json_transport = (
+            "window.miniappRequest" in source
+            and (
+                "requestJson(api(" in source
+                or "request(api(" in source
+                or "window.miniappRequest(api(" in source
+            )
+        )
+        assert "miniappFetch(api(" in source or uses_json_transport
         assert 'src="miniapp-shell.js"></script>' in source
 
 
@@ -315,10 +336,22 @@ def test_revision_review_has_attempt_owned_question_reporting():
 def test_practice_errors_are_inline_retryable_and_empty_states_have_actions():
     assert "alert(" not in PRACTICE
     assert 'id="empty-message"' in PRACTICE
+    assert 'id="completed-message"' in PRACTICE
     assert 'id="retry"' in PRACTICE
-    assert "এতে নকল চেষ্টা তৈরি হবে না" in PRACTICE
-    assert 'el("submit").disabled=error.status===409' in PRACTICE
+    assert "নকল চেষ্টা তৈরি হবে না" in PRACTICE
+    assert 'category==="CONFLICT"' in PRACTICE
     assert 'el("empty-message").textContent=' in PRACTICE
+    assert 'id="count" aria-label="প্রশ্নের সংখ্যা" aria-live="polite">—' in PRACTICE
+    for category in (
+        "AUTH_REQUIRED",
+        "AUTH_EXPIRED",
+        "OFFLINE",
+        "NETWORK_FAILURE",
+        "REQUEST_TIMEOUT",
+        "RATE_LIMITED",
+        "SERVER_TEMPORARY",
+    ):
+        assert category in PRACTICE
 
 
 def test_mini_app_navigation_uses_live_routes_and_marks_revision_active():
@@ -330,8 +363,10 @@ def test_mini_app_navigation_uses_live_routes_and_marks_revision_active():
     assert 'id="empty-quiz-link" href="./"' in PRACTICE
     assert 'el("page-link").href=quizHomeUrl' in DASHBOARD
     assert 'link.href=quizHomeUrl' in DASHBOARD
-    assert 'el("nav-practice").classList.toggle("active",requestedSource!=="due")' in PRACTICE
-    assert 'el("nav-revision").classList.toggle("active",requestedSource==="due")' in PRACTICE
+    assert '["due","wrong","bookmark","weak_topic"].forEach' in PRACTICE
+    assert 'link.setAttribute("aria-current","page")' in PRACTICE
+    for source in ("due", "wrong", "bookmark", "weak_topic"):
+        assert f'id="source-{source}"' in PRACTICE
     for source in (INDEX, DASHBOARD, PRACTICE, SETTINGS):
         assert "tgWebAppData=" in source
         assert "telegramLaunchHash" in source

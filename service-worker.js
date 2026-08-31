@@ -1,8 +1,8 @@
 "use strict";
 
-const SHELL_CACHE = "quiz-miniapp-shell-v8.6.0-ui28";
-const ANSWER_FREE_CACHE = "quiz-answer-free-v8.6.0-ui28";
-const NETWORK_TIMEOUT_MS = 8000;
+const SHELL_CACHE = "quiz-miniapp-shell-v8.7.0-ui1";
+const ANSWER_FREE_CACHE = "quiz-answer-free-v8.7.0-ui1";
+const SHELL_NETWORK_TIMEOUT_MS = 30000;
 const BASE_URL = new URL("./", self.location.href);
 const BASE_PATH = BASE_URL.pathname;
 const SHELL_URLS = [
@@ -71,7 +71,10 @@ self.addEventListener("activate", (event) => {
 async function answerFreeNetworkFirst(request) {
   var cache = await caches.open(ANSWER_FREE_CACHE);
   try {
-    var response = await fetchWithTimeout(request, {cache: "no-store"});
+    // The page transport owns API cancellation. A second service-worker
+    // deadline can win the race during a cold start and surface a false
+    // network failure even though the upstream request is still healthy.
+    var response = await fetch(request, {cache: "no-store"});
     if (response.ok && response.headers.get("X-Answer-Free-Payload") === "1") {
       await cache.put(request, response.clone());
     }
@@ -87,9 +90,9 @@ async function answerFreeNetworkFirst(request) {
   }
 }
 
-function fetchWithTimeout(request, options) {
+function fetchWithTimeout(request, options, timeoutMs) {
   var controller = new AbortController();
-  var timer = setTimeout(() => controller.abort(), NETWORK_TIMEOUT_MS);
+  var timer = setTimeout(() => controller.abort(), timeoutMs);
   return fetch(request, {...options, signal: controller.signal})
     .finally(() => clearTimeout(timer));
 }
@@ -98,7 +101,7 @@ async function shellFromCacheOrNetwork(request) {
   var cache = await caches.open(SHELL_CACHE);
   var pathname = new URL(request.url).pathname;
   var cached = await cache.match(pathname);
-  return cached || fetchWithTimeout(request, {cache: "no-store"});
+  return cached || fetchWithTimeout(request, {cache: "no-store"}, SHELL_NETWORK_TIMEOUT_MS);
 }
 
 self.addEventListener("fetch", (event) => {
@@ -108,7 +111,9 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   if (isSensitiveApi(url)) {
-    event.respondWith(fetchWithTimeout(request, {cache: "no-store"}));
+    // Sensitive learner/auth/answer requests are deliberately not intercepted.
+    // The page transport owns their deadline, cancellation, classification,
+    // and retry policy, and no service-worker cache ever sees their response.
     return;
   }
   if (isAnswerFreeProjection(url)) {

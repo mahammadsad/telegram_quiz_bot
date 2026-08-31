@@ -7,6 +7,7 @@
   installTelegramNavigation();
   if(tg){try{tg.ready();tg.expand()}catch(e){}}
   var API_BASE=(window.QUIZ_API_BASE||document.querySelector('meta[name="quiz-api-base"]').content||"").replace(/\/$/,"");
+  var requestJson=window.miniappRequest;
   var BN=["০","১","২","৩","৪","৫","৬","৭","৮","৯"];
   var queryParams=new URLSearchParams(location.search);
   var quizId=queryParams.get("quiz")||"";
@@ -45,7 +46,7 @@
     });
   }
   function authHeaders(){return initData?{"X-Telegram-Init-Data":initData}:{}}
-  function check(response){return response.ok?response.json():response.json().catch(function(){return{}}).then(function(body){var error=new Error(body.detail||String(response.status));error.status=response.status;throw error})}
+  function errorMessage(error){return typeof window.miniappErrorMessage==="function"?window.miniappErrorMessage(error):"এখন তথ্য লোড করা যাচ্ছে না। আবার চেষ্টা করুন।"}
 
   buildOptions();syncSubject();
   el("board-load").addEventListener("click",function(){boardOffset=0;loadBoard()});
@@ -75,7 +76,8 @@
   function showPersonalState(message,retry){el("personal-state-copy").textContent=message;el("personal-state").classList.remove("hidden");el("personal-retry").classList.toggle("hidden",!retry)}
 
   function loadPersonal(){el("personal-retry").disabled=true;showPersonalState("আপনার ড্যাশবোর্ড লোড হচ্ছে...",false);
-    miniappFetch(api("/api/me/dashboard"),{headers:authHeaders()}).then(check).then(function(data){el("personal-state").classList.add("hidden");renderPersonal(data);showContent()}).catch(function(){showContent();showPersonalState("ড্যাশবোর্ডের তথ্য এখন লোড করা যাচ্ছে না। ইন্টারনেট দেখে আবার চেষ্টা করুন।",true)}).finally(function(){el("personal-retry").disabled=false})}
+    var slowNotice=window.setTimeout(function(){showPersonalState("সার্ভার প্রস্তুত হচ্ছে—আর কয়েক সেকেন্ড সময় লাগতে পারে।",false)},6000);
+    requestJson(api("/api/me/dashboard"),{headers:authHeaders()}).then(function(data){el("personal-state").classList.add("hidden");renderPersonal(data);showContent()}).catch(function(error){showContent();showPersonalState(errorMessage(error),true)}).finally(function(){window.clearTimeout(slowNotice);el("personal-retry").disabled=false})}
 
   function renderPersonal(data){
     ["identity-card","personal","personal-metrics","performance-filters","activity-card","subjects-card","weak-card","mastery-card","chapters-card","insights-card","recent-card","next-card"].forEach(function(id){el(id).classList.remove("hidden")});
@@ -174,7 +176,7 @@
     var path=quizId?"/api/quiz/"+encodeURIComponent(quizId)+"/leaderboard?limit=10&offset=0":"/api/leaderboards/"+type+"?limit="+boardLimit+"&offset="+boardOffset+(type==="subject_accuracy"?"&subject="+encodeURIComponent(subject):"");
     path+="&privacyRelease=20260801045552";
     el("board").classList.add("hidden");el("your-rank").classList.add("hidden");el("board-state").classList.remove("hidden");el("board-state").textContent="তালিকা লোড হচ্ছে...";
-    miniappFetch(api(path),{headers:authHeaders(),cache:"no-store"}).then(check).then(renderBoard).catch(function(){el("board-state").textContent="র‍্যাঙ্কিং এখন পাওয়া যাচ্ছে না। আবার চেষ্টা করুন।"}).finally(function(){boardLoading=false;el("board-load").disabled=false;el("board-load").textContent="দেখুন";updateBoardPager()});
+    requestJson(api(path),{headers:authHeaders(),cache:"no-store"}).then(renderBoard).catch(function(error){el("board-state").textContent=errorMessage(error)}).finally(function(){boardLoading=false;el("board-load").disabled=false;el("board-load").textContent="দেখুন";updateBoardPager()});
   }
 
   function renderBoard(data){

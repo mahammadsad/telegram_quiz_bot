@@ -90,6 +90,64 @@ jobs:
           --password "$SUPABASE_DB_PASSWORD"
           --include-all --yes
 
+      - name: Verify learner bootstrap and platform contracts
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import time
+          from urllib.error import HTTPError
+          from urllib.request import Request, urlopen
+
+          from database.contract import (
+              PLATFORM_CONTRACT_MIGRATION_VERSION,
+              PLATFORM_CONTRACT_VERSION,
+          )
+
+          base = os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1/rpc/"
+          headers = {
+              "apikey": os.environ["SUPABASE_SERVICE_KEY"],
+              "Authorization": f"Bearer {os.environ['SUPABASE_SERVICE_KEY']}",
+              "Content-Type": "application/json",
+          }
+
+          def rpc(name):
+              request = Request(base + name, data=b"{}", headers=headers, method="POST")
+              for attempt in range(6):
+                  try:
+                      with urlopen(request, timeout=15) as response:
+                          return json.loads(response.read().decode("utf-8"))
+                  except HTTPError as error:
+                      if error.code != 404 or attempt == 5:
+                          raise
+                      time.sleep(5)
+
+          latency = rpc("get_learner_bootstrap_latency_contract")
+          if latency != {
+              "ready": True,
+              "contractVersion": "1.0.0",
+              "lastActiveTouchIntervalSeconds": 900,
+              "dashboardRoundTripsAfterIdentity": 1,
+              "practiceRoundTripsAfterIdentity": 1,
+          }:
+              raise SystemExit("Learner bootstrap latency contract is not exact.")
+
+          platform = rpc("get_platform_contract_v1")
+          if not (
+              isinstance(platform, dict)
+              and platform.get("ready") is True
+              and platform.get("contract_version") == PLATFORM_CONTRACT_VERSION
+              and platform.get("required_migration_version")
+                  == PLATFORM_CONTRACT_MIGRATION_VERSION
+              and platform.get("migration_applied") is True
+              and platform.get("checks", {}).get("learnerBootstrapLatency") is True
+              and platform.get("missing_checks") == []
+          ):
+              raise SystemExit("Platform contract is not ready after migration.")
+          print("Learner bootstrap and platform contracts are ready.")
+          PY
+
       - name: Verify learner report status projection is callable
         shell: bash
         run: |

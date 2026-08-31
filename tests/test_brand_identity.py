@@ -43,8 +43,8 @@ def test_installable_pages_publish_the_parent_brand_theme_color() -> None:
 
 def test_brand_release_invalidates_the_previous_pwa_shell_cache() -> None:
     source = (ROOT / "service-worker.js").read_text(encoding="utf-8")
-    assert "quiz-miniapp-shell-v8.6.0-ui28" in source
-    assert "quiz-answer-free-v8.6.0-ui28" in source
+    assert "quiz-miniapp-shell-v8.7.0-ui1" in source
+    assert "quiz-answer-free-v8.7.0-ui1" in source
 
 
 def test_quiz_intro_keeps_parent_site_cta_before_start() -> None:

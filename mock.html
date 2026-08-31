@@ -2,7 +2,7 @@
 <html lang="bn">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="quiz-api-base" content="" />
 <meta name="theme-color" content="#b42318" />
 <title>সময়বদ্ধ মক পরীক্ষা</title>
@@ -18,7 +18,7 @@
 </head>
 <body>
 <main id="main-content" class="app" tabindex="-1">
-  <header class="brand"><div><h1>সময়বদ্ধ মক পরীক্ষা</h1><p id="test-subtitle">বিভাগ, সময় ও নেগেটিভ মার্কিংসহ</p></div><div id="timer" class="timer hidden" role="timer" aria-live="off">--:--</div></header>
+  <header class="brand"><div><span class="wordmark">CITIZEN AFFAIRS বাংলা</span><h1>সময়বদ্ধ মক পরীক্ষা</h1><p id="test-subtitle">বিভাগ, সময় ও নেগেটিভ মার্কিংসহ</p></div><div id="timer" class="timer hidden" role="timer" aria-live="off">--:--</div></header>
 
   <section id="screen-loading" class="card state" aria-live="polite"><div class="loader" aria-hidden="true"></div><p id="loading-copy">পরীক্ষা লোড হচ্ছে...</p></section>
 
@@ -26,7 +26,7 @@
 
   <section id="screen-empty" class="card state hidden" aria-live="polite"><h2>পরীক্ষা পাওয়া যায়নি</h2><p id="empty-copy">একটি বৈধ মক পরীক্ষার লিংক খুলুন।</p><div class="actions"><a class="btn primary" href="./">দৈনিক কুইজ খুলুন</a><a class="btn" href="dashboard.html">ড্যাশবোর্ড</a></div></section>
 
-  <section id="screen-error" class="card state hidden" aria-live="assertive"><h2>এখন খোলা যাচ্ছে না</h2><p id="error-copy" class="error-copy">ইন্টারনেট দেখে আবার চেষ্টা করুন।</p><div class="actions"><button id="btn-retry" class="btn primary" type="button">আবার চেষ্টা করুন</button><a class="btn" href="./">দৈনিক কুইজ</a></div></section>
+  <section id="screen-error" class="card state hidden" aria-live="assertive"><h2>এখন খোলা যাচ্ছে না</h2><p id="error-copy" class="error-copy">একটু পরে আবার চেষ্টা করুন।</p><div class="actions"><button id="btn-retry" class="btn primary" type="button">আবার চেষ্টা করুন</button><a class="btn" href="./">দৈনিক কুইজ</a></div></section>
 
   <section id="screen-intro" class="card hidden">
     <h2 id="intro-title">মক পরীক্ষা</h2><p id="intro-note">সাবমিটের আগে উত্তর বা ব্যাখ্যা প্রকাশ করা হয় না।</p>
@@ -59,7 +59,7 @@
 
 <div id="submit-modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="submit-title"><div class="modal-card"><h2 id="submit-title">পরীক্ষা সাবমিট করবেন?</h2><p id="submit-copy">সাবমিটের পর উত্তর আর বদলানো যাবে না।</p><div class="actions"><button id="btn-submit-back" class="btn" type="button">ফিরে যান</button><button id="btn-submit-confirm" class="btn danger" type="button">সাবমিট নিশ্চিত করুন</button></div></div></div>
 
-<nav class="bottom" aria-label="প্রধান নেভিগেশন"><a href="./">দৈনিক কুইজ</a><a class="active" href="mock.html" aria-current="page">মক পরীক্ষা</a><a href="practice.html?source=due">পুনরাবৃত্তি</a><a href="dashboard.html">পরিসংখ্যান</a></nav>
+<nav class="bottom" aria-label="প্রধান নেভিগেশন"><a href="./">কুইজ</a><a href="practice.html?source=due">অনুশীলন</a><a href="dashboard.html">অগ্রগতি</a><a href="settings.html">সেটিংস</a></nav>
 
 <script src="mock.js"></script>
 </body>

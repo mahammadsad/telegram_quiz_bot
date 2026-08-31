@@ -2,7 +2,7 @@
 <html lang="bn">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <meta name="quiz-api-base" content="" />
 <meta name="theme-color" content="#b42318" />
 <title>প্রস্তুতি ড্যাশবোর্ড</title>
@@ -17,8 +17,8 @@
 <link rel="stylesheet" href="dashboard.css" />
 </head>
 <body>
-<main class="app">
-  <header class="top"><div class="brand"><small id="page-kicker">আপনার শেখার কেন্দ্র</small><h1 id="page-title">প্রস্তুতি ড্যাশবোর্ড</h1></div><a class="quiz-link" id="page-link" href="./">কুইজ খুলুন</a></header>
+<main id="main-content" class="app" tabindex="-1">
+  <header class="top"><div class="brand"><span class="wordmark">CITIZEN AFFAIRS বাংলা</span><h1 id="page-title">প্রস্তুতি ড্যাশবোর্ড</h1><small id="page-kicker">আপনার শেখার কেন্দ্র</small></div><a class="quiz-link" id="page-link" href="./">কুইজ খুলুন</a></header>
   <div id="loading" class="card status"><div class="loader"></div>ড্যাশবোর্ড লোড হচ্ছে...</div>
   <div id="content" class="grid hidden">
     <section id="personal-state" class="card status hidden"><p id="personal-state-copy"></p><button class="btn primary hidden" id="personal-retry" type="button">আবার চেষ্টা করুন</button></section>
@@ -42,9 +42,8 @@
 </main>
 <nav class="bottom" aria-label="প্রধান নেভিগেশন">
   <a href="./"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="m8 9 1.5 1.5L13 7"/><path d="M8 16h8"/></svg><span>কুইজ</span></a>
-  <a href="practice.html?source=wrong"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14 7 3 3"/></svg><span>অনুশীলন</span></a>
-  <a href="practice.html?source=due"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M6.1 9A7 7 0 0 1 18 6l2 6"/><path d="M17.9 15A7 7 0 0 1 6 18l-2-6"/></svg><span>পুনরাবৃত্তি</span></a>
-  <a class="active" href="dashboard.html"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 20V10"/><path d="M12 20V4"/><path d="M19 20v-7"/><path d="M3 20h18"/></svg><span>পরিসংখ্যান</span></a>
+  <a href="practice.html?source=due"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14 7 3 3"/></svg><span>অনুশীলন</span></a>
+  <a class="active" href="dashboard.html" aria-current="page"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 20V10"/><path d="M12 20V4"/><path d="M19 20v-7"/><path d="M3 20h18"/></svg><span>অগ্রগতি</span></a>
   <a href="settings.html"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg><span>সেটিংস</span></a>
 </nav>
 <script src="dashboard.js"></script>

@@ -132,5 +132,5 @@ test("personal dashboard quiz link returns to the live quiz instead of a raw 404
     .poll(() => page.evaluate(() => location.pathname + location.search))
     .toBe(`/?quiz=${QUIZ_ID}`);
   await expect(page.locator("#screen-intro")).toBeVisible();
-  await expect(page.locator("#quiz-id-pill")).toContainText(QUIZ_ID);
+  await expect(page.locator("#quiz-id-pill")).toHaveAttribute("data-quiz-id", QUIZ_ID);
 });
