@@ -80,12 +80,14 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert "shellNetworkFirst" in source
     assert "client.navigate(client.url)" in source
     assert "tgWebAppData=" in source
+    assert "replacesPreviousShell" in source
+    assert "await client.navigate" not in source
     assert "cached ||" not in source
     assert "response.status >= 500" in source
     assert 'fetch(request, {cache: "no-store"})' in source
 
     shell = CLIENT.get("/miniapp-shell.js").text
-    assert 'workerUrl.searchParams.set("shell", "8.7.1-ui2")' in shell
+    assert 'workerUrl.searchParams.set("shell", "8.7.2-ui3")' in shell
     assert 'updateViaCache: "none"' in shell
     assert "registration.update()" in shell
 
