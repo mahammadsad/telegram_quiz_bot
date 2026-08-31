@@ -30,6 +30,27 @@ def list_recent_usage(subject_key: str, *, since: datetime) -> list[Row]:
     return as_rows(result.data, "recent content usage")
 
 
+def list_recent_replenishment_events(
+    *,
+    since: datetime,
+    limit: int = 1000,
+) -> list[Row]:
+    """Return bounded answer-free replenishment diagnostics for operators."""
+    bounded_limit = max(1, min(limit, 5000))
+    result = (
+        get_client()
+        .table("content_replenishment_job_events")
+        .select(
+            "event_type,accepted_count,rejected_count,rejection_codes,error_code,created_at"
+        )
+        .gte("created_at", since.isoformat())
+        .order("created_at", desc=True)
+        .limit(bounded_limit)
+        .execute()
+    )
+    return as_rows(result.data, "recent content replenishment events")
+
+
 def existing_candidate_identities(
     *,
     variant_fingerprints: list[str],

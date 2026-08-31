@@ -22,11 +22,14 @@ from services.question_inventory import (
     exposure_quality_report,
     inventory_report,
     replenishment_plan,
+    replenishment_quality_report,
 )
 from storage import content_inventory_repo
 
 _T = TypeVar("_T")
 _READ_ATTEMPTS = 3
+_REPLENISHMENT_EVENT_DAYS = 7
+_REPLENISHMENT_EVENT_LIMIT = 1000
 
 
 def _read_with_retry(operation: Callable[[], _T]) -> _T:
@@ -86,7 +89,21 @@ def main() -> int:
             "replenishment": replenishment_plan(int(capacity["verified"])),
             "exposure_quality_30d": exposure_quality_report(recent_usage),
         }
-    print(json.dumps({"generated_at": now.isoformat(), "subjects": report}, sort_keys=True))
+    replenishment_events = _read_with_retry(
+        partial(
+            content_inventory_repo.list_recent_replenishment_events,
+            since=now - timedelta(days=_REPLENISHMENT_EVENT_DAYS),
+            limit=_REPLENISHMENT_EVENT_LIMIT,
+        )
+    )
+    print(json.dumps({
+        "generated_at": now.isoformat(),
+        "subjects": report,
+        "replenishment_quality_7d": replenishment_quality_report(
+            replenishment_events,
+            sample_limit=_REPLENISHMENT_EVENT_LIMIT,
+        ),
+    }, sort_keys=True))
     return 0
 
 
