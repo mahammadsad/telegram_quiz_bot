@@ -1,6 +1,6 @@
 const { test, expect } = require("@playwright/test");
 
-const ACTIVE_SHELL_CACHE = "quiz-miniapp-shell-v8.7.0-ui1";
+const ACTIVE_SHELL_CACHE = "quiz-miniapp-shell-v8.7.1-ui2";
 
 async function openHarness(page) {
   await page.goto("/tests/browser-service-worker/harness.html");
@@ -117,7 +117,7 @@ test("answer-free projections enter the fallback cache only with the opt-in resp
       const url = `/api/quiz/sw-${probe}?probe=${probe}&answerFree=${answerFree ? "1" : "0"}&failAfter=1`;
       const firstResponse = await fetch(url, { cache: "no-store" });
       const first = await firstResponse.json();
-      const cache = await caches.open("quiz-answer-free-v8.7.0-ui1");
+      const cache = await caches.open("quiz-answer-free-v8.7.1-ui2");
       const cachedAfterSuccess = Boolean(await cache.match(url));
       const secondResponse = await fetch(url, { cache: "no-store" });
       const second = await secondResponse.json();
@@ -145,6 +145,33 @@ test("answer-free projections enter the fallback cache only with the opt-in resp
   expect(result.withHeader.firstStatus).toBe(200);
   expect(result.withHeader.secondStatus).toBe(200);
   expect(result.withHeader.second).toEqual(result.withHeader.first);
+});
+
+test("shell requests refresh stale cached assets from the network", async ({ page }) => {
+  await openHarness(page);
+  await registerAndControl(page);
+
+  const result = await page.evaluate(async () => {
+    const cache = await caches.open("quiz-miniapp-shell-v8.7.1-ui2");
+    await cache.put(
+      "/index.js",
+      new Response("stale-cache-only-script", {
+        status: 200,
+        headers: { "Content-Type": "text/javascript" },
+      }),
+    );
+    const response = await fetch("/index.js", { cache: "no-store" });
+    const body = await response.text();
+    const refreshed = await cache.match("/index.js");
+    return {
+      body,
+      cachedBody: refreshed ? await refreshed.text() : "",
+    };
+  });
+
+  expect(result.body).not.toContain("stale-cache-only-script");
+  expect(result.body).toContain("screen-loading");
+  expect(result.cachedBody).toBe(result.body);
 });
 
 test("activation removes old service-worker cache versions", async ({ page }) => {

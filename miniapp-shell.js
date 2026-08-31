@@ -117,8 +117,16 @@
   function registerWorker() {
     if (!("serviceWorker" in navigator) || location.protocol !== "https:") return;
     var workerUrl = new URL("service-worker.js", document.baseURI);
+    workerUrl.searchParams.set("shell", "8.7.1-ui2");
     var workerScope = new URL("./", workerUrl).pathname;
-    navigator.serviceWorker.register(workerUrl.href, {scope: workerScope}).catch(function () {
+    navigator.serviceWorker.register(workerUrl.href, {
+      scope: workerScope,
+      updateViaCache: "none",
+    }).then(function (registration) {
+      // Do not wait for the browser's periodic update interval. Telegram
+      // WebViews may otherwise keep an old cache-first worker for many hours.
+      return registration.update();
+    }).catch(function () {
       // The Mini App remains fully usable online if registration is unavailable.
     });
   }
@@ -451,7 +459,7 @@
   window.__miniAppContract = Object.freeze({
     locale: "bn",
     supportedLocales: supportedLocales,
-    shellVersion: "8.7.0-ui1",
+    shellVersion: "8.7.1-ui2",
     basePath: new URL("./", document.baseURI).pathname,
     errorCategories: ERROR_CATEGORIES,
   });

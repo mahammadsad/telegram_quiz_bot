@@ -77,8 +77,17 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert "NETWORK_TIMEOUT_MS = 8000" not in source
     assert "new AbortController()" in source
     assert "cache.match(pathname)" in source
+    assert "shellNetworkFirst" in source
+    assert "client.navigate(client.url)" in source
+    assert "tgWebAppData=" in source
+    assert "cached ||" not in source
     assert "response.status >= 500" in source
     assert 'fetch(request, {cache: "no-store"})' in source
+
+    shell = CLIENT.get("/miniapp-shell.js").text
+    assert 'workerUrl.searchParams.set("shell", "8.7.1-ui2")' in shell
+    assert 'updateViaCache: "none"' in shell
+    assert "registration.update()" in shell
 
 
 def test_csp_blocks_inline_scripts_and_styles_after_frontend_extraction() -> None:
