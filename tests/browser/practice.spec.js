@@ -145,6 +145,39 @@ test("practice loads its queue and presentation preferences from one bootstrap",
   expect(learnerReads).not.toContain("/api/me/preferences");
 });
 
+test("practice marks English assessment content for assistive technology", async ({ page }) => {
+  await installTelegramMock(page);
+  await installApiMocks(page, { practiceSource: "due" });
+  await page.route(/\/api\/me\/practice-bootstrap(?:\?.*)?$/, (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        mode: "revision",
+        sourceType: "due",
+        rows: [{
+          questionId: "44444444-4444-4444-8444-000000000001",
+          q: "Choose the word that best completes the sentence.",
+          o: ["Clumsy", "Broken", "Soft", "Hasty"],
+          language: "en",
+          subjectKey: "english",
+          chapter: "Vocabulary",
+          markedForReview: false,
+        }],
+        preferences: {
+          revisionSoundEnabled: false,
+          revisionVibrationEnabled: false,
+        },
+      }),
+    }),
+  );
+
+  await page.goto("/practice.html?source=due");
+  await expect(page.locator("#question")).toHaveAttribute("lang", "en");
+  await expect(page.locator(".option")).toHaveCount(4);
+  await expect(page.locator(".option span:last-child").first()).toHaveAttribute("lang", "en");
+});
+
 test("practice load failure keeps the count unknown and shows an auth recovery", async ({
   page,
 }) => {

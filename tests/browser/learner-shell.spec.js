@@ -13,6 +13,31 @@ const SURFACES = [
   { path: "/syllabus.html", active: null, minHeight: 456 },
 ];
 
+const PRIMARY_LEARNER_SURFACES = [
+  "/",
+  "/practice.html?source=due",
+  "/dashboard.html",
+  "/settings.html",
+  "/mock.html",
+  "/syllabus.html",
+];
+
+test("primary learner surfaces share safe-area metadata and Citizen Affairs identity", async ({
+  page,
+}) => {
+  await installTelegramMock(page);
+  await installApiMocks(page);
+
+  for (const path of PRIMARY_LEARNER_SURFACES) {
+    await page.goto(path);
+    await expect(page.locator('meta[name="viewport"]'), path).toHaveAttribute(
+      "content",
+      /viewport-fit=cover/,
+    );
+    await expect(page.locator(".wordmark"), path).toHaveText("CITIZEN AFFAIRS বাংলা");
+  }
+});
+
 test("learner shells preserve branding, safe areas, and fixed-nav clearance", async ({
   page,
 }) => {

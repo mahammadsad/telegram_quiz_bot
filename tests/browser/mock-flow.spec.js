@@ -21,12 +21,16 @@ async function expectWcag22Aa(page) {
 }
 
 function question(id, order, text) {
+  const english = id === 1;
   return {
     questionId: `44444444-4444-4444-8444-${String(id).padStart(12, "0")}`,
     order,
     sectionOrder: order,
     question: text,
-    options: ["প্রথম বিকল্প", "দ্বিতীয় বিকল্প", "তৃতীয় বিকল্প", "চতুর্থ বিকল্প"],
+    options: english
+      ? ["Four", "Six", "Seven", "Eight"]
+      : ["প্রথম বিকল্প", "দ্বিতীয় বিকল্প", "তৃতীয় বিকল্প", "চতুর্থ বিকল্প"],
+    language: english ? "en" : "bn",
     subjectKey: id < 3 ? "mathematics" : "reasoning",
     topic: id < 3 ? "সংখ্যা" : "যুক্তি",
     marksForCorrect: 1,
@@ -53,7 +57,10 @@ function testInstance() {
         questionCount: 2,
         timeLimitSeconds: 900,
         allowMarkForReview: true,
-        questions: [question(1, 1, "গণিতের প্রথম প্রশ্ন"), question(2, 2, "গণিতের দ্বিতীয় প্রশ্ন")],
+        questions: [
+          question(1, 1, "Which number is prime?"),
+          question(2, 2, "গণিতের দ্বিতীয় প্রশ্ন"),
+        ],
       },
       {
         sectionInstanceId: SECTION_TWO,
@@ -245,6 +252,8 @@ test("timed multi-section mock persists, resumes, advances, and renders analysis
   await expect(page.locator("#screen-test")).toBeVisible();
   await expect(page.locator("#section-title")).toHaveText("গণিত");
   await expect(page.locator("#timer")).not.toHaveText("--:--");
+  await expect(page.locator("#question-text")).toHaveAttribute("lang", "en");
+  await expect(page.locator(".option span:last-child").first()).toHaveAttribute("lang", "en");
 
   await page.locator("#btn-bookmark").click();
   await expect(page.locator("#btn-bookmark")).toContainText("অনুশীলনে যোগ হয়েছে");

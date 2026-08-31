@@ -23,6 +23,7 @@
   button:focus-visible,a:focus-visible{outline:3px solid color-mix(in srgb,var(--link) 45%,transparent);outline-offset:3px}
   .app{width:min(100%,760px);margin:auto;padding:18px 14px calc(116px + var(--practice-safe-bottom))}
   .top{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+  .wordmark{display:block;color:var(--button);font-size:11px;font-weight:800;letter-spacing:.08em;line-height:1.25}
   .top h1{margin:0;font-size:24px}.top p{margin:2px 0 0;color:var(--hint);font-size:13px}
   .chip{border:1px solid var(--line);border-radius:999px;padding:8px 11px;color:var(--hint);font-weight:700}
   .practice-sources{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin:0 0 12px;padding:4px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
