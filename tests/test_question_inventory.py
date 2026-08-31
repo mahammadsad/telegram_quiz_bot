@@ -120,6 +120,58 @@ def test_assembler_enforces_requested_difficulty_mix() -> None:
     )
 
 
+def test_assembler_selects_a_balanced_pack_from_an_unbalanced_oldest_pool() -> None:
+    difficulty_mix = ["easy", "medium", "hard", "easy", "medium", "medium", "easy", "medium", "medium", "hard"]
+    rows = [
+        candidate(
+            index,
+            correct_option="A",
+            difficulty=difficulty_mix[index],
+            eligible_at=(NOW - timedelta(days=100 - index)).isoformat(),
+        )
+        for index in range(10)
+    ]
+    balanced_tail = (
+        ("B", "easy"), ("B", "medium"), ("B", "medium"),
+        ("C", "easy"), ("C", "medium"),
+        ("D", "medium"), ("D", "hard"),
+    )
+    rows.extend(
+        candidate(
+            10 + index,
+            correct_option=position,
+            difficulty=difficulty,
+            eligible_at=(NOW - timedelta(days=20 - index)).isoformat(),
+        )
+        for index, (position, difficulty) in enumerate(balanced_tail)
+    )
+
+    result = assemble_verified_quiz(
+        rows,
+        [],
+        now=NOW,
+        difficulty_targets={"easy": 3, "medium": 5, "hard": 2},
+        balanced_answer_positions=True,
+    )
+
+    assert Counter(row["difficulty"] for row in result.questions) == Counter(
+        {"easy": 3, "medium": 5, "hard": 2}
+    )
+    assert sorted(Counter(row["correct_option"] for row in result.questions).values()) == [2, 2, 3, 3]
+
+
+def test_assembler_fails_closed_when_answer_positions_cannot_be_balanced() -> None:
+    rows = [candidate(index, correct_option="A") for index in range(12)]
+
+    with pytest.raises(InventoryExhausted, match="balance correct answers"):
+        assemble_verified_quiz(
+            rows,
+            [],
+            now=NOW,
+            balanced_answer_positions=True,
+        )
+
+
 def test_assembler_fails_closed_when_difficulty_inventory_is_short() -> None:
     rows = [
         candidate(index, difficulty="easy" if index < 5 else "medium")

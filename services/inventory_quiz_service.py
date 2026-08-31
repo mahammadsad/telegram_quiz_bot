@@ -66,6 +66,7 @@ def load_verified_inventory_quiz(
             history,
             now=current,
             difficulty_targets=QUIZ_DIFFICULTY_DISTRIBUTION,
+            balanced_answer_positions=True,
         )
         clean = _validate_assembled(assembled, subject_key, chapter)
     except (InventoryExhausted, QuizValidationError, RuntimeError, ValueError) as exc:
