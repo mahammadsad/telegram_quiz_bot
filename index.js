@@ -20,6 +20,7 @@
   }
 
   var API_BASE = (window.QUIZ_API_BASE || document.querySelector('meta[name="quiz-api-base"]').content || "").replace(/\/$/, "");
+  var requestJson = window.miniappRequest;
   var BN = ["০","১","২","৩","৪","৫","৬","৭","৮","৯"];
   var LETTERS = ["A","B","C","D"];
 
@@ -79,6 +80,18 @@
   byId("btn-submit-confirm").addEventListener("click", function(){ hideSubmitConfirmation(); finishQuiz(true); });
   byId("btn-retry").addEventListener("click", function(){ retryAction(); });
   byId("btn-home-retry").addEventListener("click", loadHome);
+  byId("question-map-toggle").addEventListener("click", openQuestionMap);
+  byId("question-map-close").addEventListener("click", function(){ closeQuestionMap(true); });
+  byId("question-map-sheet").addEventListener("cancel", function(event){
+    event.preventDefault();
+    closeQuestionMap(true);
+  });
+  byId("question-map-sheet").addEventListener("click", function(event){
+    if (event.target === byId("question-map-sheet")) closeQuestionMap(true);
+  });
+  byId("question-map-sheet").addEventListener("close", function(){
+    byId("question-map-toggle").setAttribute("aria-expanded", "false");
+  });
 
   if (isTelegram) {
     tg.MainButton.onClick(function(){
@@ -88,14 +101,16 @@
       else if (screen === "result") openDashboard();
     });
     tg.BackButton.onClick(function(){
-      if (screen === "quiz") goPrev();
+      if (isSubmitModalOpen()) hideSubmitConfirmation();
+      else if (isQuestionMapOpen()) closeQuestionMap(true);
+      else if (screen === "quiz") goPrev();
       else if (screen === "resources") show("intro");
       else if (screen === "result") show("intro");
     });
   }
 
   document.addEventListener("keydown", function(event){
-    if (screen !== "quiz") return;
+    if (screen !== "quiz" || isQuestionMapOpen() || isSubmitModalOpen()) return;
     if (["1","2","3","4"].indexOf(event.key) >= 0) {
       answers[current] = Number(event.key) - 1;
       saveDraft();
@@ -107,7 +122,8 @@
   if (!quizId) {
     loadHome();
   } else {
-    byId("quiz-id-pill").textContent = "#" + quizId;
+    byId("quiz-id-pill").textContent = "কুইজ";
+    byId("quiz-id-pill").dataset.quizId = quizId;
     byId("nav-quiz").href = quizHomeUrl();
     loadQuizPreferences();
     loadQuiz();
@@ -158,20 +174,11 @@
     });
   }
   function quizHomeUrl(){ return telegramUrl("./?quiz=" + encodeURIComponent(quizId)); }
-  function jsonOrThrow(resp, label){
-    if (resp.ok) return resp.json();
-    return resp.json().catch(function(){ return {}; }).then(function(body){
-      var err = new Error(body.detail || (label + " returned " + resp.status));
-      err.status = resp.status;
-      throw err;
-    });
-  }
-
-  function fetchWithTimeout(resource, options, timeoutMs){
-    var controller = new AbortController();
-    var requestOptions = Object.assign({}, options || {}, {signal:controller.signal});
-    var timer = window.setTimeout(function(){ controller.abort(); }, timeoutMs || 8000);
-    return window.fetch(resource, requestOptions).finally(function(){ window.clearTimeout(timer); });
+  function safeErrorMessage(error, fallback){
+    if (typeof window.miniappErrorMessage === "function") {
+      return window.miniappErrorMessage(error);
+    }
+    return fallback;
   }
 
   function getQuizId(){
@@ -222,8 +229,7 @@
 
   function loadQuizPreferences(){
     if (!isTelegram) return;
-    fetchWithTimeout(api("/api/me/preferences"), {headers:{"X-Telegram-Init-Data":tg.initData}})
-      .then(function(resp){ return jsonOrThrow(resp, "Preferences API"); })
+    requestJson(api("/api/me/preferences"), {headers:{"X-Telegram-Init-Data":tg.initData}})
       .then(function(data){
         quizMode = data.quizMode === "practice" ? "practice" : "timed";
         if (quiz && !requestedAttemptId && screen === "intro") renderIntro();
@@ -275,25 +281,38 @@
 
   function show(name){
     screen = name;
+    document.body.dataset.screen = name;
+    if (name !== "quiz" && isQuestionMapOpen()) closeQuestionMap(false);
     Object.keys(screens).forEach(function(key){ screens[key].classList.toggle("hidden", key !== name); });
     syncTelegramButtons();
   }
 
+  function telegramActionColor(){
+    var value = tg && tg.themeParams ? String(tg.themeParams.button_color || "") : "";
+    return /^#[0-9a-f]{6}$/i.test(value) ? value : "#b42318";
+  }
+
   function syncTelegramButtons(){
     if (!isTelegram) return;
+    if (isQuestionMapOpen() || isSubmitModalOpen()) {
+      tg.MainButton.hide();
+      tg.BackButton.show();
+      return;
+    }
+    var actionColor = telegramActionColor();
     if (screen === "intro") {
       tg.BackButton.hide();
-      tg.MainButton.setParams({text:legacyLocal ? "লাইভ কুইজ আবার চেষ্টা করুন" : "মক টেস্ট শুরু করুন", is_visible:true, color:"#0f766e", text_color:"#ffffff"});
+      tg.MainButton.setParams({text:legacyLocal ? "লাইভ কুইজ আবার চেষ্টা করুন" : "মক টেস্ট শুরু করুন", is_visible:true, color:actionColor, text_color:"#ffffff"});
     } else if (screen === "resources") {
       tg.BackButton.show();
-      tg.MainButton.setParams({text:"মক টেস্ট শুরু করুন", is_visible:true, color:"#0f766e", text_color:"#ffffff"});
+      tg.MainButton.setParams({text:"মক টেস্ট শুরু করুন", is_visible:true, color:actionColor, text_color:"#ffffff"});
     } else if (screen === "quiz") {
       if (current > 0) tg.BackButton.show(); else tg.BackButton.hide();
       var last = quiz && current === quiz.qs.length - 1;
-      tg.MainButton.setParams({text:last ? (readOnlyMode ? "শেষ করুন" : "সাবমিট করুন") : "পরবর্তী", is_visible:true, color:"#0f766e", text_color:"#ffffff"});
+      tg.MainButton.setParams({text:last ? (readOnlyMode ? "শেষ করুন" : "সাবমিট করুন") : "পরবর্তী", is_visible:true, color:actionColor, text_color:"#ffffff"});
     } else if (screen === "result") {
       tg.BackButton.show();
-      tg.MainButton.setParams({text:"ড্যাশবোর্ড দেখুন", is_visible:true, color:"#2563eb", text_color:"#ffffff"});
+      tg.MainButton.hide();
     } else {
       tg.BackButton.hide();
       tg.MainButton.hide();
@@ -308,8 +327,7 @@
     byId("loading-message").textContent = "সাম্প্রতিক কুইজ লোড হচ্ছে...";
     byId("home-retry-wrap").classList.add("hidden");
     show("loading");
-    fetchWithTimeout(api("/api/quizzes/recent?limit=26"))
-      .then(function(resp){ return jsonOrThrow(resp, "Recent quizzes API"); })
+    requestJson(api("/api/quizzes/recent?limit=26"))
       .then(function(data){ renderHome(Array.isArray(data.items) ? data.items : []); })
       .catch(function(){
         renderHome([]);
@@ -365,8 +383,12 @@
     byId("btn-retry").textContent = "আবার চেষ্টা করুন";
     show("loading");
     byId("loading-message").textContent = "কুইজ তৈরি/লোড হচ্ছে...";
-    fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId)))
-      .then(function(resp){ return jsonOrThrow(resp, "Quiz API"); })
+    var slowNotice = window.setTimeout(function(){
+      if (screen === "loading") {
+        byId("loading-message").textContent = "সার্ভার প্রস্তুত হচ্ছে—আর কয়েক সেকেন্ড সময় লাগতে পারে।";
+      }
+    }, 6000);
+    requestJson(api("/api/quiz/" + encodeURIComponent(quizId)))
       .then(function(data){
         if (!data.qs || data.qs.length !== 10) throw new Error("Quiz must contain exactly 10 questions");
         quiz = data;
@@ -376,13 +398,13 @@
         else renderIntro();
       })
       .catch(function(err){
-        console.error(err);
         if (err.status === 404) {
           loadLegacyQuiz();
           return;
         }
-        showError(err.message || "কুইজ লোড করা যায়নি। একটু পরে আবার চেষ্টা করুন।");
-      });
+        showError(safeErrorMessage(err, "কুইজ লোড করা যায়নি। একটু পরে আবার চেষ্টা করুন।"));
+      })
+      .finally(function(){ window.clearTimeout(slowNotice); });
   }
 
   function loadAttemptResult(value){
@@ -390,13 +412,11 @@
     byId("btn-retry").textContent = "ফল আবার লোড করুন";
     show("loading");
     byId("loading-message").textContent = "আপনার ফলাফল লোড হচ্ছে...";
-    fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId) + "/attempt/" + encodeURIComponent(value)), {
+    requestJson(api("/api/quiz/" + encodeURIComponent(quizId) + "/attempt/" + encodeURIComponent(value)), {
       headers:{"X-Telegram-Init-Data":isTelegram ? tg.initData : ""}
     })
-      .then(function(resp){ return jsonOrThrow(resp, "Attempt result API"); })
       .then(function(result){ attemptId = value; discardDraft(); renderResult(result); })
       .catch(function(err){
-        console.error(err);
         if (err.status === 401) {
           showError("ফল দেখতে Telegram-এর কুইজ বাটন থেকে Mini App খুলুন।");
           return;
@@ -410,11 +430,7 @@
   }
 
   function loadLegacyQuiz(){
-    fetchWithTimeout("quizzes/" + encodeURIComponent(quizId) + ".json?v=" + Date.now(), {cache:"no-store"})
-      .then(function(resp){
-        if (!resp.ok) throw new Error("Legacy quiz returned " + resp.status);
-        return resp.json();
-      })
+    requestJson("quizzes/" + encodeURIComponent(quizId) + ".json?v=" + Date.now(), {cache:"no-store"})
       .then(function(data){
         if (!data.qs || data.qs.length !== 10) throw new Error("Quiz must contain exactly 10 questions");
         quiz = data;
@@ -422,8 +438,7 @@
         answers = quiz.qs.map(function(){ return null; });
         renderIntro();
       })
-      .catch(function(err){
-        console.error(err);
+      .catch(function(){
         showError(buildMissingQuizMessage());
       });
   }
@@ -435,6 +450,12 @@
   function renderIntro(){
     var meta = quiz.meta || {};
     var marking = markingScheme();
+    var learnerLabel = /^\d{4}-\d{2}-\d{2}$/.test(meta.date || "")
+      ? formatHomeDate(meta.date)
+      : (meta.subject || "দৈনিক কুইজ");
+    byId("quiz-id-pill").textContent = learnerLabel;
+    byId("quiz-id-pill").dataset.quizId = quizId;
+    byId("quiz-id-pill").setAttribute("aria-label", [meta.subject, learnerLabel].filter(Boolean).join(" · "));
     byId("intro-title").textContent = meta.chapter || "আজকের মক টেস্ট";
     byId("intro-subject").textContent = meta.subject || "মক টেস্ট";
     byId("intro-count").textContent = bn(quiz.qs.length) + "টি";
@@ -454,11 +475,9 @@
     show("resources");
     byId("resource-status").textContent = "যাচাই করা রিসোর্স লোড হচ্ছে...";
     byId("resource-list").textContent = "";
-    fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId) + "/resources"))
-      .then(function(resp){ return jsonOrThrow(resp, "Learning resources API"); })
+    requestJson(api("/api/quiz/" + encodeURIComponent(quizId) + "/resources"))
       .then(renderResources)
-      .catch(function(err){
-        console.error(err);
+      .catch(function(){
         byId("resource-status").textContent = "রিসোর্স এখন লোড করা যায়নি। কোনো লাইভ সার্চ করা হয়নি; পরে আবার চেষ্টা করুন।";
         renderResourceTopics(fallbackResourceTopics());
       });
@@ -568,12 +587,11 @@
     button.addEventListener("click", function(){
       button.disabled = true;
       message.textContent = "পাঠানো হচ্ছে...";
-      fetchWithTimeout(api("/api/resources/" + encodeURIComponent(resource.id) + "/feedback"), {
+      requestJson(api("/api/resources/" + encodeURIComponent(resource.id) + "/feedback"), {
         method:"POST",
         headers:{"Content-Type":"application/json"},
         body:JSON.stringify({initData:tg.initData, feedbackType:select.value})
-      }).then(function(resp){ return jsonOrThrow(resp, "Resource feedback API"); })
-        .then(function(){ message.textContent = "ধন্যবাদ—মতামতটি যাচাইয়ের জন্য রাখা হয়েছে।"; })
+      }).then(function(){ message.textContent = "ধন্যবাদ—মতামতটি যাচাইয়ের জন্য রাখা হয়েছে।"; })
         .catch(function(){ message.textContent = "মতামত পাঠানো যায়নি। পরে আবার চেষ্টা করুন।"; })
         .then(function(){ button.disabled = false; });
     });
@@ -639,15 +657,14 @@
   function ensureServerAttemptStarted(){
     if (readOnlyMode || serverAttemptStarted) return Promise.resolve();
     if (serverStartPromise) return serverStartPromise;
-    serverStartPromise = fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId) + "/attempts/start"), {
+    serverStartPromise = requestJson(api("/api/quiz/" + encodeURIComponent(quizId) + "/attempts/start"), {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
         initData:isTelegram ? tg.initData : "",
         attemptId:attemptId
       })
-    }).then(function(resp){ return jsonOrThrow(resp, "Attempt start API"); })
-      .then(function(){ serverAttemptStarted = true; })
+    }).then(function(){ serverAttemptStarted = true; })
       .catch(function(error){
         serverStartPromise = null;
         throw error;
@@ -669,9 +686,13 @@
 
   function renderQuestion(){
     var q = quiz.qs[current];
+    var answeredTotal = answers.filter(function(v){ return v !== null; }).length;
+    var markedTotal = markedForReview.filter(Boolean).length;
     byId("q-index").textContent = "প্রশ্ন " + bn(current + 1) + " / " + bn(quiz.qs.length);
-    byId("answered-count").textContent = "উত্তর " + bn(answers.filter(function(v){ return v !== null; }).length);
+    byId("answered-count").textContent = "উত্তর " + bn(answeredTotal);
+    byId("question-map-summary").textContent = "প্রশ্ন " + bn(current + 1) + " / " + bn(quiz.qs.length) + " · উত্তর " + bn(answeredTotal) + " · চিহ্নিত " + bn(markedTotal);
     byId("q-text").textContent = q.q;
+    setContentLanguage(byId("q-text"), q.q, q.language);
     var progress = byId("progress-fill");
     progress.max = quiz.qs.length;
     progress.value = current + 1;
@@ -682,8 +703,10 @@
       var button = document.createElement("button");
       button.className = "option" + (answers[current] === index ? " selected" : "");
       button.type = "button";
+      button.setAttribute("aria-pressed", answers[current] === index ? "true" : "false");
       button.innerHTML = '<span class="key">' + LETTERS[index] + '</span><span class="label"></span>';
       button.querySelector(".label").textContent = label;
+      setContentLanguage(button.querySelector(".label"), label, q.language);
       button.addEventListener("click", function(){
         answers[current] = index;
         haptic("select");
@@ -711,9 +734,46 @@
       button.className = "nav-q" + (answers[index] !== null ? " answered" : "") + (markedForReview[index] ? " marked" : "") + (index === current ? " current" : "");
       button.textContent = bn(index + 1);
       button.setAttribute("aria-label", "প্রশ্ন " + bn(index + 1) + (answers[index] !== null ? ", উত্তর দেওয়া" : ", উত্তর বাকি") + (markedForReview[index] ? ", রিভিউ চিহ্নিত" : ""));
-      button.addEventListener("click", function(){ moveToQuestion(index); });
+      if (index === current) button.setAttribute("aria-current", "step");
+      button.addEventListener("click", function(){ closeQuestionMap(false); moveToQuestion(index, true); });
       nav.appendChild(button);
     });
+  }
+
+  function contentLanguage(text, declared){
+    if (/^en(?:$|-)/i.test(String(declared || ""))) return "en";
+    var value = String(text || "");
+    var latin = (value.match(/[A-Za-z]/g) || []).length;
+    var bengali = (value.match(/[\u0980-\u09ff]/g) || []).length;
+    return latin >= 4 && latin > bengali * 2 ? "en" : "bn";
+  }
+
+  function setContentLanguage(node, text, declared){
+    node.setAttribute("lang", contentLanguage(text, declared));
+  }
+
+  function isQuestionMapOpen(){ return !!byId("question-map-sheet").open; }
+  function isSubmitModalOpen(){ return !byId("submit-modal").classList.contains("hidden"); }
+
+  function openQuestionMap(){
+    var sheet = byId("question-map-sheet");
+    if (sheet.open) return;
+    byId("question-map-toggle").setAttribute("aria-expanded", "true");
+    if (typeof sheet.showModal === "function") sheet.showModal();
+    else sheet.setAttribute("open", "");
+    var currentButton = sheet.querySelector('[aria-current="step"]');
+    window.requestAnimationFrame(function(){ (currentButton || byId("question-map-close")).focus(); });
+    syncTelegramButtons();
+  }
+
+  function closeQuestionMap(restoreFocus){
+    var sheet = byId("question-map-sheet");
+    if (!sheet.open) return;
+    if (typeof sheet.close === "function") sheet.close();
+    else sheet.removeAttribute("open");
+    byId("question-map-toggle").setAttribute("aria-expanded", "false");
+    syncTelegramButtons();
+    if (restoreFocus) window.requestAnimationFrame(function(){ byId("question-map-toggle").focus(); });
   }
 
   function toggleMarked(){
@@ -730,13 +790,17 @@
     questionStartedAt = Date.now();
   }
 
-  function moveToQuestion(index){
-    if (index === current) return;
+  function moveToQuestion(index, forceFocus){
+    if (index === current) {
+      if (forceFocus) byId("q-text").focus();
+      return;
+    }
     trackCurrentTime();
     current = Math.max(0, Math.min(quiz.qs.length - 1, index));
     questionStartedAt = Date.now();
     saveDraft();
     renderQuestion();
+    window.requestAnimationFrame(function(){ byId("q-text").focus(); });
   }
 
   function startTimer(){
@@ -798,7 +862,7 @@
     byId("loading-message").textContent = "উত্তর সাবমিট হচ্ছে...";
     ensureServerAttemptStarted().catch(function(){
       // The server accepts legacy submission, but marks all timing untrusted.
-    }).then(function(){ return fetchWithTimeout(api("/api/quiz/" + encodeURIComponent(quizId) + "/submit"), {
+    }).then(function(){ return requestJson(api("/api/quiz/" + encodeURIComponent(quizId) + "/submit"), {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
@@ -810,16 +874,9 @@
         markedForReview: markedForReview
       })
     }); })
-      .then(function(resp){
-        if (!resp.ok) {
-          return jsonOrThrow(resp, "Submit API");
-        }
-        return resp.json();
-      })
       .then(function(result){ submitting = false; discardDraft(); rememberResultLocation(result.attemptId || attemptId); renderResult(result); })
       .catch(function(err){
         submitting = false;
-        console.error(err);
         retryAction = finishQuiz;
         byId("btn-retry").textContent = "আবার চেষ্টা করুন";
         if (err.status === 401) {
@@ -844,10 +901,13 @@
         : "");
     byId("submit-modal").classList.remove("hidden");
     byId("btn-submit-back").focus();
+    syncTelegramButtons();
   }
 
   function hideSubmitConfirmation(){
     byId("submit-modal").classList.add("hidden");
+    syncTelegramButtons();
+    if (screen === "quiz") byId("btn-next").focus();
   }
 
   function openDashboard(){
@@ -982,12 +1042,11 @@
   function setBookmark(button, itemType, itemId){
     if (!isTelegram || !itemId || button.disabled) return;
     button.disabled = true;
-    fetchWithTimeout(api("/api/me/bookmarks"), {
+    requestJson(api("/api/me/bookmarks"), {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({initData:tg.initData,itemType:itemType,itemId:itemId,active:true})
     })
-      .then(function(resp){ return jsonOrThrow(resp, "Bookmark API"); })
       .then(function(){ button.textContent = "★ বুকমার্ক করা হয়েছে"; haptic("success"); })
       .catch(function(){ button.disabled = false; button.textContent = "বুকমার্ক করা যায়নি"; });
   }
@@ -1004,7 +1063,7 @@
     }
     button.disabled = true;
     message.textContent = "রিপোর্ট পাঠানো হচ্ছে...";
-    fetchWithTimeout(api("/api/questions/" + encodeURIComponent(item.questionId) + "/report"), {
+    requestJson(api("/api/questions/" + encodeURIComponent(item.questionId) + "/report"), {
       method:"POST",
       headers:{"Content-Type":"application/json"},
       body:JSON.stringify({
@@ -1015,7 +1074,6 @@
         details: details
       })
     })
-      .then(function(resp){ return resp.ok ? resp.json() : jsonOrThrow(resp, "Report API"); })
       .then(function(){
         message.textContent = "রিপোর্ট গ্রহণ করা হয়েছে। ধন্যবাদ।";
         haptic("success");

@@ -72,10 +72,13 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert CLIENT.get("/admin.css").headers["cache-control"] == "public, max-age=300"
     assert CLIENT.get("/admin.js").headers["cache-control"] == "public, max-age=3600"
     source = worker.text
-    assert "NETWORK_TIMEOUT_MS = 8000" in source
+    assert "ANSWER_FREE_NETWORK_TIMEOUT_MS" not in source
+    assert "SHELL_NETWORK_TIMEOUT_MS = 30000" in source
+    assert "NETWORK_TIMEOUT_MS = 8000" not in source
     assert "new AbortController()" in source
     assert "cache.match(pathname)" in source
     assert "response.status >= 500" in source
+    assert 'fetch(request, {cache: "no-store"})' in source
 
 
 def test_csp_blocks_inline_scripts_and_styles_after_frontend_extraction() -> None:
@@ -121,9 +124,10 @@ def test_mock_page_without_uuid_opens_catalog_instead_of_dead_end() -> None:
     html = CLIENT.get("/mock.html").text
     assert 'id="screen-catalog"' in html
     script = CLIENT.get("/mock.js").text
-    assert 'miniappFetch(api("/api/tests/catalog?limit=100"))' in script
-    assert 'api("/api/tests/attempts/recent?limit=100")' in script
-    assert 'api("/api/previous-year?"+pyqParams().toString())' in script
+    assert 'request("/api/tests/catalog?limit=100")' in script
+    assert "window.miniappRequest(api(path)" in script
+    assert 'request("/api/tests/attempts/recent?limit=100"' in script
+    assert 'request("/api/previous-year?"+pyqParams().toString())' in script
     assert '"X-Telegram-Init-Data":initData' in script
     assert "if(!validTestId(testId)){loadCatalog();return}" in script
     assert 'id="pyq-hierarchy"' in html
@@ -135,7 +139,8 @@ def test_syllabus_map_is_external_asset_only_and_linked_from_learning_surfaces()
     script = CLIENT.get("/syllabus.js").text
     assert '<script src="syllabus.js"></script>' in html
     assert "<script>" not in html
-    assert 'fetcher(api("/api/syllabus")' in script
+    assert "var requestJson=window.miniappRequest" in script
+    assert 'requestJson(api("/api/syllabus")' in script
     assert 'api("/api/me/syllabus-progress")' in script
     assert '"X-Telegram-Init-Data":initData' in script
     assert 'id="personal-progress"' in html

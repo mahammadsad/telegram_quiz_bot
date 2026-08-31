@@ -147,6 +147,24 @@ def build_learner_router(
             offset=offset,
         )
 
+    @router.get("/practice-bootstrap")
+    def practice_bootstrap(
+        source: str = "wrong",
+        subject: str | None = None,
+        limit: int = 100,
+        offset: int = 0,
+        init_data: str = Header(default="", alias="X-Telegram-Init-Data"),
+    ) -> dict:
+        return read_validated(
+            learning_service.practice_bootstrap,
+            init_data,
+            "অনুশীলনের প্রশ্ন এখন লোড করা যাচ্ছে না।",
+            source_type=source,
+            subject_key=subject,
+            limit=limit,
+            offset=offset,
+        )
+
     @router.post("/practice/{question_id}")
     def submit_practice(question_id: UUID, payload: PracticeAnswerRequest) -> dict:
         try:

@@ -462,7 +462,7 @@ def test_versioned_production_manifest_matches_deployment_intent() -> None:
         "require_new_candidate_proof": True,
     }
     assert PRODUCTION_CONFIG["scheduler"]["dispatcher_max_retries"] == 8
-    assert PRODUCTION_CONFIG["database"]["request_timeout_seconds"] == 8
+    assert PRODUCTION_CONFIG["database"]["request_timeout_seconds"] == 12
     assert PRODUCTION_CONFIG["database"]["platform_contract_version"] == PLATFORM_CONTRACT_VERSION
     assert PRODUCTION_CONFIG["database"]["platform_contract_migration_version"] == PLATFORM_CONTRACT_MIGRATION_VERSION
     assert PRODUCTION_CONFIG["database"]["post_finalization_migration_version"] == (POST_FINALIZATION_MIGRATION_VERSION)
@@ -513,7 +513,7 @@ def test_python_and_browser_packages_share_the_release_version() -> None:
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     lock = json.loads((ROOT / "package-lock.json").read_text(encoding="utf-8"))
 
-    assert APPLICATION_VERSION == "8.6.0"
+    assert APPLICATION_VERSION == "8.7.0"
     assert package["version"] == APPLICATION_VERSION
     assert lock["version"] == APPLICATION_VERSION
     assert lock["packages"][""]["version"] == APPLICATION_VERSION

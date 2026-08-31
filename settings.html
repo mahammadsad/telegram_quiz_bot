@@ -19,7 +19,7 @@
 <body>
 <main class="app">
   <header class="top">
-    <div class="brand"><span class="brand-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></span><div><small>আপনার নিয়ন্ত্রণ</small><h1>পছন্দ ও গোপনীয়তা</h1></div></div>
+    <div class="brand"><span class="brand-icon"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg></span><div><small>CITIZEN AFFAIRS বাংলা</small><h1>পছন্দ ও গোপনীয়তা</h1></div></div>
     <a class="dashboard-link" href="dashboard.html">পরিসংখ্যান দেখুন</a>
   </header>
 
@@ -32,15 +32,19 @@
   <form id="settings" class="hidden">
     <section class="card">
       <h2>শেখার পছন্দ</h2>
-      <p class="section-note">আপনার লক্ষ্য ও কুইজের ধরন ঠিক করুন।</p>
+      <p class="section-note">বিষয় আগে বেছে নিন; লক্ষ্য পরীক্ষা শুধু মক ও সিলেবাসের সুপারিশ আরও নির্দিষ্ট করবে।</p>
+      <button class="selector-row" id="open-subject-dialog" type="button" aria-haspopup="dialog" aria-controls="subject-dialog">
+        <span><b>পছন্দের বিষয়</b><small>আপনার দৈনিক কুইজ ও শেখার পরবর্তী লক্ষ্য এখানে অগ্রাধিকার পাবে।</small></span><strong id="subject-summary">০টি নির্বাচিত</strong><span class="selector-chevron" aria-hidden="true">›</span>
+      </button>
       <div class="form-grid">
         <label class="field-label">দৈনিক প্রশ্ন লক্ষ্য<input class="field" id="daily-target" type="number" min="1" max="130" required /></label>
-        <label class="field-label">ইন্টারফেস ভাষা<select class="field" id="language" aria-describedby="language-support"><option value="bn">বাংলা</option></select><small id="language-support">সম্পূর্ণ অনুবাদ ও পরীক্ষা শেষ না হওয়া পর্যন্ত শুধু বাংলা ইন্টারফেস সমর্থিত।</small></label>
         <label class="field-label">কুইজ মোড<select class="field" id="quiz-mode"><option value="timed">সময়বদ্ধ</option><option value="practice">অনুশীলন</option></select></label>
         <label class="field-label">কঠিনতার পছন্দ<select class="field" id="difficulty"><option value="adaptive">স্বয়ংক্রিয়</option><option value="easy">সহজ</option><option value="medium">মাঝারি</option><option value="hard">কঠিন</option></select></label>
-        <div class="wide"><b class="group-title">টার্গেট পরীক্ষা</b><div class="checks" id="exam-checks"></div></div>
-        <div class="wide"><b class="group-title">পছন্দের বিষয়</b><div class="checks" id="subject-checks"></div></div>
+        <label class="field-label">ইন্টারফেস ভাষা<select class="field" id="language" aria-describedby="language-support"><option value="bn">বাংলা</option></select><small id="language-support">সম্পূর্ণ অনুবাদ ও পরীক্ষা শেষ না হওয়া পর্যন্ত শুধু বাংলা ইন্টারফেস সমর্থিত।</small></label>
       </div>
+      <button class="selector-row secondary-selector" id="open-exam-dialog" type="button" aria-haspopup="dialog" aria-controls="exam-dialog">
+        <span><b>লক্ষ্য পরীক্ষা <em>(ঐচ্ছিক)</em></b><small>এটি মক ও সিলেবাসের সুপারিশ পরিশীলিত করে; বিষয়ভিত্তিক কুইজকে প্রতিস্থাপন করে না।</small></span><strong id="exam-summary">কোনোটি নয়</strong><span class="selector-chevron" aria-hidden="true">›</span>
+      </button>
     </section>
 
     <section class="card">
@@ -67,26 +71,43 @@
       <p class="message" id="sound-message" aria-live="polite"></p>
     </section>
 
-    <section class="card">
-      <h2>আপনার ডেটা ও অ্যাকাউন্ট</h2>
-      <p class="section-note">প্রতিটি কাজের আগে নতুন Telegram যাচাই প্রয়োজন। মুছে ফেলার অনুরোধে ৭ দিনের grace period আছে।</p>
-      <div class="actions"><button class="btn" id="export-data" type="button">আমার ডেটা এক্সপোর্ট করুন</button><button class="btn" id="cancel-deletion" type="button">মুছে ফেলার অনুরোধ বাতিল করুন</button><button class="btn" id="request-deletion" type="button">অ্যাকাউন্ট মুছে ফেলুন</button></div>
-      <p class="message" id="privacy-message" aria-live="polite"></p>
-      <p class="legal-links"><a href="privacy.html">গোপনীয়তা নোটিশ</a><span aria-hidden="true">·</span><a href="terms.html">ব্যবহারের শর্ত</a></p>
+    <section class="card legal-card">
+      <h2>গোপনীয়তা ও সহায়তা</h2>
+      <div class="legal-links"><a href="privacy.html"><span>গোপনীয়তা নোটিশ</span><span aria-hidden="true">›</span></a><a href="terms.html"><span>ব্যবহারের শর্ত</span><span aria-hidden="true">›</span></a></div>
+      <details class="danger-zone">
+        <summary>অ্যাকাউন্ট ও ডেটা</summary>
+        <div class="danger-content">
+          <p class="section-note">প্রতিটি কাজের আগে নতুন Telegram যাচাই প্রয়োজন। মুছে ফেলার অনুরোধে ৭ দিনের grace period আছে।</p>
+          <div class="account-actions"><button class="btn" id="export-data" type="button">আমার ডেটা এক্সপোর্ট করুন</button><button class="btn" id="cancel-deletion" type="button">মুছে ফেলার অনুরোধ বাতিল করুন</button><button class="btn danger" id="request-deletion" type="button" aria-expanded="false" aria-controls="deletion-confirm">অ্যাকাউন্ট মুছে ফেলুন</button></div>
+          <div class="deletion-confirm hidden" id="deletion-confirm" role="alert"><b>এই অনুরোধটি নিশ্চিত করবেন?</b><p>৭ দিনের মধ্যে বাতিল না করলে অ্যাকাউন্ট ও শেখার ডেটা স্থায়ীভাবে মুছে যাবে।</p><div class="actions"><button class="btn" id="cancel-delete-confirm" type="button">ফিরে যান</button><button class="btn danger" id="confirm-deletion" type="button">হ্যাঁ, মুছে ফেলার অনুরোধ দিন</button></div></div>
+          <p class="message" id="privacy-message" aria-live="polite"></p>
+        </div>
+      </details>
     </section>
 
     <section class="card save-card">
-      <div class="actions"><button class="btn primary" id="settings-submit" type="submit">সব পরিবর্তন সংরক্ষণ করুন</button></div>
+      <div class="actions"><button class="btn primary" id="settings-submit" type="submit" disabled>পরিবর্তন সংরক্ষণ করুন</button></div>
       <p class="message" id="settings-message" role="status" aria-live="polite"></p>
     </section>
   </form>
 </main>
 
+<dialog class="selector-dialog" id="subject-dialog" aria-labelledby="subject-dialog-title">
+  <div class="dialog-handle" aria-hidden="true"></div><div class="dialog-head"><div><h2 id="subject-dialog-title">পছন্দের বিষয়</h2><p id="subject-dialog-count">০টি নির্বাচিত</p></div><button class="dialog-close" id="subject-dialog-close" type="button" aria-label="বিষয় নির্বাচন বন্ধ করুন">×</button></div>
+  <div class="checks dialog-checks" id="subject-checks"></div>
+  <div class="dialog-actions"><button class="btn" id="subject-clear" type="button">সব মুছুন</button><button class="btn primary" id="subject-done" type="button">সম্পন্ন</button></div>
+</dialog>
+<dialog class="selector-dialog" id="exam-dialog" aria-labelledby="exam-dialog-title">
+  <div class="dialog-handle" aria-hidden="true"></div><div class="dialog-head"><div><h2 id="exam-dialog-title">লক্ষ্য পরীক্ষা (ঐচ্ছিক)</h2><p id="exam-dialog-count">০টি নির্বাচিত</p></div><button class="dialog-close" id="exam-dialog-close" type="button" aria-label="পরীক্ষা নির্বাচন বন্ধ করুন">×</button></div>
+  <p class="dialog-note">এটি মক ও সিলেবাস সাজাতে সাহায্য করবে; বিষয়ভিত্তিক কুইজ সবসময় থাকবে।</p>
+  <div class="checks dialog-checks" id="exam-checks"></div>
+  <div class="dialog-actions"><button class="btn" id="exam-clear" type="button">সব মুছুন</button><button class="btn primary" id="exam-done" type="button">সম্পন্ন</button></div>
+</dialog>
+
 <nav class="bottom" aria-label="প্রধান নেভিগেশন">
   <a href="./"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="m8 9 1.5 1.5L13 7"/><path d="M8 16h8"/></svg><span>কুইজ</span></a>
-  <a href="practice.html?source=wrong"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14 7 3 3"/></svg><span>অনুশীলন</span></a>
-  <a href="practice.html?source=due"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M20 7v5h-5"/><path d="M4 17v-5h5"/><path d="M6.1 9A7 7 0 0 1 18 6l2 6"/><path d="M17.9 15A7 7 0 0 1 6 18l-2-6"/></svg><span>পুনরাবৃত্তি</span></a>
-  <a href="dashboard.html"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 20V10"/><path d="M12 20V4"/><path d="M19 20v-7"/><path d="M3 20h18"/></svg><span>পরিসংখ্যান</span></a>
+  <a href="practice.html?source=due"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14 7 3 3"/></svg><span>অনুশীলন</span></a>
+  <a href="dashboard.html"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 20V10"/><path d="M12 20V4"/><path d="M19 20v-7"/><path d="M3 20h18"/></svg><span>অগ্রগতি</span></a>
   <a class="active" href="settings.html" aria-current="page"><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9 7 7M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/></svg><span>সেটিংস</span></a>
 </nav>
 

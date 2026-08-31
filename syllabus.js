@@ -1,17 +1,17 @@
 (function(){
   "use strict";
   var apiBase=(document.querySelector('meta[name="quiz-api-base"]')||{}).content||"";
-  var fetcher=window.miniappFetch||window.fetch.bind(window);
+  var requestJson=window.miniappRequest;
   var tg=window.Telegram&&window.Telegram.WebApp?window.Telegram.WebApp:null;
   var initData=tg&&tg.initData?tg.initData:"";
   var payload=null,progress=null,progressByTopic={};
   var requestedExam=(new URLSearchParams(location.search).get("exam")||"").trim().toUpperCase();
   function el(id){return document.getElementById(id)}
   function api(path){return apiBase.replace(/\/$/,"")+path}
-  function check(response){if(!response.ok){var error=new Error("request failed");error.status=response.status;throw error}return response.json()}
+  function errorMessage(error){return typeof window.miniappErrorMessage==="function"?window.miniappErrorMessage(error):"এখন তথ্য লোড করা যাচ্ছে না। আবার চেষ্টা করুন।"}
   function show(id){["loading","error","empty","catalog"].forEach(function(name){el(name).classList.toggle("hidden",name!==id)})}
   function option(value,label){var node=document.createElement("option");node.value=value;node.textContent=label;return node}
-  function load(){show("loading");var publicRequest=fetcher(api("/api/syllabus"),{cache:"no-store"}).then(check),progressRequest=initData?fetcher(api("/api/me/syllabus-progress"),{headers:{"X-Telegram-Init-Data":initData},cache:"no-store"}).then(check).catch(function(){return null}):Promise.resolve(null);Promise.all([publicRequest,progressRequest]).then(function(results){payload=results[0];progress=results[1];indexProgress();buildFilters();render();renderProgress()}).catch(function(){show("error")})}
+  function load(){show("loading");var publicRequest=requestJson(api("/api/syllabus"),{cache:"no-store"}),progressRequest=initData?requestJson(api("/api/me/syllabus-progress"),{headers:{"X-Telegram-Init-Data":initData},cache:"no-store"}).catch(function(){return null}):Promise.resolve(null);Promise.all([publicRequest,progressRequest]).then(function(results){payload=results[0];progress=results[1];indexProgress();buildFilters();render();renderProgress()}).catch(function(error){el("error-copy").textContent=errorMessage(error);show("error")})}
   function indexProgress(){progressByTopic={};if(!progress)return;(progress.subjects||[]).forEach(function(subject){(subject.chapters||[]).forEach(function(chapter){(chapter.microTopics||[]).forEach(function(topic){progressByTopic[topic.key]=topic})})})}
   function buildFilters(){
     var exam=el("exam-filter"),subject=el("subject-filter");exam.length=1;subject.length=1;

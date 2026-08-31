@@ -38,8 +38,9 @@ MASTERY_STRENGTHS = {"all", "due", "weak", "strong"}
 
 def dashboard(telegram_user: dict) -> dict:
     user_id = _user_id(telegram_user)
-    payload = _safe(personal_learning_repo.dashboard(user_id))
-    preference_payload = _safe(personal_learning_repo.preferences(user_id))
+    bootstrap = _safe(personal_learning_repo.dashboard_bootstrap(user_id))
+    payload = _safe(_required_mapping(bootstrap, "dashboard"))
+    preference_payload = _safe(_required_mapping(bootstrap, "preferences"))
     payload["studyPlan"] = _study_plan(payload, preference_payload)
     payload["identity"] = _identity(telegram_user)
     return payload
@@ -128,6 +129,33 @@ def wrong_questions(
             offset=max(0, offset),
         )
     )
+
+
+def practice_bootstrap(
+    telegram_user: dict,
+    *,
+    source_type: str,
+    subject_key: str | None,
+    limit: int,
+    offset: int,
+) -> dict:
+    if source_type not in PRACTICE_SOURCES:
+        raise ValueError("Invalid practice source.")
+    clean_subject = subject_key.strip() if subject_key else None
+    if clean_subject and clean_subject not in SUBJECTS:
+        raise ValueError("Unknown subject key.")
+    bootstrap = _safe(
+        personal_learning_repo.practice_bootstrap(
+            _user_id(telegram_user),
+            source_type=source_type,
+            subject_key=clean_subject,
+            limit=_page_limit(limit),
+            offset=max(0, offset),
+        )
+    )
+    queue = _safe(_required_mapping(bootstrap, "queue"))
+    preferences_payload = _safe(_required_mapping(bootstrap, "preferences"))
+    return _safe({**queue, "preferences": preferences_payload})
 
 
 def submit_practice_answer(
@@ -292,6 +320,13 @@ def _safe(payload: dict) -> dict:
     return payload
 
 
+def _required_mapping(payload: dict, key: str) -> dict:
+    value = payload.get(key)
+    if not isinstance(value, dict):
+        raise ValueError(f"Personalized-learning bootstrap omitted {key}.")
+    return dict(value)
+
+
 def _study_plan(dashboard_payload: dict, preference_payload: dict) -> dict:
     """Build one transparent next assignment from saved preferences and mastery."""
     preferred_subjects = [
@@ -359,14 +394,14 @@ def _study_plan(dashboard_payload: dict, preference_payload: dict) -> dict:
     elif remaining == 0:
         action = "goal_complete"
         reason_code = "daily_target_complete"
-    elif target_exams:
-        action = "target_exam_mock"
-        exam_key = target_exams[0]
-        reason_code = "saved_target_exam"
     elif preferred_subjects:
         action = "preferred_subject_quiz"
         subject_key = preferred_subjects[0]
         reason_code = "saved_preferred_subject"
+    elif target_exams:
+        action = "target_exam_mock"
+        exam_key = target_exams[0]
+        reason_code = "saved_target_exam"
 
     return {
         "version": 1,

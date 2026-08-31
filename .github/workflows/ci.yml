@@ -63,6 +63,10 @@ jobs:
         run: npx playwright install --with-deps chromium
       - name: Run real mobile browser tests
         run: npm run test:browser
+      - name: Run local HTTPS service-worker regressions
+        run: |
+          openssl version
+          npm run test:browser:service-worker
       - name: Upload browser report, screenshots, traces, and videos
         if: always()
         uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
