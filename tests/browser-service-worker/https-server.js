@@ -72,12 +72,8 @@ async function serveApi(request, response, url) {
   const probe = url.searchParams.get("probe") || "missing-probe";
 
   if (url.pathname === "/api/me/dashboard") {
-    const requestedDelay = Number(url.searchParams.get("delayFirstMs") || 0);
-    const delayFirstMs = Number.isFinite(requestedDelay)
-      ? Math.max(0, Math.min(requestedDelay, 12_000))
-      : 0;
-    if (requestCount === 1 && delayFirstMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delayFirstMs));
+    if (requestCount === 1 && url.searchParams.get("delayFirstMs") === "8500") {
+      await new Promise((resolve) => setTimeout(resolve, 8_500));
     }
     sendJson(response, 200, {
       kind: "sensitive-network-response",
@@ -88,12 +84,8 @@ async function serveApi(request, response, url) {
   }
 
   if (/^\/api\/quiz\/[^/]+$/.test(url.pathname)) {
-    const requestedDelay = Number(url.searchParams.get("delayFirstMs") || 0);
-    const delayFirstMs = Number.isFinite(requestedDelay)
-      ? Math.max(0, Math.min(requestedDelay, 26_000))
-      : 0;
-    if (requestCount === 1 && delayFirstMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delayFirstMs));
+    if (requestCount === 1 && url.searchParams.get("delayFirstMs") === "24000") {
+      await new Promise((resolve) => setTimeout(resolve, 24_000));
     }
     const failAfter = Number(url.searchParams.get("failAfter") || 0);
     if (failAfter > 0 && requestCount > failAfter) {
