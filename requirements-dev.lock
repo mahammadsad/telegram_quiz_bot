@@ -193,7 +193,7 @@ pycparser==3.0
     # via
     #   -c requirements.lock
     #   cffi
-pydantic==2.13.4
+pydantic==2.13.5
     # via
     #   -c requirements.lock
     #   -r requirements.txt
@@ -203,7 +203,7 @@ pydantic==2.13.4
     #   realtime
     #   storage3
     #   supabase-auth
-pydantic-core==2.46.4
+pydantic-core==2.46.5
     # via
     #   -c requirements.lock
     #   pydantic
