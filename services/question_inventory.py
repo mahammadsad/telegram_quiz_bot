@@ -247,6 +247,50 @@ def replenishment_plan(
     }
 
 
+def replenishment_quality_report(
+    events: Iterable[dict[str, Any]],
+    *,
+    sample_limit: int,
+) -> dict[str, Any]:
+    """Aggregate answer-free generation yield and rejection diagnostics."""
+    if sample_limit < 1:
+        raise ValueError("sample_limit must be positive")
+    rows = [dict(event) for event in events]
+    event_types: Counter[str] = Counter()
+    rejection_codes: Counter[str] = Counter()
+    error_codes: Counter[str] = Counter()
+    accepted = 0
+    rejected = 0
+    for event in rows:
+        event_type = str(event.get("event_type") or "unknown").strip() or "unknown"
+        event_types[event_type] += 1
+        accepted += max(0, int(event.get("accepted_count") or 0))
+        rejected += max(0, int(event.get("rejected_count") or 0))
+        rejection_codes.update(
+            str(code).strip()
+            for code in (event.get("rejection_codes") or [])
+            if str(code).strip()
+        )
+        error_code = str(event.get("error_code") or "").strip()
+        if error_code:
+            error_codes[error_code] += 1
+
+    candidate_total = accepted + rejected
+    return {
+        "sample_events": len(rows),
+        "sample_limit": sample_limit,
+        "sample_truncated": len(rows) >= sample_limit,
+        "accepted_candidates": accepted,
+        "rejected_candidates": rejected,
+        "acceptance_percent": (
+            round(accepted / candidate_total * 100, 2) if candidate_total else 0.0
+        ),
+        "event_types": dict(sorted(event_types.items())),
+        "rejection_codes": dict(sorted(rejection_codes.items())),
+        "error_codes": dict(sorted(error_codes.items())),
+    }
+
+
 def exposure_quality_report(
     usage_events: Iterable[dict[str, Any]],
     *,

@@ -12,6 +12,7 @@ from services.question_inventory import (
     exposure_quality_report,
     inventory_report,
     replenishment_plan,
+    replenishment_quality_report,
 )
 
 NOW = datetime(2026, 8, 8, 8, 0, tzinfo=timezone.utc)
@@ -149,6 +150,44 @@ def test_inventory_days_and_replenishment_batches_are_reported() -> None:
         "batch_size": 5,
         "batch_count": 4,
     }
+
+
+def test_replenishment_quality_report_is_answer_free_and_bounded() -> None:
+    report = replenishment_quality_report(
+        [
+            {
+                "event_type": "batch_completed",
+                "accepted_count": 3,
+                "rejected_count": 2,
+                "rejection_codes": ["historical_duplicate", "proof_invalid"],
+                "error_code": None,
+                "job_id": "must-not-leak",
+                "worker_id": "must-not-leak",
+            },
+            {
+                "event_type": "batch_failed",
+                "accepted_count": 0,
+                "rejected_count": 5,
+                "rejection_codes": ["proof_invalid"],
+                "error_code": "content_rejected",
+            },
+        ],
+        sample_limit=2,
+    )
+
+    assert report == {
+        "sample_events": 2,
+        "sample_limit": 2,
+        "sample_truncated": True,
+        "accepted_candidates": 3,
+        "rejected_candidates": 7,
+        "acceptance_percent": 30.0,
+        "event_types": {"batch_completed": 1, "batch_failed": 1},
+        "rejection_codes": {"historical_duplicate": 1, "proof_invalid": 2},
+        "error_codes": {"content_rejected": 1},
+    }
+    assert "job_id" not in report
+    assert "worker_id" not in report
 
 
 def test_chapter_difficulty_report_exposes_exact_answer_free_gaps() -> None:
