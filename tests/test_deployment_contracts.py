@@ -93,6 +93,23 @@ def test_every_github_action_is_pinned_to_a_commit() -> None:
         assert commit_ref.search(line), f"unpinned action in {workflow.name}: {line.strip()}"
 
 
+def test_codeql_init_and_analysis_use_one_release() -> None:
+    workflow = _load_yaml(WORKFLOW_DIR / "security.yml")
+    steps = workflow["jobs"]["codeql"]["steps"]
+    init = next(
+        step["uses"]
+        for step in steps
+        if step["uses"].startswith("github/codeql-action/init@")
+    )
+    analyze = next(
+        step["uses"]
+        for step in steps
+        if step["uses"].startswith("github/codeql-action/analyze@")
+    )
+
+    assert init.rsplit("@", 1)[1] == analyze.rsplit("@", 1)[1]
+
+
 def test_workflows_have_minimum_permissions_timeouts_and_environment_guards() -> None:
     ci = _load_yaml(WORKFLOW_DIR / "ci.yml")
     main = _load_yaml(WORKFLOW_DIR / "main.yml")
@@ -270,7 +287,7 @@ def test_delivery_slo_workflow_is_read_only_bounded_and_pinned() -> None:
     assert workflow["jobs"]["report"]["steps"][-1]["if"] == "always()"
     assert "SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}" in source
     assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in source
-    assert "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f" in source
+    assert "actions/upload-artifact@" in source
 
 
 def test_delivery_slo_script_supports_the_documented_direct_invocation() -> None:
@@ -294,7 +311,7 @@ def test_content_replenishment_archives_answer_free_capacity_report() -> None:
     assert "reports/question-inventory.json" in source
     assert job["steps"][-1]["if"] == "always()"
     assert job["steps"][-1]["with"]["retention-days"] == 30
-    assert "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f" in source
+    assert "actions/upload-artifact@" in source
 
 
 def test_question_calibration_workflow_is_read_only_private_and_pinned() -> None:
@@ -310,7 +327,7 @@ def test_question_calibration_workflow_is_read_only_private_and_pinned() -> None
     assert "python -m scripts.report_question_calibration" in source
     assert "SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}" in source
     assert "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1" in source
-    assert "actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f" in source
+    assert "actions/upload-artifact@" in source
     assert "retention-days: 30" in source
 
 
