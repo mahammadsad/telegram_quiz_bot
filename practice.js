@@ -29,6 +29,12 @@
 
   function el(id){return document.getElementById(id)}
   function bn(v){return String(v).replace(/[0-9]/g,function(d){return BN[+d]})}
+  function contentLanguage(text,declared){
+    if(/^en(?:$|-)/i.test(String(declared||"")))return"en";
+    var value=String(text||""),latin=(value.match(/[A-Za-z]/g)||[]).length,bengali=(value.match(/[\u0980-\u09ff]/g)||[]).length;
+    return latin>=4&&latin>bengali*2?"en":"bn";
+  }
+  function setContentLanguage(node,text,declared){node.setAttribute("lang",contentLanguage(text,declared))}
   function api(p){return API_BASE+p}
   function telegramUrl(path){
     var url=new URL(path,window.location.href);
@@ -175,7 +181,7 @@
     el("feedback").classList.add("hidden");el("next-wrap").classList.add("hidden");el("submit").parentElement.classList.remove("hidden");
     el("submit").textContent=answerFrozen?"একই উত্তর আবার পাঠান":"উত্তর যাচাই করুন";
     el("position").textContent="প্রশ্ন "+bn(index+1)+" / "+bn(rows.length);el("topic").textContent=rows[index].chapter||rows[index].subjectKey||"";
-    el("question").textContent=rows[index].q;el("bar").max=rows.length;el("bar").value=index+1;
+    el("question").textContent=rows[index].q;setContentLanguage(el("question"),rows[index].q,rows[index].language);el("bar").max=rows.length;el("bar").value=index+1;
     el("next").textContent=index===rows.length-1?(queueMode==="revision"?"পুনরাবৃত্তি শেষ করুন":"অনুশীলন শেষ করুন"):"পরবর্তী প্রশ্ন";
     renderOptions();
   }
@@ -186,7 +192,7 @@
       if(review){if(i===review.correctIndex)button.classList.add("correct");else if(i===selected)button.classList.add("wrong")}
       button.disabled=answerFrozen||submitting||!!review;button.setAttribute("aria-pressed",selected===i?"true":"false");
       button.setAttribute("aria-label",LETTERS[i]+". "+label+(review&&i===review.correctIndex?" — সঠিক উত্তর":review&&i===selected?" — আপনার ভুল উত্তর":""));
-      button.innerHTML='<span class="key">'+LETTERS[i]+'</span><span></span>';button.lastChild.textContent=label;
+      button.innerHTML='<span class="key">'+LETTERS[i]+'</span><span></span>';button.lastChild.textContent=label;setContentLanguage(button.lastChild,label,rows[index].language);
       button.addEventListener("click",function(){if(!answerFrozen&&!submitting){selected=i;savePending(false);renderOptions();var current=el("options").children[i];if(current)current.focus()}});wrap.appendChild(button);
     });
     updateSubmitState();
@@ -219,7 +225,9 @@
         var explanation=document.createElement("p");explanation.textContent=result.explanation||"ব্যাখ্যা পাওয়া যায়নি।";box.appendChild(explanation);
         if(result.sourceUrl&&/^https:\/\//i.test(result.sourceUrl)){var link=document.createElement("a");link.href=result.sourceUrl;link.target="_blank";link.rel="noopener noreferrer";link.textContent="যাচাই করা উৎস দেখুন";box.appendChild(link)}
         if(result.mode==="revision")appendReportControl(box,rows[index].questionId,attemptId);
-        box.classList.remove("hidden");el("submit").parentElement.classList.add("hidden");el("next-wrap").classList.remove("hidden");heading.focus();
+        box.classList.remove("hidden");el("submit").parentElement.classList.add("hidden");el("next-wrap").classList.remove("hidden");
+        box.scrollIntoView({block:"start"});
+        try{heading.focus({preventScroll:true})}catch(e){heading.focus()}
       }).catch(showSubmitError);
   }
 
