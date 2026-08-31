@@ -435,6 +435,32 @@ broken request/state model.
   contradict the audit because the existing tests omit HTTPS service-worker
   timing and most error-state matrices.
 
+## Implementation checkpoint — 2026-09-01
+
+Reliability phases A–D and the shared safe-area/action-surface foundations are
+implemented. The production-like HTTPS suite now exercises the service worker,
+including a 24-second cold quiz read, typed error handling and cache ownership.
+Quiz, practice, settings and learner-shell changes described above are covered
+across the four supported Android viewport widths.
+
+The timed-mock follow-up now:
+
+- hides global navigation during an active assessment;
+- replaces the permanently expanded palette with a compact answered/marked
+  summary and an on-demand 44 px question map;
+- gives current, answered and marked items visible and semantic states;
+- moves focus to the question heading after question/section navigation;
+- exposes the Citizen Affairs parent-site CTA before Start;
+- shows the next-section action only after the final question in the current
+  section; and
+- aligns mock and syllabus navigation with the four-destination shell.
+
+Verification at this checkpoint: 256 Playwright mobile tests, six HTTPS
+service-worker tests, 50 focused Python contract tests, Ruff, mypy, JavaScript
+syntax validation and npm audit all pass. The real Telegram Android/iOS and
+assistive-technology matrix remains a manual release-signoff item; this entry
+does not claim that external validation is complete.
+
 ## Decisions intentionally deferred
 
 - No production mutation or deployment is part of this audit.

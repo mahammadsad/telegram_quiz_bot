@@ -9,8 +9,8 @@ const {
 
 const SURFACES = [
   { path: "/dashboard.html", active: "অগ্রগতি", minHeight: 436 },
-  { path: "/mock.html", active: null, minHeight: 456 },
-  { path: "/syllabus.html", active: null, minHeight: 456 },
+  { path: "/mock.html", active: "কুইজ", minHeight: 456 },
+  { path: "/syllabus.html", active: "অগ্রগতি", minHeight: 456 },
 ];
 
 const PRIMARY_LEARNER_SURFACES = [
