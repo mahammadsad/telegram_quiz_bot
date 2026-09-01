@@ -302,9 +302,9 @@ function practiceQueue(source = "due", { empty = false } = {}) {
 
 async function installTelegramMock(
   page,
-  { startParam = QUIZ_ID, requireLaunchHash = false } = {},
+  { startParam = QUIZ_ID, requireLaunchHash = false, nativeActions = true } = {},
 ) {
-  await page.addInitScript(({ injectedStartParam, requireHash }) => {
+  await page.addInitScript(({ injectedStartParam, requireHash, provideNativeActions }) => {
     const state = {
       ready: 0,
       expand: 0,
@@ -422,13 +422,21 @@ async function installTelegramMock(
         },
       },
     };
+    if (!provideNativeActions) {
+      delete window.Telegram.WebApp.MainButton;
+      delete window.Telegram.WebApp.BackButton;
+    }
     window.__triggerMainButton = () => {
       if (mainHandler) mainHandler();
     };
     window.__triggerBackButton = () => {
       if (backHandler) backHandler();
     };
-  }, { injectedStartParam: startParam, requireHash: requireLaunchHash });
+  }, {
+    injectedStartParam: startParam,
+    requireHash: requireLaunchHash,
+    provideNativeActions: nativeActions,
+  });
 
   await page.route("https://telegram.org/**", (route) => route.abort());
   await page.route("https://fonts.googleapis.com/**", (route) => route.abort());
