@@ -69,9 +69,7 @@ def verify_candidate(
     options = candidate.get("options")
     correct_index = candidate.get("correct_index")
     if not isinstance(options, list) or len(options) != 4:
-        raise DeterministicVerificationError(
-            "options_invalid", "Deterministic verification requires four options."
-        )
+        raise DeterministicVerificationError("options_invalid", "Deterministic verification requires four options.")
     if isinstance(correct_index, bool) or not isinstance(correct_index, int) or correct_index not in range(4):
         raise DeterministicVerificationError(
             "answer_invalid", "Deterministic verification requires one declared answer."
@@ -136,11 +134,7 @@ def verify_candidate(
         raise DeterministicVerificationError(
             "proof_invalid", "The proof must provide four machine-readable option values."
         )
-    matches = [
-        index
-        for index, value in enumerate(option_values)
-        if _values_equal(value, solved.value)
-    ]
+    matches = [index for index, value in enumerate(option_values) if _values_equal(value, solved.value)]
     if len(matches) != 1:
         raise DeterministicVerificationError(
             "answer_not_unique",
@@ -201,9 +195,7 @@ def _verify_option_quality(
         )
     kinds = [_option_kind(value) for value in options]
     correct_kind = kinds[correct_index]
-    pattern_safe = not (
-        kinds.count(correct_kind) == 1 and len(set(kinds)) > 1
-    )
+    pattern_safe = not (kinds.count(correct_kind) == 1 and len(set(kinds)) > 1)
     if not pattern_safe and enforce_pattern:
         raise DeterministicVerificationError(
             "option_pattern_leakage",
@@ -238,10 +230,7 @@ def _option_kind(value: Any) -> str:
 
 def _verify_language(candidate: Mapping[str, Any], subject: str) -> None:
     question = str(candidate.get("question") or candidate.get("question_text") or "")
-    explanation = " ".join(
-        str(candidate.get(name) or "")
-        for name in ("explanation", "detailed_explanation")
-    )
+    explanation = " ".join(str(candidate.get(name) or "") for name in ("explanation", "detailed_explanation"))
     combined = question + " " + explanation
     if any(marker in combined for marker in _MOJIBAKE):
         raise DeterministicVerificationError(
@@ -259,9 +248,7 @@ def _verify_language(candidate: Mapping[str, Any], subject: str) -> None:
     terminology = candidate.get("terminology_glossary")
     if terminology is not None:
         if not isinstance(terminology, Mapping):
-            raise DeterministicVerificationError(
-                "terminology_invalid", "Terminology glossary must be an object."
-            )
+            raise DeterministicVerificationError("terminology_invalid", "Terminology glossary must be an object.")
         for canonical, observed in terminology.items():
             if normalize_text(str(canonical)) != normalize_text(str(observed)):
                 raise DeterministicVerificationError(
@@ -284,8 +271,12 @@ def _verify_subject_language_contract(
     allowed = {
         "english": {"grammar_rule", "vocabulary", "comprehension", "error_detection"},
         "bengali": {
-            "grammar_rule", "vocabulary", "comprehension", "literature",
-            "linguistics", "translation",
+            "grammar_rule",
+            "vocabulary",
+            "comprehension",
+            "literature",
+            "linguistics",
+            "translation",
         },
     }
     if form not in allowed[subject]:
@@ -325,9 +316,7 @@ def _verify_subject_language_contract(
         raise DeterministicVerificationError(
             "language_review_invalid", "Language review status is missing or unsupported."
         )
-    human_reviewed = review_status == "human_reviewed" and _has_human_review_attestation(
-        candidate
-    )
+    human_reviewed = review_status == "human_reviewed" and _has_human_review_attestation(candidate)
     if review_status == "human_reviewed" and not human_reviewed:
         raise DeterministicVerificationError(
             "language_review_required",
@@ -338,9 +327,7 @@ def _verify_subject_language_contract(
             "language_review_required",
             "Uncertain language content must enter human review.",
         )
-    if form == "translation" and (
-        verification.get("translation_status") != "human_reviewed" or not human_reviewed
-    ):
+    if form == "translation" and (verification.get("translation_status") != "human_reviewed" or not human_reviewed):
         raise DeterministicVerificationError(
             "translation_review_required",
             "Translation correctness requires a separate human-reviewed decision.",
@@ -378,13 +365,9 @@ def _verify_source_dates(candidate: Mapping[str, Any], *, now: datetime | None) 
             "source_date_inconsistent", "Source publication is after its access timestamp."
         )
     if effective and effective > current:
-        raise DeterministicVerificationError(
-            "fact_not_effective", "The fact is not effective at verification time."
-        )
+        raise DeterministicVerificationError("fact_not_effective", "The fact is not effective at verification time.")
     if expires and expires < current:
-        raise DeterministicVerificationError(
-            "source_stale", "The source fact expired before verification."
-        )
+        raise DeterministicVerificationError("source_stale", "The source fact expired before verification.")
 
 
 def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
@@ -430,10 +413,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             return _SolvedValue(result, (left + right, result))
         if family == "simple_interest":
             result = (
-                _fraction(params["principal"])
-                * _fraction(params["rate_percent"])
-                * _fraction(params["years"])
-                / 100
+                _fraction(params["principal"]) * _fraction(params["rate_percent"]) * _fraction(params["years"]) / 100
             )
             return _SolvedValue(result, (result,))
         if family == "algebra_linear":
@@ -446,9 +426,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             result = remainder / coefficient
             return _SolvedValue(result, (remainder, result))
         if family == "time_work":
-            worker_times = [
-                _fraction(value) for value in _sequence(params.get("worker_times"))
-            ]
+            worker_times = [_fraction(value) for value in _sequence(params.get("worker_times"))]
             if len(worker_times) not in range(2, 7) or any(value <= 0 for value in worker_times):
                 raise ValueError
             combined_rate = sum((Fraction(1, 1) / value for value in worker_times), Fraction())
@@ -457,12 +435,8 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             return _SolvedValue(result, (combined_rate, result), unit)
         if family == "speed_distance":
             requested = str(params.get("requested") or "")
-            distance_unit = _required_unit(
-                params.get("distance_unit"), {"metre", "kilometre"}
-            )
-            time_unit = _required_unit(
-                params.get("time_unit"), {"second", "minute", "hour"}
-            )
+            distance_unit = _required_unit(params.get("distance_unit"), {"metre", "kilometre"})
+            time_unit = _required_unit(params.get("time_unit"), {"second", "minute", "hour"})
             if requested == "distance":
                 speed = _fraction(params["speed"])
                 duration = _fraction(params["time"])
@@ -515,9 +489,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             result = (numerator / denominator).quantize(quantum, rounding=ROUND_HALF_UP)
             return _SolvedValue(result, (result,))
         if family == "gcd_lcm":
-            integer_values = [
-                _positive_int(value) for value in _sequence(params.get("values"))
-            ]
+            integer_values = [_positive_int(value) for value in _sequence(params.get("values"))]
             requested = str(params.get("requested") or "")
             if len(integer_values) not in range(2, 9):
                 raise ValueError
@@ -528,11 +500,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             elif requested == "lcm":
                 integer_result = 1
                 for integer_value in integer_values:
-                    integer_result = (
-                        integer_result
-                        * integer_value
-                        // gcd(integer_result, integer_value)
-                    )
+                    integer_result = integer_result * integer_value // gcd(integer_result, integer_value)
                     if integer_result > 10**12:
                         raise ValueError
             else:
@@ -570,11 +538,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
         if family == "weighted_average":
             values = [_fraction(value) for value in _sequence(params.get("values"))]
             weights = [_fraction(value) for value in _sequence(params.get("weights"))]
-            if (
-                len(values) not in range(2, 9)
-                or len(values) != len(weights)
-                or any(weight <= 0 for weight in weights)
-            ):
+            if len(values) not in range(2, 9) or len(values) != len(weights) or any(weight <= 0 for weight in weights):
                 raise ValueError
             weighted_total = sum(
                 (value * weight for value, weight in zip(values, weights, strict=True)),
@@ -598,10 +562,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
                 or requested_index not in range(len(capitals))
             ):
                 raise ValueError
-            shares = [
-                capital * duration
-                for capital, duration in zip(capitals, durations, strict=True)
-            ]
+            shares = [capital * duration for capital, duration in zip(capitals, durations, strict=True)]
             total_share = sum(shares, Fraction())
             result = total_profit * shares[requested_index] / total_share
             return _SolvedValue(result, (total_share, result), "currency")
@@ -624,9 +585,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             length = _fraction(params["length"])
             width = _fraction(params["width"])
             requested = str(params.get("requested") or "")
-            length_unit = _required_unit(
-                params.get("length_unit"), {"centimetre", "metre", "kilometre"}
-            )
+            length_unit = _required_unit(params.get("length_unit"), {"centimetre", "metre", "kilometre"})
             if length <= 0 or width <= 0:
                 raise ValueError
             if requested == "area":
@@ -648,9 +607,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
                 return _SolvedValue(discount_amount, (discount_amount,), "currency")
             if requested == "sale_price":
                 result = marked_price - discount_amount
-                return _SolvedValue(
-                    result, (discount_amount, result), "currency"
-                )
+                return _SolvedValue(result, (discount_amount, result), "currency")
             raise ValueError
         if family == "simultaneous_linear_equations":
             a1 = _fraction(params["a1"])
@@ -673,9 +630,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             return _SolvedValue(result, (determinant, equation_numerator, result))
         if family == "triangle_measure":
             requested = str(params.get("requested") or "")
-            length_unit = _required_unit(
-                params.get("length_unit"), {"centimetre", "metre", "kilometre"}
-            )
+            length_unit = _required_unit(params.get("length_unit"), {"centimetre", "metre", "kilometre"})
             if requested == "area":
                 base = _fraction(params["base"])
                 height = _fraction(params["height"])
@@ -683,18 +638,13 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
                     raise ValueError
                 product = base * height
                 result = product / 2
-                return _SolvedValue(
-                    result, (product, result), f"square_{length_unit}"
-                )
+                return _SolvedValue(result, (product, result), f"square_{length_unit}")
             if requested == "perimeter":
                 sides = [_fraction(value) for value in _sequence(params.get("sides"))]
                 if (
                     len(sides) != 3
                     or any(side <= 0 for side in sides)
-                    or any(
-                        sides[index] >= sum(sides, Fraction()) - sides[index]
-                        for index in range(3)
-                    )
+                    or any(sides[index] >= sum(sides, Fraction()) - sides[index] for index in range(3))
                 ):
                     raise ValueError
                 result = sum(sides, Fraction())
@@ -702,9 +652,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             raise ValueError
         if family == "permutation_combination":
             item_count = _bounded_int(params.get("n"), minimum=0, maximum=100)
-            selection_count = _bounded_int(
-                params.get("r"), minimum=0, maximum=item_count
-            )
+            selection_count = _bounded_int(params.get("r"), minimum=0, maximum=item_count)
             requested = str(params.get("requested") or "")
             if requested == "permutation":
                 result = perm(item_count, selection_count)
@@ -723,9 +671,9 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             result = constant_product / target_quantity
             return _SolvedValue(result, (constant_product, result))
         if family == "quadratic_equation_root":
-            coefficient_a = _bounded_int(params.get("a"), minimum=-10**6, maximum=10**6)
-            coefficient_b = _bounded_int(params.get("b"), minimum=-10**6, maximum=10**6)
-            coefficient_c = _bounded_int(params.get("c"), minimum=-10**6, maximum=10**6)
+            coefficient_a = _bounded_int(params.get("a"), minimum=-(10**6), maximum=10**6)
+            coefficient_b = _bounded_int(params.get("b"), minimum=-(10**6), maximum=10**6)
+            coefficient_c = _bounded_int(params.get("c"), minimum=-(10**6), maximum=10**6)
             requested = str(params.get("requested") or "")
             if not coefficient_a or requested not in {"smaller", "larger"}:
                 raise ValueError
@@ -743,6 +691,74 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             )
             result = roots[0] if requested == "smaller" else roots[1]
             return _SolvedValue(result, (discriminant, square_root, result))
+        if family == "age_ratio":
+            older_ratio = _positive_int(params.get("older_ratio"), maximum=1000)
+            younger_ratio = _positive_int(params.get("younger_ratio"), maximum=1000)
+            age_difference = _fraction(params["age_difference"])
+            years_offset = _fraction(params.get("years_offset", 0))
+            requested = str(params.get("requested") or "")
+            if (
+                older_ratio <= younger_ratio
+                or age_difference <= 0
+                or age_difference > 200
+                or abs(years_offset) > 200
+            ):
+                raise ValueError
+            scale = age_difference / (older_ratio - younger_ratio)
+            if requested == "older_present":
+                referenced_age = older_ratio * scale
+            elif requested == "younger_present":
+                referenced_age = younger_ratio * scale
+            else:
+                raise ValueError
+            result = referenced_age - years_offset
+            if referenced_age <= 0 or referenced_age > 200 or result <= 0 or result > 200:
+                raise ValueError
+            return _SolvedValue(result, (scale, referenced_age, result), "year")
+        if family == "boat_stream":
+            boat_speed = _fraction(params["boat_speed"])
+            stream_speed = _fraction(params["stream_speed"])
+            requested = str(params.get("requested") or "")
+            speed_unit = _required_unit(params.get("speed_unit"), {"kilometre/hour", "metre/second"})
+            distance_unit = _required_unit(params.get("distance_unit"), {"kilometre", "metre"})
+            compatible = {
+                "kilometre/hour": ("kilometre", "hour"),
+                "metre/second": ("metre", "second"),
+            }
+            expected_distance_unit, time_unit = compatible[speed_unit]
+            if boat_speed <= stream_speed or stream_speed <= 0 or distance_unit != expected_distance_unit:
+                raise ValueError
+            if requested.startswith("upstream"):
+                effective_speed = boat_speed - stream_speed
+            elif requested.startswith("downstream"):
+                effective_speed = boat_speed + stream_speed
+            else:
+                raise ValueError
+            if requested.endswith("_speed"):
+                return _SolvedValue(effective_speed, (effective_speed,), speed_unit)
+            if requested.endswith("_time"):
+                distance = _fraction(params["distance"])
+                if distance <= 0:
+                    raise ValueError
+                result = distance / effective_speed
+                return _SolvedValue(result, (effective_speed, result), time_unit)
+            raise ValueError
+        if family == "circle_measure":
+            radius = _fraction(params["radius"])
+            pi_numerator = _positive_int(params.get("pi_numerator"), maximum=10000)
+            pi_denominator = _positive_int(params.get("pi_denominator"), maximum=10000)
+            pi_value = Fraction(pi_numerator, pi_denominator)
+            requested = str(params.get("requested") or "")
+            length_unit = _required_unit(params.get("length_unit"), {"centimetre", "metre", "kilometre"})
+            if radius <= 0 or not Fraction(3) < pi_value < Fraction(4):
+                raise ValueError
+            if requested == "area":
+                result = pi_value * radius * radius
+                return _SolvedValue(result, (result,), f"square_{length_unit}")
+            if requested == "circumference":
+                result = 2 * pi_value * radius
+                return _SolvedValue(result, (result,), length_unit)
+            raise ValueError
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         raise DeterministicVerificationError(
             "math_proof_invalid", "The mathematics proof parameters are invalid."
@@ -760,9 +776,7 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
             values = [_fraction(value) for value in _sequence(params.get("sequence"))]
             if len(values) < 3:
                 raise ValueError
-            differences = [
-                right - left for left, right in zip(values, values[1:], strict=False)
-            ]
+            differences = [right - left for left, right in zip(values, values[1:], strict=False)]
             if len(set(differences)) != 1:
                 raise ValueError
             result = values[-1] + differences[0]
@@ -801,10 +815,7 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
             signed_shift = shift if direction == "encode" else -shift if direction == "decode" else 0
             if not signed_shift:
                 raise ValueError
-            result = "".join(
-                chr((ord(character) - ord("A") + signed_shift) % 26 + ord("A"))
-                for character in source
-            )
+            result = "".join(chr((ord(character) - ord("A") + signed_shift) % 26 + ord("A")) for character in source)
             return _SolvedValue(result, (result,))
         if family == "direction_path":
             moves = _sequence(params.get("moves"))
@@ -813,7 +824,10 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
             x = Fraction()
             y = Fraction()
             vectors = {
-                "N": (0, 1), "S": (0, -1), "E": (1, 0), "W": (-1, 0),
+                "N": (0, 1),
+                "S": (0, -1),
+                "E": (1, 0),
+                "W": (-1, 0),
             }
             for move in moves:
                 if not isinstance(move, Mapping):
@@ -851,10 +865,7 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
             return _SolvedValue(result, (len(valid_orders), result))
         if family == "syllogism_finite_sets":
             raw_sets = _mapping(params.get("sets"))
-            sets = {
-                str(name): {str(value) for value in _sequence(members)}
-                for name, members in raw_sets.items()
-            }
+            sets = {str(name): {str(value) for value in _sequence(members)} for name, members in raw_sets.items()}
             left = str(params.get("left") or "")
             right = str(params.get("right") or "")
             relation = str(params.get("relation") or "")
@@ -894,51 +905,38 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
             if len(values) not in range(3, 9) or any(not value for value in values):
                 raise ValueError
             ratio = values[1] / values[0]
-            if not ratio or abs(ratio) > 100 or any(
-                right != left * ratio
-                for left, right in zip(values, values[1:], strict=False)
+            if (
+                not ratio
+                or abs(ratio) > 100
+                or any(right != left * ratio for left, right in zip(values, values[1:], strict=False))
             ):
                 raise ValueError
             result = values[-1] * ratio
             return _SolvedValue(result, (ratio, result))
         if family == "alphabet_series_next":
             alphabet_positions = [
-                _bounded_int(value, minimum=1, maximum=26)
-                for value in _sequence(params.get("positions"))
+                _bounded_int(value, minimum=1, maximum=26) for value in _sequence(params.get("positions"))
             ]
             if len(alphabet_positions) not in range(3, 13):
                 raise ValueError
             alphabet_steps = [
-                (right - left) % 26
-                for left, right in zip(
-                    alphabet_positions, alphabet_positions[1:], strict=False
-                )
+                (right - left) % 26 for left, right in zip(alphabet_positions, alphabet_positions[1:], strict=False)
             ]
             if not alphabet_steps[0] or len(set(alphabet_steps)) != 1:
                 raise ValueError
-            result = (
-                (alphabet_positions[-1] - 1 + alphabet_steps[0]) % 26
-            ) + 1
+            result = ((alphabet_positions[-1] - 1 + alphabet_steps[0]) % 26) + 1
             return _SolvedValue(result, (alphabet_steps[0], result))
         if family == "quadratic_series_next":
             values = [_fraction(value) for value in _sequence(params.get("sequence"))]
             if len(values) not in range(4, 10):
                 raise ValueError
-            differences = [
-                right - left
-                for left, right in zip(values, values[1:], strict=False)
-            ]
-            second_differences = [
-                right - left
-                for left, right in zip(differences, differences[1:], strict=False)
-            ]
+            differences = [right - left for left, right in zip(values, values[1:], strict=False)]
+            second_differences = [right - left for left, right in zip(differences, differences[1:], strict=False)]
             if len(set(second_differences)) != 1 or not second_differences[0]:
                 raise ValueError
             next_difference = differences[-1] + second_differences[0]
             result = values[-1] + next_difference
-            return _SolvedValue(
-                result, (second_differences[0], next_difference, result)
-            )
+            return _SolvedValue(result, (second_differences[0], next_difference, result))
         if family == "alternating_arithmetic_series_next":
             values = [_fraction(value) for value in _sequence(params.get("sequence"))]
             if len(values) not in range(6, 13):
@@ -946,12 +944,7 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
             subsequences = (values[::2], values[1::2])
             steps: list[Fraction] = []
             for subsequence in subsequences:
-                differences = [
-                    right - left
-                    for left, right in zip(
-                        subsequence, subsequence[1:], strict=False
-                    )
-                ]
+                differences = [right - left for left, right in zip(subsequence, subsequence[1:], strict=False)]
                 if len(differences) < 2 or len(set(differences)) != 1:
                     raise ValueError
                 steps.append(differences[0])
@@ -960,6 +953,42 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
             next_parity = len(values) % 2
             result = subsequences[next_parity][-1] + steps[next_parity]
             return _SolvedValue(result, (steps[0], steps[1], result))
+        if family == "two_set_cardinality":
+            first_count = _bounded_int(params.get("first_count"), minimum=0, maximum=10**9)
+            second_count = _bounded_int(params.get("second_count"), minimum=0, maximum=10**9)
+            intersection = _bounded_int(params.get("intersection"), minimum=0, maximum=10**9)
+            requested = str(params.get("requested") or "")
+            if intersection > min(first_count, second_count):
+                raise ValueError
+            union = first_count + second_count - intersection
+            if requested == "union":
+                return _SolvedValue(union, (union,))
+            if requested == "only_first":
+                result = first_count - intersection
+            elif requested == "only_second":
+                result = second_count - intersection
+            elif requested == "neither":
+                total_population = _bounded_int(params.get("total_population"), minimum=0, maximum=10**9)
+                if total_population < union:
+                    raise ValueError
+                result = total_population - union
+            else:
+                raise ValueError
+            return _SolvedValue(result, (union, result))
+        if family == "bidirectional_rank_total":
+            rank_from_left = _positive_int(params.get("rank_from_left"), maximum=10**9)
+            rank_from_right = _positive_int(params.get("rank_from_right"), maximum=10**9)
+            result = rank_from_left + rank_from_right - 1
+            return _SolvedValue(result, (result,))
+        if family == "clock_mirror_time":
+            hour = _bounded_int(params.get("hour"), minimum=1, maximum=12)
+            minute = _bounded_int(params.get("minute"), minimum=0, maximum=59)
+            shown_minutes = (hour % 12) * 60 + minute
+            mirror_minutes = (720 - shown_minutes) % 720
+            mirror_hour = mirror_minutes // 60 or 12
+            mirror_minute = mirror_minutes % 60
+            result = f"{mirror_hour:02d}:{mirror_minute:02d}"
+            return _SolvedValue(result, (result,))
     except (TypeError, ValueError) as exc:
         raise DeterministicVerificationError(
             "reasoning_proof_invalid", "The reasoning puzzle is inconsistent or under-constrained."
@@ -997,19 +1026,11 @@ def _verify_explanation_values(proof: Mapping[str, Any], expected: Sequence[Any]
 
 def _verify_option_units(proof: Mapping[str, Any], expected: str) -> None:
     option_units = proof.get("option_units")
-    if (
-        not isinstance(option_units, Sequence)
-        or isinstance(option_units, (str, bytes))
-        or len(option_units) != 4
-    ):
-        raise DeterministicVerificationError(
-            "units_missing", "The proof must provide a unit for every option."
-        )
+    if not isinstance(option_units, Sequence) or isinstance(option_units, (str, bytes)) or len(option_units) != 4:
+        raise DeterministicVerificationError("units_missing", "The proof must provide a unit for every option.")
     normalized = [normalize_text(str(value)) for value in option_units]
     if any(value != normalize_text(expected) for value in normalized):
-        raise DeterministicVerificationError(
-            "units_inconsistent", "Every option must use the proved answer unit."
-        )
+        raise DeterministicVerificationError("units_inconsistent", "Every option must use the proved answer unit.")
 
 
 def _required_unit(value: Any, allowed: set[str]) -> str:
@@ -1022,10 +1043,7 @@ def _required_unit(value: Any, allowed: set[str]) -> str:
 def _solve_evidence(candidate: Mapping[str, Any], proof: Mapping[str, Any]) -> str:
     answer = str(candidate.get("knowledge_answer_value") or "").strip()
     evidence = normalize_text(
-        " ".join(
-            str(candidate.get(name) or "")
-            for name in ("canonical_claim", "evidence_summary")
-        )
+        " ".join(str(candidate.get(name) or "") for name in ("canonical_claim", "evidence_summary"))
     )
     if not answer or normalize_text(answer) not in evidence:
         raise DeterministicVerificationError(
@@ -1033,9 +1051,7 @@ def _solve_evidence(candidate: Mapping[str, Any], proof: Mapping[str, Any]) -> s
         )
     evidence_values = proof.get("evidence_values")
     if not isinstance(evidence_values, Sequence) or isinstance(evidence_values, (str, bytes)):
-        raise DeterministicVerificationError(
-            "proof_invalid", "Evidence proof values must be a list."
-        )
+        raise DeterministicVerificationError("proof_invalid", "Evidence proof values must be a list.")
     supported = [value for value in evidence_values if normalize_text(str(value)) in evidence]
     if len({normalize_text(str(value)) for value in supported}) != 1:
         raise DeterministicVerificationError(
@@ -1061,13 +1077,9 @@ def _solve_evidence_span(candidate: Mapping[str, Any], proof: Mapping[str, Any])
         )
     evidence_values = proof.get("evidence_values")
     if not isinstance(evidence_values, Sequence) or isinstance(evidence_values, (str, bytes)):
-        raise DeterministicVerificationError(
-            "proof_invalid", "Evidence proof values must be a list."
-        )
+        raise DeterministicVerificationError("proof_invalid", "Evidence proof values must be a list.")
     supported = {
-        normalize_text(str(value))
-        for value in evidence_values
-        if str(value).strip() and str(value).strip() in span
+        normalize_text(str(value)) for value in evidence_values if str(value).strip() and str(value).strip() in span
     }
     if supported != {normalize_text(answer)}:
         raise DeterministicVerificationError(
@@ -1135,9 +1147,7 @@ def _bounded_int(value: Any, *, minimum: int, maximum: int) -> int:
 
 def _mapping(value: Any) -> Mapping[str, Any]:
     if not isinstance(value, Mapping):
-        raise DeterministicVerificationError(
-            "proof_invalid", "Proof parameters must be an object."
-        )
+        raise DeterministicVerificationError("proof_invalid", "Proof parameters must be an object.")
     return value
 
 
@@ -1154,9 +1164,7 @@ def _parse_datetime(value: Any, label: str) -> datetime | None:
     try:
         return _utc(datetime.fromisoformat(text.replace("Z", "+00:00")))
     except ValueError as exc:
-        raise DeterministicVerificationError(
-            "source_date_invalid", f"The {label} timestamp is invalid."
-        ) from exc
+        raise DeterministicVerificationError("source_date_invalid", f"The {label} timestamp is invalid.") from exc
 
 
 def _utc(value: datetime) -> datetime:
