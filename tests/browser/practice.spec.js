@@ -18,7 +18,7 @@ async function expectWcag22Aa(page) {
 }
 
 async function openPractice(page, source, options = {}) {
-  await installTelegramMock(page);
+  await installTelegramMock(page, { nativeActions: false });
   const api = await installApiMocks(page, {
     practiceSource: source,
     ...options,
@@ -27,11 +27,100 @@ async function openPractice(page, source, options = {}) {
   return api;
 }
 
+test("Telegram MainButton is the only primary action throughout practice", async ({
+  page,
+}) => {
+  const api = await installApiMocks(page, {
+    practiceSource: "due",
+    practiceCorrect: true,
+    failFirstPractice: true,
+  });
+  await installTelegramMock(page);
+  await page.goto("/practice.html?source=due");
+  await expect(page.locator("#practice")).toBeVisible();
+  await expect(page.locator("body")).toHaveClass(/tg-native/);
+  await expect(page.locator("#submit")).toBeHidden();
+
+  let nativeState = await page.evaluate(() => window.__mobileQa);
+  expect(nativeState.mainVisible).toBe(true);
+  expect(nativeState.mainParams.text).toBe("উত্তর বেছে নিন");
+  expect(nativeState.mainParams.is_active).toBe(false);
+
+  await page.locator(".option").first().click();
+  nativeState = await page.evaluate(() => window.__mobileQa);
+  expect(nativeState.mainParams.text).toBe("উত্তর যাচাই করুন");
+  expect(nativeState.mainParams.is_active).toBe(true);
+
+  await page.evaluate(() => {
+    window.__triggerMainButton();
+    window.__triggerMainButton();
+  });
+  await expect(page.locator("#feedback")).toContainText("নিশ্চিত হয়নি");
+  expect(api.practiceSubmissions).toHaveLength(1);
+  const firstAttemptId = api.practiceSubmissions[0].attemptId;
+  nativeState = await page.evaluate(() => window.__mobileQa);
+  expect(nativeState.mainVisible).toBe(true);
+  expect(nativeState.mainParams.text).toBe("একই উত্তর আবার পাঠান");
+  expect(nativeState.mainParams.is_active).toBe(true);
+
+  await page.evaluate(() => window.__triggerMainButton());
+  await expect(page.locator("#feedback")).toBeVisible();
+  await expect(page.locator("#feedback")).toContainText("সঠিক উত্তর");
+  expect(api.practiceSubmissions).toHaveLength(2);
+  expect(api.practiceSubmissions[1].attemptId).toBe(firstAttemptId);
+  await expect(page.locator("#next")).toBeHidden();
+  nativeState = await page.evaluate(() => window.__mobileQa);
+  expect(nativeState.mainParams.text).toBe("পরবর্তী প্রশ্ন");
+  expect(nativeState.mainParams.is_active).toBe(true);
+
+  await page.evaluate(() => window.__triggerMainButton());
+  await expect(page.locator("#position")).toContainText("২ / ২");
+  await page.locator(".option").first().click();
+  await page.evaluate(() => window.__triggerMainButton());
+  await expect(page.locator("#feedback")).toBeVisible();
+  nativeState = await page.evaluate(() => window.__mobileQa);
+  expect(nativeState.mainParams.text).toBe("পুনরাবৃত্তি শেষ করুন");
+
+  await page.evaluate(() => window.__triggerMainButton());
+  await expect(page.locator("#completed")).toBeVisible();
+  nativeState = await page.evaluate(() => window.__mobileQa);
+  expect(nativeState.mainVisible).toBe(false);
+});
+
+test("Telegram practice authentication failure leaves a working recovery action", async ({
+  page,
+}) => {
+  await installTelegramMock(page);
+  await installApiMocks(page, { practiceSource: "due" });
+  await page.route(/\/api\/me\/practice\/[0-9a-f-]+$/, (route) =>
+    route.fulfill({
+      status: 401,
+      contentType: "application/json",
+      body: JSON.stringify({ detail: "private diagnostic" }),
+    }),
+  );
+  await page.goto("/practice.html?source=due");
+  await page.locator(".option").first().click();
+  await page.evaluate(() => window.__triggerMainButton());
+
+  await expect(page.locator("#feedback")).toContainText("সেশন যাচাই করা যায়নি");
+  await expect(page.locator("#feedback .primary")).toBeVisible();
+  await expect(page.locator("#feedback .primary")).toHaveAttribute(
+    "href",
+    "https://t.me/dailyquizzerbot/quiz_master",
+  );
+  const nativeState = await page.evaluate(() => window.__mobileQa);
+  expect(nativeState.mainVisible).toBe(false);
+  await expect(page.getByText("private diagnostic")).toHaveCount(0);
+});
+
 test("revision queue reveals checked answers, reports issues, and plays one mistake sound", async ({
   page,
 }, testInfo) => {
   const api = await openPractice(page, "due");
   await expect(page.locator("#practice")).toBeVisible();
+  await expect(page.locator("body")).not.toHaveClass(/tg-native/);
+  await expect(page.locator("#submit")).toBeVisible();
   await expect(page.locator("#source-due")).toHaveClass(/active/);
   await expect(page.locator("#source-due")).toHaveAttribute("aria-current", "page");
   await expect(page.locator(".option")).toHaveCount(4);

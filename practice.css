@@ -54,6 +54,7 @@
   body[data-screen-state="practice"] .app{padding-bottom:calc(66px + var(--practice-safe-bottom))}
   body[data-screen-state="practice"] #next-wrap{bottom:var(--practice-safe-bottom)}
   body[data-screen-state="practice"] .feedback{padding-bottom:76px;scroll-margin-bottom:calc(64px + var(--practice-safe-bottom))}
+  body.tg-native .telegram-main-fallback{display:none}
   .bottom a{min-height:48px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;text-decoration:none;color:var(--hint);padding:5px 2px;border-radius:12px;font-size:11px;font-weight:800;line-height:1.1;white-space:nowrap}.bottom svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-linecap:round;stroke-linejoin:round;stroke-width:2}.bottom a.active{background:color-mix(in srgb,var(--button) 12%,transparent);color:var(--button)}
   @media(max-width:520px){.app{padding:14px 10px calc(120px + var(--practice-safe-bottom))}.card{padding:15px}.question{font-size:19px}.actions{flex-direction:column}.state{padding:22px 8px}#next-wrap{padding-top:8px}}
   @media(max-width:400px){.bottom a{font-size:11px}.bottom svg{width:18px;height:18px}}
