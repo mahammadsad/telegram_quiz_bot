@@ -458,9 +458,25 @@ The timed-mock follow-up now:
   controls when those native APIs are unavailable; and
 - aligns mock and syllabus navigation with the four-destination shell.
 
-Verification at this checkpoint: 264 Playwright mobile tests, six HTTPS
-service-worker tests, 50 focused Python contract tests, Ruff, mypy, JavaScript
-syntax validation and npm audit all pass. The real Telegram Android/iOS and
+The practice/revision follow-up now:
+
+- makes Telegram MainButton the single primary submit, retry and next action
+  during an active queue while retaining the in-page action footer for browsers
+  and clients without the complete native API;
+- keeps submit inactive until an answer is selected and blocks duplicate native
+  taps while an answer write is in flight;
+- preserves the same attempt UUID for uncertain-write retries through the
+  native action; and
+- hides a stale native action after auth/conflict failures while presenting a
+  usable contextual recovery link. The quiz shell also detects incomplete
+  Telegram action APIs before enabling native-only presentation, so the
+  browser fallback does not crash after cross-page navigation.
+
+Verification at this checkpoint: 272 Playwright mobile tests, six HTTPS
+service-worker tests and 684 Python tests pass (39 environment-dependent tests
+skip locally). Ruff, mypy, JavaScript syntax validation, lock/migration-ledger
+checks, public-data history checks, Bandit, pip-audit and npm audit also pass.
+The real Telegram Android/iOS and
 assistive-technology matrix remains a manual release-signoff item; this entry
 does not claim that external validation is complete.
 

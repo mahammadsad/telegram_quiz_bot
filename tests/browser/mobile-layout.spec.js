@@ -63,14 +63,16 @@ async function setMobileAcceptanceEnvironment(page, scenario) {
 
 async function expectSingleActionSurfaceAcrossMobileMatrix(
   page,
-  { actionSelector, nativeAction = false },
+  { actionSelector = null, nativeAction = false },
 ) {
   for (const scenario of MOBILE_ACCEPTANCE_SCENARIOS) {
     await test.step(scenario.name, async () => {
       await setMobileAcceptanceEnvironment(page, scenario);
-      const action = page.locator(actionSelector);
-      await expect(action).toBeVisible();
-      await action.evaluate((element) => element.scrollIntoView({ block: "center" }));
+      if (actionSelector) {
+        const action = page.locator(actionSelector);
+        await expect(action).toBeVisible();
+        await action.evaluate((element) => element.scrollIntoView({ block: "center" }));
+      }
 
       const layout = await page.evaluate((selector) => {
         const visible = (element) => {
@@ -95,7 +97,7 @@ async function expectSingleActionSurfaceAcrossMobileMatrix(
             height: rect.height,
           };
         };
-        const actionElement = document.querySelector(selector);
+        const actionElement = selector ? document.querySelector(selector) : null;
         const domSurfaces = Array.from(
           document.querySelectorAll(
             ".bottom-nav, nav.bottom, #screen-quiz .browser-only, #next-wrap, .selector-dialog[open] .dialog-actions",
@@ -112,9 +114,9 @@ async function expectSingleActionSurfaceAcrossMobileMatrix(
         if (nativeMainVisible) {
           surfaces.push({ name: "telegram-main-button", containsAction: false, rect: null });
         }
-        const actionRect = rectOf(actionElement);
+        const actionRect = actionElement ? rectOf(actionElement) : null;
         const overlaps = surfaces
-          .filter((surface) => surface.rect && !surface.containsAction)
+          .filter((surface) => actionRect && surface.rect && !surface.containsAction)
           .filter(
             (surface) =>
               actionRect.right > surface.rect.left &&
@@ -142,14 +144,16 @@ async function expectSingleActionSurfaceAcrossMobileMatrix(
         layout.viewport.width + 1,
       );
       expect(layout.surfaces, scenario.name).toHaveLength(1);
-      expect(layout.actionRect.left, scenario.name).toBeGreaterThanOrEqual(0);
-      expect(layout.actionRect.right, scenario.name).toBeLessThanOrEqual(
-        layout.viewport.width + 1,
-      );
-      expect(layout.actionRect.top, scenario.name).toBeGreaterThanOrEqual(0);
-      expect(layout.actionRect.bottom, scenario.name).toBeLessThanOrEqual(
-        layout.viewport.height - 34 + 1,
-      );
+      if (layout.actionRect) {
+        expect(layout.actionRect.left, scenario.name).toBeGreaterThanOrEqual(0);
+        expect(layout.actionRect.right, scenario.name).toBeLessThanOrEqual(
+          layout.viewport.width + 1,
+        );
+        expect(layout.actionRect.top, scenario.name).toBeGreaterThanOrEqual(0);
+        expect(layout.actionRect.bottom, scenario.name).toBeLessThanOrEqual(
+          layout.viewport.height - 34 + 1,
+        );
+      }
       expect(layout.overlaps, scenario.name).toEqual([]);
       if (nativeAction) {
         expect(layout.nativeMainVisible, scenario.name).toBe(true);
@@ -251,11 +255,11 @@ test("practice feedback keeps one safe next action across the mobile acceptance 
   await page.goto("/practice.html?source=due");
   await expect(page.locator("#practice")).toBeVisible();
   await page.locator(".option").first().click();
-  await page.locator("#submit").click();
+  await page.evaluate(() => window.__triggerMainButton());
   await expect(page.locator("#feedback")).toBeVisible();
 
   await expectSingleActionSurfaceAcrossMobileMatrix(page, {
-    actionSelector: "#next",
+    nativeAction: true,
   });
 });
 
@@ -301,9 +305,9 @@ test("practice completed state keeps one safe next action across the mobile acce
   await expect(page.locator("#practice")).toBeVisible();
   for (let index = 0; index < 2; index += 1) {
     await page.locator(".option").first().click();
-    await page.locator("#submit").click();
+    await page.evaluate(() => window.__triggerMainButton());
     await expect(page.locator("#feedback")).toBeVisible();
-    await page.locator("#next").click();
+    await page.evaluate(() => window.__triggerMainButton());
   }
   await expect(page.locator("#completed")).toBeVisible();
 

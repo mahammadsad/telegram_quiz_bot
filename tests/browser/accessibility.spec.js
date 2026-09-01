@@ -103,7 +103,7 @@ test("syllabus map satisfies automated WCAG 2.2 AA checks", async ({ page }) => 
 });
 
 test("revision practice satisfies automated WCAG 2.2 AA checks", async ({ page }) => {
-  await installTelegramMock(page);
+  await installTelegramMock(page, { nativeActions: false });
   await installApiMocks(page, { practiceSource: "due" });
   await page.goto("/practice.html?source=due");
 
@@ -112,7 +112,7 @@ test("revision practice satisfies automated WCAG 2.2 AA checks", async ({ page }
 });
 
 test("practice feedback satisfies automated WCAG 2.2 AA checks", async ({ page }) => {
-  await installTelegramMock(page);
+  await installTelegramMock(page, { nativeActions: false });
   await installApiMocks(page, { practiceSource: "due" });
   await page.goto("/practice.html?source=due");
 
@@ -127,7 +127,7 @@ test("practice feedback satisfies automated WCAG 2.2 AA checks", async ({ page }
 test("practice authentication error satisfies automated WCAG 2.2 AA checks", async ({
   page,
 }) => {
-  await installTelegramMock(page);
+  await installTelegramMock(page, { nativeActions: false });
   await installApiMocks(page, { practiceSource: "due" });
   await page.route(/\/api\/me\/practice-bootstrap(?:\?.*)?$/, (route) =>
     route.fulfill({
@@ -146,7 +146,7 @@ test("practice authentication error satisfies automated WCAG 2.2 AA checks", asy
 });
 
 test("practice empty state satisfies automated WCAG 2.2 AA checks", async ({ page }) => {
-  await installTelegramMock(page);
+  await installTelegramMock(page, { nativeActions: false });
   await installApiMocks(page, {
     practiceSource: "due",
     emptyPractice: true,
@@ -162,7 +162,7 @@ test("practice empty state satisfies automated WCAG 2.2 AA checks", async ({ pag
 test("practice completed state satisfies automated WCAG 2.2 AA checks", async ({
   page,
 }) => {
-  await installTelegramMock(page);
+  await installTelegramMock(page, { nativeActions: false });
   await installApiMocks(page, {
     practiceSource: "due",
     practiceCorrect: true,

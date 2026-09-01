@@ -3,6 +3,10 @@
 
   var tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
   var isTelegram = !!(tg && tg.initData);
+  var hasTelegramActions = !!(isTelegram && tg.MainButton && tg.BackButton &&
+    typeof tg.MainButton.onClick === "function" && typeof tg.MainButton.setParams === "function" &&
+    typeof tg.MainButton.hide === "function" && typeof tg.BackButton.onClick === "function" &&
+    typeof tg.BackButton.show === "function" && typeof tg.BackButton.hide === "function");
   var telegramLaunchHash = /(?:^|&)tgWebAppData=/.test(window.location.hash.slice(1))
     ? window.location.hash
     : "";
@@ -11,7 +15,7 @@
     try {
       tg.ready();
       tg.expand();
-      document.body.classList.toggle("tg-native", isTelegram);
+      document.body.classList.toggle("tg-native", hasTelegramActions);
       if (isTelegram) {
         tg.enableClosingConfirmation();
         try { tg.setHeaderColor("#f5f7fb"); tg.setBackgroundColor("#f5f7fb"); } catch(e){}
@@ -93,7 +97,7 @@
     byId("question-map-toggle").setAttribute("aria-expanded", "false");
   });
 
-  if (isTelegram) {
+  if (hasTelegramActions) {
     tg.MainButton.onClick(function(){
       if (screen === "intro") legacyLocal ? loadQuiz() : startQuiz();
       else if (screen === "resources") startQuiz();
@@ -293,7 +297,7 @@
   }
 
   function syncTelegramButtons(){
-    if (!isTelegram) return;
+    if (!hasTelegramActions) return;
     if (isQuestionMapOpen() || isSubmitModalOpen()) {
       tg.MainButton.hide();
       tg.BackButton.show();

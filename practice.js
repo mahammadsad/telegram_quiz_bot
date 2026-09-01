@@ -2,6 +2,8 @@
   "use strict";
   var tg=window.Telegram&&window.Telegram.WebApp?window.Telegram.WebApp:null;
   var initData=tg&&tg.initData?tg.initData:"";
+  var hasTelegramMainAction=!!(initData&&tg.MainButton&&typeof tg.MainButton.setParams==="function"&&typeof tg.MainButton.onClick==="function"&&typeof tg.MainButton.hide==="function");
+  document.body.classList.toggle("tg-native",hasTelegramMainAction);
   var telegramLaunchHash=/(?:^|&)tgWebAppData=/.test(window.location.hash.slice(1))
     ?window.location.hash:"";
   installTelegramNavigation();
@@ -13,7 +15,7 @@
   if(["wrong","due","bookmark","weak_topic"].indexOf(requestedSource)<0)requestedSource="wrong";
   var launchQuizId=(tg&&tg.initDataUnsafe&&tg.initDataUnsafe.start_param)||"";
   var quizHomeUrl=telegramUrl(launchQuizId?"/?quiz="+encodeURIComponent(launchQuizId):"/");
-  var rows=[],index=0,selected=null,started=0,submitting=false,answerFrozen=false;
+  var rows=[],index=0,selected=null,started=0,submitting=false,answerFrozen=false,submitRetryAllowed=true;
   var queueMode="",queueSource="",attemptId="",audioContext=null;
   var activeState="loading",slowTimer=null,retryTimer=null,submitRetryTimer=null;
   var feedbackPlayed=Object.create(null);
@@ -66,7 +68,27 @@
     document.body.dataset.screenState=name;
     ["loading","empty","completed","error","practice"].forEach(function(k){el(k).classList.toggle("hidden",k!==name)});
     el("practice-card").setAttribute("aria-busy",name==="loading"?"true":"false");
+    syncTelegramMainAction();
     if(moveFocus&&name!=="practice")window.requestAnimationFrame(function(){try{el(name).focus()}catch(e){}});
+  }
+  function telegramActionColor(){
+    var value=tg&&tg.themeParams?String(tg.themeParams.button_color||""):"";
+    return /^#[0-9a-f]{6}$/i.test(value)?value:"#b42318";
+  }
+  function syncTelegramMainAction(){
+    if(!hasTelegramMainAction)return;
+    if(activeState!=="practice"){tg.MainButton.hide();return}
+    if(!el("next-wrap").classList.contains("hidden")){
+      tg.MainButton.setParams({text:el("next").textContent,is_visible:true,is_active:true,color:telegramActionColor(),text_color:"#ffffff"});return;
+    }
+    if(!submitRetryAllowed){tg.MainButton.hide();return}
+    var active=selected!==null&&!submitting&&!el("submit").disabled;
+    tg.MainButton.setParams({text:submitting?"উত্তর যাচাই হচ্ছে...":selected===null?"উত্তর বেছে নিন":el("submit").textContent,is_visible:true,is_active:active,color:telegramActionColor(),text_color:"#ffffff"});
+  }
+  function telegramMainAction(){
+    if(activeState!=="practice"||submitting)return;
+    if(!el("next-wrap").classList.contains("hidden")){next();return}
+    submit();
   }
   function setCount(value){el("count").textContent=value===null?"—":bn(value)+(value===0?"":"টি")}
   function request(path,options){
@@ -150,6 +172,7 @@
     if(active)link.setAttribute("aria-current","page");else link.removeAttribute("aria-current");
   });
   el("submit").addEventListener("click",submit);el("next").addEventListener("click",next);el("retry").addEventListener("click",load);
+  if(hasTelegramMainAction){tg.MainButton.onClick(telegramMainAction);if(tg.BackButton&&typeof tg.BackButton.hide==="function")tg.BackButton.hide()}
   document.addEventListener("keydown",function(event){if(answerFrozen||submitting)return;if(["1","2","3","4"].indexOf(event.key)>=0){selected=+event.key-1;savePending(false);renderOptions()}else if(event.key==="Enter"&&selected!==null)submit()});
   load();
 
@@ -176,7 +199,7 @@
   }
 
   function render(){
-    state("practice");submitting=false;started=performance.now();restorePending();
+    state("practice");submitting=false;submitRetryAllowed=true;started=performance.now();restorePending();
     el("marked").checked=!!rows[index].markedForReview;el("marked").disabled=answerFrozen;
     el("feedback").classList.add("hidden");el("next-wrap").classList.add("hidden");el("submit").parentElement.classList.remove("hidden");
     el("submit").textContent=answerFrozen?"একই উত্তর আবার পাঠান":"উত্তর যাচাই করুন";
@@ -197,7 +220,7 @@
     });
     updateSubmitState();
   }
-  function updateSubmitState(){el("submit").disabled=selected===null||submitting}
+  function updateSubmitState(){el("submit").disabled=selected===null||submitting;syncTelegramMainAction()}
 
   function primeFeedback(){
     if(queueMode!=="revision"||!preferences.sound)return;
@@ -213,8 +236,9 @@
   }
 
   function submit(){
-    if(submitting||selected===null)return;primeFeedback();submitting=true;answerFrozen=true;savePending(true);renderOptions();el("feedback").classList.add("hidden");
+    if(submitting||selected===null)return;primeFeedback();submitting=true;submitRetryAllowed=true;answerFrozen=true;savePending(true);renderOptions();el("feedback").classList.add("hidden");
     el("submit").disabled=true;el("submit").textContent="উত্তর যাচাই হচ্ছে...";el("marked").disabled=true;
+    syncTelegramMainAction();
     var seconds=Math.min(3600,Math.max(0,(performance.now()-started)/1000));
     request("/api/me/practice/"+encodeURIComponent(rows[index].questionId),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:initData,attemptId:attemptId,selectedIndex:selected,sourceType:queueSource,mode:queueMode,responseTimeSeconds:seconds,markedForReview:el("marked").checked})})
       .then(function(result){
@@ -226,6 +250,7 @@
         if(result.sourceUrl&&/^https:\/\//i.test(result.sourceUrl)){var link=document.createElement("a");link.href=result.sourceUrl;link.target="_blank";link.rel="noopener noreferrer";link.textContent="যাচাই করা উৎস দেখুন";box.appendChild(link)}
         if(result.mode==="revision")appendReportControl(box,rows[index].questionId,attemptId);
         box.classList.remove("hidden");el("submit").parentElement.classList.add("hidden");el("next-wrap").classList.remove("hidden");
+        syncTelegramMainAction();
         box.scrollIntoView({block:"start"});
         try{heading.focus({preventScroll:true})}catch(e){heading.focus()}
       }).catch(showSubmitError);
@@ -233,24 +258,24 @@
 
   function showSubmitError(error){
     submitting=false;if(submitRetryTimer){clearTimeout(submitRetryTimer);submitRetryTimer=null}
-    var category=categoryOf(error),box=el("feedback"),heading=document.createElement("h2"),message=document.createElement("p"),retryAllowed=true;
+    var category=categoryOf(error),box=el("feedback"),heading=document.createElement("h2"),message=document.createElement("p"),retryAllowed=true,recovery=null;
     box.className="feedback bad";box.textContent="";heading.tabIndex=-1;heading.textContent="উত্তর সংরক্ষণ নিশ্চিত হয়নি";
-    if(category==="CONFLICT"||Number(error&&error.status)===409){heading.textContent="এই চেষ্টা আর বদলানো যাবে না";message.textContent="এই attempt ID-তে অন্য একটি উত্তর আগে জমা হয়েছে। তালিকাটি আবার খুলে নতুন চেষ্টা শুরু করুন।";retryAllowed=false;el("submit").textContent="নতুন চেষ্টা প্রয়োজন"}
-    else if(category==="AUTH_REQUIRED"||category==="AUTH_EXPIRED"){heading.textContent="Telegram সেশন যাচাই করা যায়নি";message.textContent="নিরাপদভাবে উত্তর জমা দিতে বট থেকে Mini App আবার খুলুন। আপনার বাছাই এই ডিভাইসে রাখা আছে।";retryAllowed=false;el("submit").textContent="সেশন আবার খুলুন"}
+    if(category==="CONFLICT"||Number(error&&error.status)===409){heading.textContent="এই চেষ্টা আর বদলানো যাবে না";message.textContent="এই attempt ID-তে অন্য একটি উত্তর আগে জমা হয়েছে। তালিকাটি আবার খুলে নতুন চেষ্টা শুরু করুন।";retryAllowed=false;el("submit").textContent="নতুন চেষ্টা প্রয়োজন";recovery=document.createElement("a");recovery.href=telegramUrl("/practice.html?source="+encodeURIComponent(requestedSource));recovery.textContent="নতুন চেষ্টা খুলুন"}
+    else if(category==="AUTH_REQUIRED"||category==="AUTH_EXPIRED"){heading.textContent="Telegram সেশন যাচাই করা যায়নি";message.textContent="নিরাপদভাবে উত্তর জমা দিতে বট থেকে Mini App আবার খুলুন। আপনার বাছাই এই ডিভাইসে রাখা আছে।";retryAllowed=false;el("submit").textContent="সেশন আবার খুলুন";recovery=document.createElement("a");recovery.href=(document.querySelector('meta[name="telegram-miniapp-url"]')||{}).content||"https://t.me/dailyquizzerbot/quiz_master";recovery.target="_blank";recovery.rel="noopener";recovery.textContent="Telegram থেকে আবার খুলুন"}
     else if(category==="OFFLINE"){message.textContent="ইন্টারনেট সংযোগ ফিরলে একই উত্তর আবার পাঠান। একই attempt ID থাকায় নকল চেষ্টা তৈরি হবে না।";el("submit").textContent="একই উত্তর আবার পাঠান"}
     else if(category==="NETWORK_FAILURE"){message.textContent="সংযোগ শেষ হওয়ার আগে ফল নিশ্চিত করা যায়নি। একই উত্তর আবার পাঠালে একই attempt ID ব্যবহার হবে।";el("submit").textContent="একই উত্তর আবার পাঠান"}
     else if(category==="REQUEST_TIMEOUT"){message.textContent="সার্ভারের উত্তর আসতে বেশি সময় লেগেছে। একই উত্তর আবার পাঠালে নকল চেষ্টা তৈরি হবে না।";el("submit").textContent="একই উত্তর আবার পাঠান"}
     else if(category==="RATE_LIMITED"){heading.textContent="কিছুক্ষণ পরে আবার পাঠান";message.textContent="অল্প সময়ে অনেকবার অনুরোধ হয়েছে। আপনার একই উত্তর ও attempt ID রাখা আছে।";el("submit").textContent="একই উত্তর আবার পাঠান"}
     else if(category==="SERVER_TEMPORARY"){message.textContent="সেবা সাময়িকভাবে ব্যস্ত। একই উত্তর আবার পাঠালে একই attempt ID ব্যবহার হবে।";el("submit").textContent="একই উত্তর আবার পাঠান"}
     else{message.textContent="ফল নিশ্চিত করা যায়নি। একই উত্তর আবার পাঠালে একই attempt ID ব্যবহার হবে এবং নকল চেষ্টা তৈরি হবে না।";el("submit").textContent="একই উত্তর আবার পাঠান"}
-    var requestId=safeRequestId(error);if(requestId){var reference=document.createElement("p");reference.className="error-reference";reference.textContent="সহায়তা কোড: "+requestId;box.append(heading,message,reference)}else box.append(heading,message);
-    box.classList.remove("hidden");renderOptions();el("submit").disabled=!retryAllowed;heading.focus();
+    var requestId=safeRequestId(error);box.append(heading,message);if(recovery){recovery.className="btn primary";box.appendChild(recovery)}if(requestId){var reference=document.createElement("p");reference.className="error-reference";reference.textContent="সহায়তা কোড: "+requestId;box.appendChild(reference)}
+    submitRetryAllowed=retryAllowed;box.classList.remove("hidden");renderOptions();el("submit").disabled=!retryAllowed;syncTelegramMainAction();heading.focus();
     if(category==="RATE_LIMITED"&&retryAllowed)startSubmitCooldown(error&&error.retryAfterSeconds);
   }
   function startSubmitCooldown(value){
     var remaining=Math.min(300,Math.max(0,Math.ceil(Number(value)||0)));if(!remaining)return;
     var button=el("submit");button.disabled=true;
-    function tick(){button.textContent=bn(remaining)+" সেকেন্ড পরে একই উত্তর পাঠান";if(remaining--<=0){button.disabled=false;button.textContent="একই উত্তর আবার পাঠান";submitRetryTimer=null;return}submitRetryTimer=setTimeout(tick,1000)}
+    function tick(){button.textContent=bn(remaining)+" সেকেন্ড পরে একই উত্তর পাঠান";syncTelegramMainAction();if(remaining--<=0){button.disabled=false;button.textContent="একই উত্তর আবার পাঠান";submitRetryTimer=null;syncTelegramMainAction();return}submitRetryTimer=setTimeout(tick,1000)}
     tick();
   }
 
