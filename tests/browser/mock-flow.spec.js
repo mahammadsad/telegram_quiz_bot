@@ -250,6 +250,11 @@ test("timed multi-section mock persists, resumes, advances, and renders analysis
   await expect(page.locator("#intro-sections")).toHaveText("2");
   await page.locator("#btn-start").click();
   await expect(page.locator("#screen-test")).toBeVisible();
+  await expect(page.locator("body")).toHaveAttribute("data-screen-state", "test");
+  await expect(page.locator("nav.bottom")).toBeHidden();
+  await expect(page.locator("#palette-panel")).not.toHaveAttribute("open", "");
+  await expect(page.locator("#palette-summary")).toContainText("প্রশ্ন ১ / ২");
+  await expect(page.locator("#palette button[aria-current=step]")).toHaveText("১");
   await expect(page.locator("#section-title")).toHaveText("গণিত");
   await expect(page.locator("#timer")).not.toHaveText("--:--");
   await expect(page.locator("#question-text")).toHaveAttribute("lang", "en");
@@ -265,7 +270,10 @@ test("timed multi-section mock persists, resumes, advances, and renders analysis
   }]);
 
   await page.locator(".option").nth(1).click();
+  await expect(page.locator("#palette-summary")).toContainText("উত্তর ১");
+  await expect(page.locator("#palette button").first()).toContainText("✓");
   await page.locator("#mark-review").check();
+  await expect(page.locator("#palette-summary")).toContainText("চিহ্নিত ১");
   await expect(page.locator("#sync-status")).toContainText("সিঙ্ক হয়েছে");
   const firstDraft = await page.evaluate((id) => JSON.parse(localStorage.getItem(`telegram-mock-draft:${id}`)), TEST_ID);
   expect(firstDraft.answers).toBeTruthy();
@@ -279,8 +287,12 @@ test("timed multi-section mock persists, resumes, advances, and renders analysis
   expect(api.starts).toHaveLength(2);
   expect(api.starts[1].clientAttemptId).toBe(api.starts[0].clientAttemptId);
 
+  await expect(page.locator("#btn-section")).toBeHidden();
+  await page.locator("#btn-next").click();
+  await expect(page.locator("#btn-section")).toBeVisible();
   await page.locator("#btn-section").click();
   await expect(page.locator("#section-title")).toHaveText("রিজনিং");
+  await expect(page.locator("#question-text")).toBeFocused();
   await page.locator(".option").first().click();
   await page.locator("#btn-submit").click();
   await expect(page.locator("#submit-modal")).toBeVisible();
