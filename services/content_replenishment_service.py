@@ -51,6 +51,10 @@ MATHEMATICS_PROOF_FAMILIES = (
     "mean_median_mode",
     "train_crossing",
     "solid_measure",
+    "successive_percentage_change",
+    "work_wages",
+    "data_table_aggregate",
+    "integer_division",
 )
 REASONING_PROOF_FAMILIES = (
     "arithmetic_series_next",
@@ -73,6 +77,9 @@ REASONING_PROOF_FAMILIES = (
     "three_set_cardinality",
     "family_tree_relation",
     "circular_seating_constraints",
+    "calendar_date_weekday",
+    "direction_turn_path",
+    "logical_truth_assignment",
 )
 LANGUAGE_QUESTION_FORMS = {
     "english": ("grammar_rule", "vocabulary", "comprehension", "error_detection"),
@@ -699,6 +706,16 @@ metre/second; it traces metres-per-second speed, total crossing length, then sec
 solid_measure has shape cuboid with positive length/width/height or cylinder with
 positive radius/height and rational pi_numerator/pi_denominator, length_unit centimetre
 or metre, and requested volume or supported surface-area form.
+successive_percentage_change has positive initial_value, two to ten changes_percent
+values from -100 through 1000, and requested final_value or net_change_percent; it
+traces the cumulative multiplier then the requested result. work_wages has equally
+sized positive efficiencies and durations, non-negative total_wages, and a zero-based
+requested_index; it traces total efficiency-time contribution then the requested wage
+and uses currency units. data_table_aggregate has two to twenty values and requested
+sum, average, range, or percentage_share; percentage_share also has a zero-based
+requested_index, traces total then result, and uses percent units. integer_division has
+non-negative integer dividend, positive integer divisor, and requested quotient or
+remainder; it traces quotient, remainder, then the requested result.
 arithmetic_series_next has sequence; ordering_rank has values,
 target, and direction (ascending or descending); odd_one_out_tag has exactly four tags,
 three equal and one different; coding_shift has source, shift, and encode/decode
@@ -730,6 +747,15 @@ circular_seating_constraints has four to eight unique items, an anchor, one-to-n
 query_steps, clockwise/counterclockwise direction, and explicit adjacent,
 clockwise_adjacent, opposite, or clockwise_steps constraints; every valid arrangement
 must produce the same answer.
+calendar_date_weekday has integer year 1900-2100, month 1-12, and a valid day, and
+traces the weekday index Monday 0 through Sunday 6. direction_turn_path has a cardinal
+start_direction, one to twenty commands containing turn straight/right/around/left and
+positive distance, and requested final_direction or net_direction; net direction traces
+x displacement, y displacement, then the unique compass result. logical_truth_assignment
+has two to eight unique items, a target, and one to twenty explicit constraints of type
+is, equal, not_equal, implies, exactly_one, or at_least_one; every satisfying assignment
+must give the target the same boolean value and the trace is valid assignment count then
+that value.
 For every evidence-backed question, use proof_family evidence_span_single_answer, copy the four
 canonical source-language values aligned positionally with the four displayed options
 to proof_option_values and proof_evidence_values, and set the conclusion to the displayed
