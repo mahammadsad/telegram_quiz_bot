@@ -1,6 +1,6 @@
 # Production release and rollback
 
-This runbook is the production gate for application version `8.6.0`. Passing local unit tests is not production evidence.
+This runbook is the production gate for application version `8.7.2`. Passing local unit tests is not production evidence.
 
 ## Ownership and required inputs
 
@@ -54,7 +54,7 @@ Do **not** schedule or manually call `public.process_due_account_deletions` unti
 ## Staging gate
 
 1. Deploy the exact release commit to staging.
-2. Verify `/version` reports `applicationVersion: 8.6.0`, the expected full `commitSha`, staging environment and build time.
+2. Verify `/version` reports `applicationVersion: 8.7.2`, the expected full `commitSha`, staging environment and build time.
 3. Verify root HTML, CSS, JS, icon, manifest, service worker, `/health/live`, `/health/ready`, an answer-free quiz, server-timed start/submission and dashboard with only the synthetic user.
 4. Test a duplicate submission with the same attempt ID; it must be idempotent.
 5. Submit forged client duration telemetry; it must not become trusted ranking time.
@@ -75,6 +75,13 @@ Do not continue if any gate is red.
    GET https://telegram-quiz-bot-h7p1.onrender.com/health/live
    GET https://telegram-quiz-bot-h7p1.onrender.com/health/ready
    ```
+
+   A Render deploy status of `live` is insufficient by itself. If `/version` still
+   reports the previous SHA, keep the release blocked, preserve the known-good origin,
+   and retry bounded uncached probes. If the mismatch persists, issue one clean
+   commit-pinned deploy through Render, then repeat the exact-SHA, readiness and smoke
+   gates. Never record or replenish against a release until the public origin proves
+   the expected full SHA.
 
 5. In BotFather/Telegram Mini Apps, set and then verify the launch URL is exactly the canonical HTTPS URL. Open it from Telegram with the synthetic account and repeat start, submit, dashboard, catalog, export request and deletion-request cancellation. Do not create a due deletion request for a real learner.
 6. Check all 13 due subject jobs globally. Replay production dead letters only through the approved idempotent operator path, with reviewed content. Require 13/13 posted and a fallback for every posted quiz.

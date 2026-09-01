@@ -1504,6 +1504,214 @@ def test_additional_syllabus_reasoning_families_are_solved(
 
 
 @pytest.mark.parametrize(
+    ("family", "parameters", "options", "values", "trace", "units", "correct"),
+    [
+        (
+            "successive_percentage_change",
+            {"initial_value": 100, "changes_percent": [20, -10], "requested": "final_value"},
+            ["১০০", "১০৬", "১০৮", "১১০"],
+            [100, 106, 108, 110],
+            ["1.08", 108],
+            None,
+            2,
+        ),
+        (
+            "successive_percentage_change",
+            {"initial_value": 200, "changes_percent": [10, -10], "requested": "net_change_percent"},
+            ["-১%", "০%", "২%", "১০%"],
+            [-1, 0, 2, 10],
+            ["0.99", -1],
+            None,
+            0,
+        ),
+        (
+            "work_wages",
+            {
+                "efficiencies": [1, 2],
+                "durations": [4, 3],
+                "total_wages": 500,
+                "requested_index": 1,
+            },
+            ["২০০", "২৫০", "৩০০", "৩৫০"],
+            [200, 250, 300, 350],
+            [10, 300],
+            ["currency"] * 4,
+            2,
+        ),
+        (
+            "data_table_aggregate",
+            {"values": [10, 20, 30, 40], "requested": "percentage_share", "requested_index": 2},
+            ["২০%", "২৫%", "৩০%", "৪০%"],
+            [20, 25, 30, 40],
+            [100, 30],
+            ["percent"] * 4,
+            2,
+        ),
+        (
+            "data_table_aggregate",
+            {"values": [4, 8, 12], "requested": "average"},
+            ["৬", "৮", "১০", "১২"],
+            [6, 8, 10, 12],
+            [24, 8],
+            None,
+            1,
+        ),
+        (
+            "data_table_aggregate",
+            {"values": [4, 8, 12], "requested": "range"},
+            ["৪", "৬", "৮", "১২"],
+            [4, 6, 8, 12],
+            [8],
+            None,
+            2,
+        ),
+        (
+            "integer_division",
+            {"dividend": 29, "divisor": 4, "requested": "remainder"},
+            ["০", "১", "২", "৩"],
+            [0, 1, 2, 3],
+            [7, 1, 1],
+            None,
+            1,
+        ),
+        (
+            "integer_division",
+            {"dividend": 29, "divisor": 4, "requested": "quotient"},
+            ["৬", "৭", "৮", "৯"],
+            [6, 7, 8, 9],
+            [7, 1, 7],
+            None,
+            1,
+        ),
+    ],
+)
+def test_third_syllabus_mathematics_increment_is_solved(
+    family: str,
+    parameters: dict,
+    options: list[str],
+    values: list,
+    trace: list,
+    units: list[str] | None,
+    correct: int,
+) -> None:
+    candidate = mathematics_candidate()
+    candidate["options"] = options
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": values,
+        "explanation_values": trace,
+        "explanation_conclusion": options[correct],
+    }
+    if units is not None:
+        candidate["deterministic_proof"]["option_units"] = units
+
+    assert verify_candidate(candidate).family == family
+
+
+@pytest.mark.parametrize(
+    ("family", "parameters", "options", "values", "trace", "correct"),
+    [
+        (
+            "calendar_date_weekday",
+            {"year": 2026, "month": 9, "day": 1},
+            ["০", "১", "২", "৩"],
+            [0, 1, 2, 3],
+            [1],
+            1,
+        ),
+        (
+            "direction_turn_path",
+            {
+                "start_direction": "N",
+                "commands": [
+                    {"turn": "right", "distance": 10},
+                    {"turn": "left", "distance": 5},
+                    {"turn": "around", "distance": 2},
+                ],
+                "requested": "net_direction",
+            },
+            ["N", "NE", "E", "SE"],
+            ["N", "NE", "E", "SE"],
+            [10, 3, "NE"],
+            1,
+        ),
+        (
+            "direction_turn_path",
+            {
+                "start_direction": "W",
+                "commands": [
+                    {"turn": "right", "distance": 2},
+                    {"turn": "around", "distance": 1},
+                ],
+                "requested": "final_direction",
+            },
+            ["N", "E", "S", "W"],
+            ["N", "E", "S", "W"],
+            ["S"],
+            2,
+        ),
+        (
+            "logical_truth_assignment",
+            {
+                "items": ["A", "B", "C"],
+                "target": "C",
+                "constraints": [
+                    {"type": "exactly_one", "items": ["A", "B", "C"]},
+                    {"type": "equal", "left": "A", "right": "B"},
+                ],
+            },
+            ["true", "false", "both", "unknown"],
+            ["true", "false", "both", "unknown"],
+            [1, "true"],
+            0,
+        ),
+        (
+            "logical_truth_assignment",
+            {
+                "items": ["A", "B", "C", "D"],
+                "target": "D",
+                "constraints": [
+                    {"type": "is", "item": "A", "value": True},
+                    {"type": "not_equal", "left": "A", "right": "B"},
+                    {"type": "implies", "left": "A", "right": "C"},
+                    {"type": "at_least_one", "items": ["B", "D"]},
+                    {"type": "equal", "left": "C", "right": "D"},
+                ],
+            },
+            ["true", "false", "both", "unknown"],
+            ["true", "false", "both", "unknown"],
+            [1, "true"],
+            0,
+        ),
+    ],
+)
+def test_third_syllabus_reasoning_increment_is_solved(
+    family: str,
+    parameters: dict,
+    options: list[str],
+    values: list,
+    trace: list,
+    correct: int,
+) -> None:
+    candidate = reasoning_candidate()
+    candidate["options"] = options
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": values,
+        "explanation_values": trace,
+        "explanation_conclusion": options[correct],
+    }
+
+    assert verify_candidate(candidate).family == family
+
+
+@pytest.mark.parametrize(
     ("subject", "family", "parameters", "expected_code"),
     [
         (
@@ -1558,7 +1766,13 @@ def test_additional_syllabus_reasoning_families_are_solved(
         (
             "mathematics",
             "mixture_replacement",
-            {"total_volume": 10, "removed_volume": 11, "initial_concentration_percent": 50, "replacement_concentration_percent": 0, "repetitions": 1},
+            {
+                "total_volume": 10,
+                "removed_volume": 11,
+                "initial_concentration_percent": 50,
+                "replacement_concentration_percent": 0,
+                "repetitions": 1,
+            },
             "math_proof_invalid",
         ),
         (
@@ -1570,31 +1784,65 @@ def test_additional_syllabus_reasoning_families_are_solved(
         (
             "mathematics",
             "train_crossing",
-            {"train_length": 100, "object_length": -1, "speed": 50, "speed_unit": "kilometre/hour", "length_unit": "metre"},
+            {
+                "train_length": 100,
+                "object_length": -1,
+                "speed": 50,
+                "speed_unit": "kilometre/hour",
+                "length_unit": "metre",
+            },
             "math_proof_invalid",
         ),
         (
             "mathematics",
             "solid_measure",
-            {"shape": "cylinder", "radius": 7, "height": 10, "pi_numerator": 4, "pi_denominator": 1, "length_unit": "metre", "requested": "volume"},
+            {
+                "shape": "cylinder",
+                "radius": 7,
+                "height": 10,
+                "pi_numerator": 4,
+                "pi_denominator": 1,
+                "length_unit": "metre",
+                "requested": "volume",
+            },
             "math_proof_invalid",
         ),
         (
             "reasoning",
             "three_set_cardinality",
-            {"first_count": 2, "second_count": 3, "third_count": 4, "first_second_intersection": 3, "first_third_intersection": 0, "second_third_intersection": 0, "all_three_intersection": 0, "requested": "union"},
+            {
+                "first_count": 2,
+                "second_count": 3,
+                "third_count": 4,
+                "first_second_intersection": 3,
+                "first_third_intersection": 0,
+                "second_third_intersection": 0,
+                "all_three_intersection": 0,
+                "requested": "union",
+            },
             "reasoning_proof_invalid",
         ),
         (
             "reasoning",
             "family_tree_relation",
-            {"people": {"A": "male", "B": "female"}, "parent_edges": [{"parent": "A", "child": "B"}, {"parent": "B", "child": "A"}], "subject": "A", "reference": "B"},
+            {
+                "people": {"A": "male", "B": "female"},
+                "parent_edges": [{"parent": "A", "child": "B"}, {"parent": "B", "child": "A"}],
+                "subject": "A",
+                "reference": "B",
+            },
             "reasoning_proof_invalid",
         ),
         (
             "reasoning",
             "circular_seating_constraints",
-            {"items": ["A", "B", "C", "D"], "anchor": "A", "direction": "clockwise", "query_steps": 2, "constraints": [{"type": "adjacent", "first": "A", "second": "B"}]},
+            {
+                "items": ["A", "B", "C", "D"],
+                "anchor": "A",
+                "direction": "clockwise",
+                "query_steps": 2,
+                "constraints": [{"type": "adjacent", "first": "A", "second": "B"}],
+            },
             "reasoning_proof_invalid",
         ),
         (
@@ -1608,6 +1856,48 @@ def test_additional_syllabus_reasoning_families_are_solved(
             "rounded_division",
             {"numerator": "1e-1000000", "denominator": 2, "decimal_places": 2, "rounding_mode": "half_up"},
             "math_proof_invalid",
+        ),
+        (
+            "mathematics",
+            "successive_percentage_change",
+            {"initial_value": 100, "changes_percent": [20], "requested": "final_value"},
+            "math_proof_invalid",
+        ),
+        (
+            "mathematics",
+            "work_wages",
+            {"efficiencies": [1, 2], "durations": [1], "total_wages": 100, "requested_index": 0},
+            "math_proof_invalid",
+        ),
+        (
+            "mathematics",
+            "data_table_aggregate",
+            {"values": [-1, 1], "requested": "percentage_share", "requested_index": 0},
+            "math_proof_invalid",
+        ),
+        (
+            "mathematics",
+            "integer_division",
+            {"dividend": 10, "divisor": 0, "requested": "remainder"},
+            "math_proof_invalid",
+        ),
+        (
+            "reasoning",
+            "calendar_date_weekday",
+            {"year": 2026, "month": 2, "day": 30},
+            "reasoning_proof_invalid",
+        ),
+        (
+            "reasoning",
+            "direction_turn_path",
+            {"start_direction": "N", "commands": [{"turn": "left", "distance": 0}], "requested": "final_direction"},
+            "reasoning_proof_invalid",
+        ),
+        (
+            "reasoning",
+            "logical_truth_assignment",
+            {"items": ["A", "B"], "target": "A", "constraints": [{"type": "at_least_one", "items": ["A", "B"]}]},
+            "reasoning_proof_invalid",
         ),
     ],
 )

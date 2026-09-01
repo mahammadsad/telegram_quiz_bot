@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from fractions import Fraction
-from itertools import permutations
+from itertools import permutations, product
 from math import comb, gcd, isqrt, perm
 from typing import Any, Mapping, Sequence
 
@@ -697,12 +697,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             age_difference = _fraction(params["age_difference"])
             years_offset = _fraction(params.get("years_offset", 0))
             requested = str(params.get("requested") or "")
-            if (
-                older_ratio <= younger_ratio
-                or age_difference <= 0
-                or age_difference > 200
-                or abs(years_offset) > 200
-            ):
+            if older_ratio <= younger_ratio or age_difference <= 0 or age_difference > 200 or abs(years_offset) > 200:
                 raise ValueError
             scale = age_difference / (older_ratio - younger_ratio)
             if requested == "older_present":
@@ -789,11 +784,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             if requested == "median":
                 ordered = sorted(values)
                 middle = len(ordered) // 2
-                result = (
-                    ordered[middle]
-                    if len(ordered) % 2
-                    else (ordered[middle - 1] + ordered[middle]) / 2
-                )
+                result = ordered[middle] if len(ordered) % 2 else (ordered[middle - 1] + ordered[middle]) / 2
                 return _SolvedValue(result, (result,))
             if requested == "mode":
                 counts = {value: values.count(value) for value in set(values)}
@@ -807,9 +798,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
             train_length = _fraction(params["train_length"])
             object_length = _fraction(params.get("object_length", 0))
             speed = _fraction(params["speed"])
-            speed_unit = _required_unit(
-                params.get("speed_unit"), {"kilometre/hour", "metre/second"}
-            )
+            speed_unit = _required_unit(params.get("speed_unit"), {"kilometre/hour", "metre/second"})
             length_unit = _required_unit(params.get("length_unit"), {"metre"})
             if train_length <= 0 or object_length < 0 or speed <= 0 or length_unit != "metre":
                 raise ValueError
@@ -826,9 +815,7 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
         if family == "solid_measure":
             shape = str(params.get("shape") or "")
             requested = str(params.get("requested") or "")
-            length_unit = _required_unit(
-                params.get("length_unit"), {"centimetre", "metre"}
-            )
+            length_unit = _required_unit(params.get("length_unit"), {"centimetre", "metre"})
             if shape == "cuboid":
                 length = _fraction(params["length"])
                 width = _fraction(params["width"])
@@ -862,6 +849,87 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
                     return _SolvedValue(result, (result,), f"square_{length_unit}")
                 raise ValueError
             raise ValueError
+        if family == "successive_percentage_change":
+            initial_value = _fraction(params["initial_value"])
+            changes = [_fraction(value) for value in _sequence(params.get("changes_percent"))]
+            requested = str(params.get("requested") or "")
+            if (
+                initial_value <= 0
+                or len(changes) not in range(2, 11)
+                or any(change < -100 or change > 1000 for change in changes)
+            ):
+                raise ValueError
+            multiplier = Fraction(1)
+            for change in changes:
+                multiplier *= Fraction(1) + change / 100
+            final_value = initial_value * multiplier
+            if requested == "final_value":
+                result = final_value
+            elif requested == "net_change_percent":
+                result = (multiplier - 1) * 100
+            else:
+                raise ValueError
+            return _SolvedValue(result, (multiplier, result))
+        if family == "work_wages":
+            efficiencies = [_fraction(value) for value in _sequence(params.get("efficiencies"))]
+            durations = [_fraction(value) for value in _sequence(params.get("durations"))]
+            total_wages = _fraction(params["total_wages"])
+            requested_index = params.get("requested_index")
+            if (
+                len(efficiencies) not in range(2, 9)
+                or len(efficiencies) != len(durations)
+                or any(value <= 0 for value in efficiencies + durations)
+                or total_wages < 0
+                or isinstance(requested_index, bool)
+                or not isinstance(requested_index, int)
+                or requested_index not in range(len(efficiencies))
+            ):
+                raise ValueError
+            contributions = [
+                efficiency * duration for efficiency, duration in zip(efficiencies, durations, strict=True)
+            ]
+            total_contribution = sum(contributions, Fraction())
+            result = total_wages * contributions[requested_index] / total_contribution
+            return _SolvedValue(result, (total_contribution, result), "currency")
+        if family == "data_table_aggregate":
+            values = [_fraction(value) for value in _sequence(params.get("values"))]
+            requested = str(params.get("requested") or "")
+            if len(values) not in range(2, 21):
+                raise ValueError
+            total = sum(values, Fraction())
+            if requested == "sum":
+                return _SolvedValue(total, (total,))
+            if requested == "average":
+                result = total / len(values)
+                return _SolvedValue(result, (total, result))
+            if requested == "range":
+                result = max(values) - min(values)
+                return _SolvedValue(result, (result,))
+            if requested == "percentage_share":
+                requested_index = params.get("requested_index")
+                if (
+                    total <= 0
+                    or any(value < 0 for value in values)
+                    or isinstance(requested_index, bool)
+                    or not isinstance(requested_index, int)
+                    or requested_index not in range(len(values))
+                ):
+                    raise ValueError
+                result = values[requested_index] * 100 / total
+                return _SolvedValue(result, (total, result), "percent")
+            raise ValueError
+        if family == "integer_division":
+            dividend = _bounded_int(params.get("dividend"), minimum=0, maximum=10**15)
+            divisor = _positive_int(params.get("divisor"), maximum=10**9)
+            requested = str(params.get("requested") or "")
+            quotient, integer_remainder = divmod(dividend, divisor)
+            if requested == "quotient":
+                result = quotient
+            elif requested == "remainder":
+                result = integer_remainder
+            else:
+                raise ValueError
+            return _SolvedValue(result, (quotient, integer_remainder, result))
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         raise DeterministicVerificationError(
             "math_proof_invalid", "The mathematics proof parameters are invalid."
@@ -1096,18 +1164,10 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
             first = _bounded_int(params.get("first_count"), minimum=0, maximum=10**9)
             second = _bounded_int(params.get("second_count"), minimum=0, maximum=10**9)
             third = _bounded_int(params.get("third_count"), minimum=0, maximum=10**9)
-            first_second = _bounded_int(
-                params.get("first_second_intersection"), minimum=0, maximum=10**9
-            )
-            first_third = _bounded_int(
-                params.get("first_third_intersection"), minimum=0, maximum=10**9
-            )
-            second_third = _bounded_int(
-                params.get("second_third_intersection"), minimum=0, maximum=10**9
-            )
-            all_three = _bounded_int(
-                params.get("all_three_intersection"), minimum=0, maximum=10**9
-            )
+            first_second = _bounded_int(params.get("first_second_intersection"), minimum=0, maximum=10**9)
+            first_third = _bounded_int(params.get("first_third_intersection"), minimum=0, maximum=10**9)
+            second_third = _bounded_int(params.get("second_third_intersection"), minimum=0, maximum=10**9)
+            all_three = _bounded_int(params.get("all_three_intersection"), minimum=0, maximum=10**9)
             if (
                 first_second > min(first, second)
                 or first_third > min(first, third)
@@ -1120,24 +1180,14 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
             only_third = third - first_third - second_third + all_three
             if min(only_first, only_second, only_third) < 0:
                 raise ValueError
-            union = (
-                first
-                + second
-                + third
-                - first_second
-                - first_third
-                - second_third
-                + all_three
-            )
+            union = first + second + third - first_second - first_third - second_third + all_three
             requested = str(params.get("requested") or "")
             if requested == "union":
                 return _SolvedValue(union, (union,))
             if requested == "exactly_one":
                 result = only_first + only_second + only_third
             elif requested == "neither":
-                total_population = _bounded_int(
-                    params.get("total_population"), minimum=0, maximum=10**9
-                )
+                total_population = _bounded_int(params.get("total_population"), minimum=0, maximum=10**9)
                 if total_population < union:
                     raise ValueError
                 result = total_population - union
@@ -1149,6 +1199,18 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
             return _SolvedValue(result, (result,))
         if family == "circular_seating_constraints":
             result, valid_count = _solve_circular_seating(params)
+            return _SolvedValue(result, (valid_count, result))
+        if family == "calendar_date_weekday":
+            year = _bounded_int(params.get("year"), minimum=1900, maximum=2100)
+            month = _bounded_int(params.get("month"), minimum=1, maximum=12)
+            day = _bounded_int(params.get("day"), minimum=1, maximum=31)
+            result = datetime(year, month, day).weekday()
+            return _SolvedValue(result, (result,))
+        if family == "direction_turn_path":
+            result, trace = _solve_direction_turn_path(params)
+            return _SolvedValue(result, trace)
+        if family == "logical_truth_assignment":
+            result, valid_count = _solve_logical_truth_assignment(params)
             return _SolvedValue(result, (valid_count, result))
     except (TypeError, ValueError) as exc:
         raise DeterministicVerificationError(
@@ -1169,15 +1231,107 @@ def _constraint_holds(rule: Any, positions: Mapping[str, int]) -> bool:
     return positions[before] < positions[after]
 
 
+def _solve_direction_turn_path(params: Mapping[str, Any]) -> tuple[str, tuple[Any, ...]]:
+    headings = ("N", "E", "S", "W")
+    start_direction = str(params.get("start_direction") or "")
+    commands = _sequence(params.get("commands"))
+    requested = str(params.get("requested") or "")
+    if start_direction not in headings or len(commands) not in range(1, 21):
+        raise ValueError
+    heading_index = headings.index(start_direction)
+    x = Fraction()
+    y = Fraction()
+    turn_offsets = {"straight": 0, "right": 1, "around": 2, "left": -1}
+    vectors = {"N": (0, 1), "E": (1, 0), "S": (0, -1), "W": (-1, 0)}
+    for raw_command in commands:
+        if not isinstance(raw_command, Mapping):
+            raise ValueError
+        turn = str(raw_command.get("turn") or "")
+        distance = _fraction(raw_command.get("distance"))
+        if turn not in turn_offsets or distance <= 0:
+            raise ValueError
+        heading_index = (heading_index + turn_offsets[turn]) % len(headings)
+        dx, dy = vectors[headings[heading_index]]
+        x += dx * distance
+        y += dy * distance
+    if requested == "final_direction":
+        result = headings[heading_index]
+        return result, (result,)
+    if requested == "net_direction":
+        if not x and not y:
+            raise ValueError
+        horizontal = "E" if x > 0 else "W" if x < 0 else ""
+        vertical = "N" if y > 0 else "S" if y < 0 else ""
+        result = vertical + horizontal
+        return result, (x, y, result)
+    raise ValueError
+
+
+def _solve_logical_truth_assignment(params: Mapping[str, Any]) -> tuple[bool, int]:
+    raw_items = _sequence(params.get("items"))
+    items = [str(value) for value in raw_items]
+    constraints = _sequence(params.get("constraints"))
+    target = str(params.get("target") or "")
+    if (
+        len(items) not in range(2, 9)
+        or len(set(items)) != len(items)
+        or any(not item or len(item) > 40 for item in items)
+        or target not in items
+        or len(constraints) not in range(1, 21)
+    ):
+        raise ValueError
+    answers: set[bool] = set()
+    valid_count = 0
+    for values in product((False, True), repeat=len(items)):
+        assignment = dict(zip(items, values, strict=True))
+        if not all(_logical_constraint_holds(rule, assignment) for rule in constraints):
+            continue
+        valid_count += 1
+        answers.add(assignment[target])
+    if not valid_count or len(answers) != 1:
+        raise ValueError
+    return answers.pop(), valid_count
+
+
+def _logical_constraint_holds(rule: Any, assignment: Mapping[str, bool]) -> bool:
+    if not isinstance(rule, Mapping):
+        raise ValueError
+    kind = str(rule.get("type") or "")
+    if kind == "is":
+        item = str(rule.get("item") or "")
+        value = rule.get("value")
+        if item not in assignment or not isinstance(value, bool):
+            raise ValueError
+        return assignment[item] is value
+    if kind in {"equal", "not_equal", "implies"}:
+        left = str(rule.get("left") or "")
+        right = str(rule.get("right") or "")
+        if left not in assignment or right not in assignment or left == right:
+            raise ValueError
+        if kind == "equal":
+            return assignment[left] is assignment[right]
+        if kind == "not_equal":
+            return assignment[left] is not assignment[right]
+        return not assignment[left] or assignment[right]
+    if kind in {"exactly_one", "at_least_one"}:
+        members = [str(value) for value in _sequence(rule.get("items"))]
+        if (
+            len(members) not in range(2, len(assignment) + 1)
+            or len(set(members)) != len(members)
+            or any(member not in assignment for member in members)
+        ):
+            raise ValueError
+        true_count = sum(assignment[member] for member in members)
+        return true_count == 1 if kind == "exactly_one" else true_count >= 1
+    raise ValueError
+
+
 def _solve_family_tree_relation(params: Mapping[str, Any]) -> str:
     raw_people = _mapping(params.get("people"))
     if len(raw_people) not in range(2, 16):
         raise ValueError
     people = {str(name): str(gender) for name, gender in raw_people.items()}
-    if any(
-        not name or len(name) > 40 or gender not in {"male", "female"}
-        for name, gender in people.items()
-    ):
+    if any(not name or len(name) > 40 or gender not in {"male", "female"} for name, gender in people.items()):
         raise ValueError
     parent_edges = _sequence(params.get("parent_edges"))
     if not parent_edges or len(parent_edges) > 30:
@@ -1221,14 +1375,10 @@ def _solve_family_tree_relation(params: Mapping[str, Any]) -> str:
         relations.add("son" if gender == "male" else "daughter")
     if parents[subject] & parents[reference]:
         relations.add("brother" if gender == "male" else "sister")
-    reference_grandparents = {
-        grandparent for parent in parents[reference] for grandparent in parents[parent]
-    }
+    reference_grandparents = {grandparent for parent in parents[reference] for grandparent in parents[parent]}
     if subject in reference_grandparents:
         relations.add("grandfather" if gender == "male" else "grandmother")
-    subject_grandparents = {
-        grandparent for parent in parents[subject] for grandparent in parents[parent]
-    }
+    subject_grandparents = {grandparent for parent in parents[subject] for grandparent in parents[parent]}
     if reference in subject_grandparents:
         relations.add("grandson" if gender == "male" else "granddaughter")
     if any(parents[subject] & parents[parent] for parent in parents[reference]):
@@ -1412,9 +1562,7 @@ def _fraction(value: Any) -> Fraction:
             decimal_value = Decimal(text)
         except InvalidOperation as exc:
             raise ValueError from exc
-    if not decimal_value.is_finite() or (
-        decimal_value and not -18 <= decimal_value.adjusted() <= 15
-    ):
+    if not decimal_value.is_finite() or (decimal_value and not -18 <= decimal_value.adjusted() <= 15):
         raise ValueError
     try:
         result = Fraction(decimal_value)
