@@ -452,10 +452,13 @@ The timed-mock follow-up now:
 - moves focus to the question heading after question/section navigation;
 - exposes the Citizen Affairs parent-site CTA before Start;
 - shows the next-section action only after the final question in the current
-  section; and
+  section;
+- uses Telegram MainButton and BackButton for start/resume, question movement,
+  section transitions and final submission while retaining accessible in-page
+  controls when those native APIs are unavailable; and
 - aligns mock and syllabus navigation with the four-destination shell.
 
-Verification at this checkpoint: 256 Playwright mobile tests, six HTTPS
+Verification at this checkpoint: 264 Playwright mobile tests, six HTTPS
 service-worker tests, 50 focused Python contract tests, Ruff, mypy, JavaScript
 syntax validation and npm audit all pass. The real Telegram Android/iOS and
 assistive-technology matrix remains a manual release-signoff item; this entry

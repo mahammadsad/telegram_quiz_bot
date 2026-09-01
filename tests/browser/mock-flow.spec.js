@@ -82,6 +82,7 @@ async function installMockAttemptApi(page, { failFirstProgress = false } = {}) {
     starts: [],
     progress: [],
     submits: [],
+    advances: [],
     currentSection: SECTION_ONE,
     failFirstProgress,
   };
@@ -210,7 +211,9 @@ async function installMockAttemptApi(page, { failFirstProgress = false } = {}) {
       return json({ attemptId: ATTEMPT_ID, status: "in_progress", responses: body.responses });
     }
     if (request.method() === "POST" && path.endsWith("/sections/advance")) {
-      state.currentSection = request.postDataJSON().nextSectionInstanceId;
+      const body = request.postDataJSON();
+      state.advances.push(body);
+      state.currentSection = body.nextSectionInstanceId;
       return json({ attemptId: ATTEMPT_ID, status: "in_progress", currentSectionInstanceId: state.currentSection });
     }
     if (request.method() === "POST" && path.endsWith("/submit")) {
@@ -248,7 +251,7 @@ test("timed multi-section mock persists, resumes, advances, and renders analysis
   await expect(page.locator("#screen-intro")).toBeVisible();
   await expect(page.locator("#intro-title")).toHaveText("WBCS পূর্ণ মক পরীক্ষা");
   await expect(page.locator("#intro-sections")).toHaveText("2");
-  await page.locator("#btn-start").click();
+  await page.evaluate(() => window.__triggerMainButton());
   await expect(page.locator("#screen-test")).toBeVisible();
   await expect(page.locator("body")).toHaveAttribute("data-screen-state", "test");
   await expect(page.locator("nav.bottom")).toBeHidden();
@@ -282,19 +285,20 @@ test("timed multi-section mock persists, resumes, advances, and renders analysis
 
   await page.reload();
   await expect(page.locator("#resume-box")).toBeVisible();
-  await page.locator("#btn-resume").click();
+  await page.evaluate(() => window.__triggerMainButton());
   await expect(page.locator("#screen-test")).toBeVisible();
   expect(api.starts).toHaveLength(2);
   expect(api.starts[1].clientAttemptId).toBe(api.starts[0].clientAttemptId);
 
   await expect(page.locator("#btn-section")).toBeHidden();
-  await page.locator("#btn-next").click();
-  await expect(page.locator("#btn-section")).toBeVisible();
-  await page.locator("#btn-section").click();
+  await page.evaluate(() => window.__triggerMainButton());
+  await expect(page.locator("#btn-section")).not.toHaveClass(/hidden/);
+  await page.evaluate(() => window.__triggerMainButton());
   await expect(page.locator("#section-title")).toHaveText("রিজনিং");
   await expect(page.locator("#question-text")).toBeFocused();
   await page.locator(".option").first().click();
-  await page.locator("#btn-submit").click();
+  await page.evaluate(() => window.__triggerMainButton());
+  await page.evaluate(() => window.__triggerMainButton());
   await expect(page.locator("#submit-modal")).toBeVisible();
   await page.locator("#btn-submit-confirm").click();
   await expect(page.locator("#screen-result")).toBeVisible();
@@ -314,7 +318,7 @@ test("failed progress sync keeps the local draft and exposes retry", async ({ pa
   await installTelegramMock(page);
   const api = await installMockAttemptApi(page, { failFirstProgress: true });
   await page.goto(`/mock.html?test=${TEST_ID}`);
-  await page.locator("#btn-start").click();
+  await page.evaluate(() => window.__triggerMainButton());
   await page.locator(".option").first().click();
 
   await expect(page.locator("#sync-status")).toContainText("খসড়া নিরাপদ আছে");
@@ -354,8 +358,85 @@ test("authenticated catalog shows server attempt state and resumes across device
 
   await expect(page.locator("#screen-intro")).toBeVisible();
   await expect(page.locator("#resume-box")).toBeVisible();
-  await page.locator("#btn-resume").click();
+  await page.evaluate(() => window.__triggerMainButton());
   await expect(page.locator("#screen-test")).toBeVisible();
   expect(api.starts).toHaveLength(1);
   expect(api.starts[0].clientAttemptId).toBe(ATTEMPT_ID);
+});
+
+test("Telegram native actions stay aligned with timed mock state", async ({ page }) => {
+  await installTelegramMock(page);
+  const api = await installMockAttemptApi(page);
+  await page.goto(`/mock.html?test=${TEST_ID}`);
+
+  await expect(page.locator("body")).toHaveClass(/tg-native/);
+  await expect(page.locator("#btn-start")).toBeHidden();
+  let telegram = await page.evaluate(() => window.__mobileQa);
+  expect(telegram.mainVisible).toBe(true);
+  expect(telegram.mainParams.text).toBe("পরীক্ষা শুরু করুন");
+  expect(telegram.backVisible).toBe(false);
+
+  await page.evaluate(() => window.__triggerMainButton());
+  await expect(page.locator("#screen-test")).toBeVisible();
+  const browserActions = page.locator("#screen-test .telegram-main-fallback");
+  await expect(browserActions).toHaveCount(2);
+  await expect(browserActions.first()).toBeHidden();
+  await expect(browserActions.last()).toBeHidden();
+  telegram = await page.evaluate(() => window.__mobileQa);
+  expect(telegram.mainParams.text).toBe("পরের প্রশ্ন");
+  expect(telegram.backVisible).toBe(false);
+
+  await page.evaluate(() => window.__triggerMainButton());
+  await expect(page.locator("#question-position")).toHaveText("প্রশ্ন ২ / ২");
+  telegram = await page.evaluate(() => window.__mobileQa);
+  expect(telegram.mainParams.text).toBe("পরের বিভাগ");
+  expect(telegram.backVisible).toBe(true);
+
+  await page.evaluate(() => window.__triggerBackButton());
+  await expect(page.locator("#question-position")).toHaveText("প্রশ্ন ১ / ২");
+  telegram = await page.evaluate(() => window.__mobileQa);
+  expect(telegram.backVisible).toBe(false);
+
+  await page.evaluate(() => window.__triggerMainButton());
+  await page.evaluate(() => {
+    window.__triggerMainButton();
+    window.__triggerMainButton();
+  });
+  await expect(page.locator("#section-title")).toHaveText("রিজনিং");
+  expect(api.advances).toHaveLength(1);
+  telegram = await page.evaluate(() => window.__mobileQa);
+  expect(telegram.mainParams.text).toBe("পরের প্রশ্ন");
+  expect(telegram.backVisible).toBe(false);
+
+  await page.evaluate(() => window.__triggerMainButton());
+  telegram = await page.evaluate(() => window.__mobileQa);
+  expect(telegram.mainParams.text).toBe("পরীক্ষা সাবমিট করুন");
+  expect(telegram.backVisible).toBe(true);
+
+  await page.evaluate(() => window.__triggerMainButton());
+  await expect(page.locator("#submit-modal")).toBeVisible();
+  telegram = await page.evaluate(() => window.__mobileQa);
+  expect(telegram.mainVisible).toBe(false);
+  expect(telegram.backVisible).toBe(true);
+
+  await page.evaluate(() => window.__triggerBackButton());
+  await expect(page.locator("#submit-modal")).toBeHidden();
+  telegram = await page.evaluate(() => window.__mobileQa);
+  expect(telegram.mainVisible).toBe(true);
+  expect(telegram.mainParams.text).toBe("পরীক্ষা সাবমিট করুন");
+});
+
+test("timed mock keeps accessible in-page controls when native actions are unavailable", async ({ page }) => {
+  await installTelegramMock(page, { nativeActions: false });
+  await installMockAttemptApi(page);
+  await page.goto(`/mock.html?test=${TEST_ID}`);
+
+  await expect(page.locator("body")).not.toHaveClass(/tg-native/);
+  await expect(page.locator("#btn-start")).toBeVisible();
+  await page.locator("#btn-start").click();
+  await expect(page.locator("#screen-test")).toBeVisible();
+  await expect(page.locator("#btn-next")).toBeVisible();
+  await page.locator("#btn-next").click();
+  await expect(page.locator("#question-position")).toHaveText("প্রশ্ন ২ / ২");
+  await expect(page.locator("#btn-section")).toBeVisible();
 });
