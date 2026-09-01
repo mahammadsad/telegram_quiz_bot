@@ -1219,6 +1219,291 @@ def test_syllabus_gap_reasoning_families_are_solved(
 
 
 @pytest.mark.parametrize(
+    ("family", "parameters", "options", "values", "trace", "units", "correct"),
+    [
+        (
+            "mixture_replacement",
+            {
+                "total_volume": 100,
+                "removed_volume": 20,
+                "initial_concentration_percent": 100,
+                "replacement_concentration_percent": 0,
+                "repetitions": 2,
+            },
+            ["৬০%", "৬৪%", "৬৮%", "৮০%"],
+            [60, 64, 68, 80],
+            ["0.8", 64],
+            ["percent"] * 4,
+            1,
+        ),
+        (
+            "mean_median_mode",
+            {"values": [2, 4, 8, 10], "requested": "median"},
+            ["৫", "৬", "৭", "৮"],
+            [5, 6, 7, 8],
+            [6],
+            None,
+            1,
+        ),
+        (
+            "mean_median_mode",
+            {"values": [2, 4, 6], "requested": "mean"},
+            ["৩", "৪", "৫", "৬"],
+            [3, 4, 5, 6],
+            [12, 4],
+            None,
+            1,
+        ),
+        (
+            "mean_median_mode",
+            {"values": [1, 2, 2, 3], "requested": "mode"},
+            ["১", "২", "৩", "৪"],
+            [1, 2, 3, 4],
+            [2],
+            None,
+            1,
+        ),
+        (
+            "train_crossing",
+            {
+                "train_length": 120,
+                "object_length": 180,
+                "speed": 54,
+                "speed_unit": "kilometre/hour",
+                "length_unit": "metre",
+            },
+            ["১৫", "১৮", "২০", "২৪"],
+            [15, 18, 20, 24],
+            [15, 300, 20],
+            ["second"] * 4,
+            2,
+        ),
+        (
+            "train_crossing",
+            {
+                "train_length": 100,
+                "object_length": 50,
+                "speed": 10,
+                "speed_unit": "metre/second",
+                "length_unit": "metre",
+            },
+            ["১০", "১২", "১৫", "২০"],
+            [10, 12, 15, 20],
+            [10, 150, 15],
+            ["second"] * 4,
+            2,
+        ),
+        (
+            "solid_measure",
+            {
+                "shape": "cylinder",
+                "radius": 7,
+                "height": 10,
+                "pi_numerator": 22,
+                "pi_denominator": 7,
+                "length_unit": "centimetre",
+                "requested": "volume",
+            },
+            ["১৪৪০", "১৫৪০", "১৬৪০", "১৭৬০"],
+            [1440, 1540, 1640, 1760],
+            [1540],
+            ["cubic_centimetre"] * 4,
+            1,
+        ),
+        (
+            "solid_measure",
+            {
+                "shape": "cuboid",
+                "length": 2,
+                "width": 3,
+                "height": 4,
+                "length_unit": "metre",
+                "requested": "total_surface_area",
+            },
+            ["৪৮", "৫০", "৫২", "৫৪"],
+            [48, 50, 52, 54],
+            [52],
+            ["square_metre"] * 4,
+            2,
+        ),
+        (
+            "solid_measure",
+            {
+                "shape": "cylinder",
+                "radius": 7,
+                "height": 3,
+                "pi_numerator": 22,
+                "pi_denominator": 7,
+                "length_unit": "centimetre",
+                "requested": "total_surface_area",
+            },
+            ["৪০০", "৪২০", "৪৪০", "৪৬০"],
+            [400, 420, 440, 460],
+            [440],
+            ["square_centimetre"] * 4,
+            2,
+        ),
+    ],
+)
+def test_additional_syllabus_mathematics_families_are_solved(
+    family: str,
+    parameters: dict,
+    options: list[str],
+    values: list,
+    trace: list,
+    units: list[str] | None,
+    correct: int,
+) -> None:
+    candidate = mathematics_candidate()
+    candidate["options"] = options
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": values,
+        "explanation_values": trace,
+        "explanation_conclusion": options[correct],
+    }
+    if units is not None:
+        candidate["deterministic_proof"]["option_units"] = units
+
+    assert verify_candidate(candidate).family == family
+
+
+@pytest.mark.parametrize(
+    ("family", "parameters", "options", "values", "trace", "correct"),
+    [
+        (
+            "three_set_cardinality",
+            {
+                "first_count": 30,
+                "second_count": 25,
+                "third_count": 20,
+                "first_second_intersection": 10,
+                "first_third_intersection": 5,
+                "second_third_intersection": 4,
+                "all_three_intersection": 3,
+                "requested": "exactly_one",
+            },
+            ["৪২", "৪৪", "৪৬", "৪৮"],
+            [42, 44, 46, 48],
+            [59, 46],
+            2,
+        ),
+        (
+            "family_tree_relation",
+            {
+                "people": {"A": "male", "B": "female", "C": "male"},
+                "parent_edges": [
+                    {"parent": "A", "child": "C"},
+                    {"parent": "B", "child": "C"},
+                ],
+                "subject": "A",
+                "reference": "C",
+            },
+            ["mother", "father", "brother", "uncle"],
+            ["mother", "father", "brother", "uncle"],
+            ["father"],
+            1,
+        ),
+        (
+            "family_tree_relation",
+            {
+                "people": {"G": "female", "P": "male", "C": "female"},
+                "parent_edges": [
+                    {"parent": "G", "child": "P"},
+                    {"parent": "P", "child": "C"},
+                ],
+                "subject": "G",
+                "reference": "C",
+            },
+            ["mother", "grandmother", "aunt", "sister"],
+            ["mother", "grandmother", "aunt", "sister"],
+            ["grandmother"],
+            1,
+        ),
+        (
+            "family_tree_relation",
+            {
+                "people": {"G": "female", "U": "male", "P": "female", "C": "male"},
+                "parent_edges": [
+                    {"parent": "G", "child": "U"},
+                    {"parent": "G", "child": "P"},
+                    {"parent": "P", "child": "C"},
+                ],
+                "subject": "U",
+                "reference": "C",
+            },
+            ["father", "brother", "uncle", "grandfather"],
+            ["father", "brother", "uncle", "grandfather"],
+            ["uncle"],
+            2,
+        ),
+        (
+            "circular_seating_constraints",
+            {
+                "items": ["A", "B", "C", "D"],
+                "anchor": "A",
+                "direction": "clockwise",
+                "query_steps": 2,
+                "constraints": [
+                    {"type": "clockwise_adjacent", "first": "A", "second": "B"},
+                    {"type": "clockwise_adjacent", "first": "B", "second": "C"},
+                    {"type": "clockwise_adjacent", "first": "C", "second": "D"},
+                ],
+            },
+            ["A", "B", "C", "D"],
+            ["A", "B", "C", "D"],
+            [1, "C"],
+            2,
+        ),
+        (
+            "circular_seating_constraints",
+            {
+                "items": ["A", "B", "C", "D", "E", "F"],
+                "anchor": "A",
+                "direction": "counterclockwise",
+                "query_steps": 1,
+                "constraints": [
+                    {"type": "clockwise_adjacent", "first": "A", "second": "B"},
+                    {"type": "clockwise_adjacent", "first": "B", "second": "C"},
+                    {"type": "opposite", "first": "A", "second": "D"},
+                    {"type": "clockwise_steps", "first": "B", "second": "E", "steps": 3},
+                    {"type": "clockwise_adjacent", "first": "E", "second": "F"},
+                ],
+            },
+            ["C", "D", "E", "F"],
+            ["C", "D", "E", "F"],
+            [1, "F"],
+            3,
+        ),
+    ],
+)
+def test_additional_syllabus_reasoning_families_are_solved(
+    family: str,
+    parameters: dict,
+    options: list[str],
+    values: list,
+    trace: list,
+    correct: int,
+) -> None:
+    candidate = reasoning_candidate()
+    candidate["options"] = options
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": values,
+        "explanation_values": trace,
+        "explanation_conclusion": options[correct],
+    }
+
+    assert verify_candidate(candidate).family == family
+
+
+@pytest.mark.parametrize(
     ("subject", "family", "parameters", "expected_code"),
     [
         (
@@ -1269,6 +1554,60 @@ def test_syllabus_gap_reasoning_families_are_solved(
             "clock_mirror_time",
             {"hour": 13, "minute": 0},
             "reasoning_proof_invalid",
+        ),
+        (
+            "mathematics",
+            "mixture_replacement",
+            {"total_volume": 10, "removed_volume": 11, "initial_concentration_percent": 50, "replacement_concentration_percent": 0, "repetitions": 1},
+            "math_proof_invalid",
+        ),
+        (
+            "mathematics",
+            "mean_median_mode",
+            {"values": [1, 1, 2, 2], "requested": "mode"},
+            "math_proof_invalid",
+        ),
+        (
+            "mathematics",
+            "train_crossing",
+            {"train_length": 100, "object_length": -1, "speed": 50, "speed_unit": "kilometre/hour", "length_unit": "metre"},
+            "math_proof_invalid",
+        ),
+        (
+            "mathematics",
+            "solid_measure",
+            {"shape": "cylinder", "radius": 7, "height": 10, "pi_numerator": 4, "pi_denominator": 1, "length_unit": "metre", "requested": "volume"},
+            "math_proof_invalid",
+        ),
+        (
+            "reasoning",
+            "three_set_cardinality",
+            {"first_count": 2, "second_count": 3, "third_count": 4, "first_second_intersection": 3, "first_third_intersection": 0, "second_third_intersection": 0, "all_three_intersection": 0, "requested": "union"},
+            "reasoning_proof_invalid",
+        ),
+        (
+            "reasoning",
+            "family_tree_relation",
+            {"people": {"A": "male", "B": "female"}, "parent_edges": [{"parent": "A", "child": "B"}, {"parent": "B", "child": "A"}], "subject": "A", "reference": "B"},
+            "reasoning_proof_invalid",
+        ),
+        (
+            "reasoning",
+            "circular_seating_constraints",
+            {"items": ["A", "B", "C", "D"], "anchor": "A", "direction": "clockwise", "query_steps": 2, "constraints": [{"type": "adjacent", "first": "A", "second": "B"}]},
+            "reasoning_proof_invalid",
+        ),
+        (
+            "mathematics",
+            "percentage_of",
+            {"base": "1e1000000", "percent": 10},
+            "math_proof_invalid",
+        ),
+        (
+            "mathematics",
+            "rounded_division",
+            {"numerator": "1e-1000000", "denominator": 2, "decimal_places": 2, "rounding_mode": "half_up"},
+            "math_proof_invalid",
         ),
     ],
 )
