@@ -244,9 +244,7 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
         "proof_explanation_values",
         "proof_evidence_span",
     } <= required
-    base_properties = content_replenishment_service.CANDIDATE_JSON_SCHEMA["items"][
-        "properties"
-    ]
+    base_properties = content_replenishment_service.CANDIDATE_JSON_SCHEMA["items"]["properties"]
     assert base_properties["options"]["minItems"] == 4
     assert base_properties["options"]["maxItems"] == 4
     assert base_properties["correct_index"]["minimum"] == 0
@@ -274,14 +272,10 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
         "comprehension",
         "error_detection",
     ]
-    assert english_properties["proof_family"]["enum"] == [
-        "evidence_span_single_answer"
-    ]
+    assert english_properties["proof_family"]["enum"] == ["evidence_span_single_answer"]
     language_artifact = english_properties["language_verification_json"]
     assert language_artifact["type"] == "OBJECT"
-    assert language_artifact["properties"]["review_status"]["enum"] == [
-        "source_proved"
-    ]
+    assert language_artifact["properties"]["review_status"]["enum"] == ["source_proved"]
     assert language_artifact["properties"]["version"]["minimum"] == 1
     assert language_artifact["properties"]["version"]["maximum"] == 1
     assert language_artifact["properties"]["uncertain"] == {"type": "BOOLEAN"}
@@ -289,6 +283,9 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
     math_schema = content_replenishment_service._candidate_schema("mathematics")
     math_properties = math_schema["items"]["properties"]
     assert "arithmetic_expression" in math_properties["proof_family"]["enum"]
+    assert "age_ratio" in math_properties["proof_family"]["enum"]
+    assert "boat_stream" in math_properties["proof_family"]["enum"]
+    assert "circle_measure" in math_properties["proof_family"]["enum"]
     assert "evidence_span_single_answer" in math_properties["proof_family"]["enum"]
     assert "fraction_operation" not in math_properties["proof_family"]["enum"]
     assert math_properties["language_question_form"]["enum"] == ["generic_fact"]
@@ -297,12 +294,13 @@ def test_candidate_contract_exposes_subject_specific_proof_artifacts(valid_quest
     reasoning_schema = content_replenishment_service._candidate_schema("reasoning")
     reasoning_properties = reasoning_schema["items"]["properties"]
     assert "syllogism_finite_sets" in reasoning_properties["proof_family"]["enum"]
+    assert "two_set_cardinality" in reasoning_properties["proof_family"]["enum"]
+    assert "bidirectional_rank_total" in reasoning_properties["proof_family"]["enum"]
+    assert "clock_mirror_time" in reasoning_properties["proof_family"]["enum"]
     assert "evidence_span_single_answer" in reasoning_properties["proof_family"]["enum"]
     assert "categorical_syllogism" not in reasoning_properties["proof_family"]["enum"]
 
-    assert "enum" not in content_replenishment_service.CANDIDATE_JSON_SCHEMA[
-        "items"
-    ]["properties"]["proof_family"]
+    assert "enum" not in content_replenishment_service.CANDIDATE_JSON_SCHEMA["items"]["properties"]["proof_family"]
 
 
 def test_language_artifact_is_derived_only_from_exact_verified_span(valid_questions) -> None:
@@ -311,15 +309,11 @@ def test_language_artifact_is_derived_only_from_exact_verified_span(valid_questi
     exact_span = bundle.documents[0].fact_summary[:80]
     item.update(
         language_question_form="Literature Fact",
-        language_verification_json=json.dumps(
-            {"uncertain": False, "source_span": "model paraphrase"}
-        ),
+        language_verification_json=json.dumps({"uncertain": False, "source_span": "model paraphrase"}),
         proof_evidence_span=exact_span,
     )
 
-    enriched = content_replenishment_service._enrich(
-        [item], "bengali", "আধুনিক ভারত", bundle
-    )[0]
+    enriched = content_replenishment_service._enrich([item], "bengali", "আধুনিক ভারত", bundle)[0]
 
     assert enriched["language_question_form"] == "literature"
     artifact = enriched["language_verification"]
@@ -329,24 +323,23 @@ def test_language_artifact_is_derived_only_from_exact_verified_span(valid_questi
     assert artifact["rule_id"].startswith("source-span-")
 
     item["proof_evidence_span"] = "not in the verified source"
-    invalid = content_replenishment_service._enrich(
-        [item], "bengali", "আধুনিক ভারত", bundle
-    )[0]
+    invalid = content_replenishment_service._enrich([item], "bengali", "আধুনিক ভারত", bundle)[0]
     assert invalid["language_verification"]["source_span"] == "model paraphrase"
 
+
 def test_language_form_normalization_does_not_promote_generic_content() -> None:
-    assert content_replenishment_service._normalized_language_form(
-        "Grammar Question", "english"
-    ) == "grammar_rule"
-    assert content_replenishment_service._normalized_language_form(
-        "generic_fact", "bengali"
-    ) == "generic_fact"
-    assert content_replenishment_service._normalized_language_form(
-        "generic_fact", "bengali", "bengali:phonetics:t02"
-    ) == "linguistics"
-    assert content_replenishment_service._normalized_language_form(
-        "generic_fact", "english", "english:error-correction:t01"
-    ) == "error_detection"
+    assert content_replenishment_service._normalized_language_form("Grammar Question", "english") == "grammar_rule"
+    assert content_replenishment_service._normalized_language_form("generic_fact", "bengali") == "generic_fact"
+    assert (
+        content_replenishment_service._normalized_language_form("generic_fact", "bengali", "bengali:phonetics:t02")
+        == "linguistics"
+    )
+    assert (
+        content_replenishment_service._normalized_language_form(
+            "generic_fact", "english", "english:error-correction:t01"
+        )
+        == "error_detection"
+    )
 
 
 def test_replenishment_excludes_historical_identity_from_job_progress(monkeypatch, valid_questions) -> None:

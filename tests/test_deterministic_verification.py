@@ -257,8 +257,20 @@ def test_reasoning_solver_rejects_inconsistent_puzzle() -> None:
     ("family", "parameters", "option_values", "explanation_values", "answer"),
     [
         ("algebra_linear", {"coefficient": 3, "constant": 6, "right_hand_side": 21}, [3, 4, 5, 6], [15, 5], "৫"),
-        ("profit_loss", {"cost_price": 100, "selling_price": 125, "requested": "profit_percent"}, [20, 25, 30, 35], [25, 25], "২৫"),
-        ("rounded_division", {"numerator": 2, "denominator": 3, "decimal_places": 2, "rounding_mode": "half_up"}, ["0.66", "0.67", "0.68", "0.69"], ["0.67"], "০.৬৭"),
+        (
+            "profit_loss",
+            {"cost_price": 100, "selling_price": 125, "requested": "profit_percent"},
+            [20, 25, 30, 35],
+            [25, 25],
+            "২৫",
+        ),
+        (
+            "rounded_division",
+            {"numerator": 2, "denominator": 3, "decimal_places": 2, "rounding_mode": "half_up"},
+            ["0.66", "0.67", "0.68", "0.69"],
+            ["0.67"],
+            "০.৬৭",
+        ),
     ],
 )
 def test_extended_mathematics_families_are_solved(
@@ -426,9 +438,7 @@ def test_more_competitive_exam_math_families_are_solved(
         ),
     ],
 )
-def test_more_math_families_reject_invalid_parameters(
-    family: str, parameters: dict
-) -> None:
+def test_more_math_families_reject_invalid_parameters(family: str, parameters: dict) -> None:
     candidate = mathematics_candidate()
     candidate["deterministic_proof"] = {
         "version": 1,
@@ -612,9 +622,7 @@ def test_combinatorics_and_inverse_proportion_are_solved(
         ),
     ],
 )
-def test_broader_math_families_reject_invalid_parameters(
-    family: str, parameters: dict
-) -> None:
+def test_broader_math_families_reject_invalid_parameters(family: str, parameters: dict) -> None:
     candidate = mathematics_candidate()
     candidate["deterministic_proof"] = {
         "version": 1,
@@ -651,7 +659,14 @@ def test_exact_square_root_rejects_non_perfect_square() -> None:
     ("family", "parameters", "option_values", "explanation_values", "units", "correct"),
     [
         ("time_work", {"worker_times": [6, 3], "time_unit": "hour"}, [1, 2, 3, 4], ["1/2", 2], ["hour"] * 4, 1),
-        ("speed_distance", {"speed": 60, "time": 2, "requested": "distance", "distance_unit": "kilometre", "time_unit": "hour"}, [100, 110, 120, 130], [120], ["kilometre"] * 4, 2),
+        (
+            "speed_distance",
+            {"speed": 60, "time": 2, "requested": "distance", "distance_unit": "kilometre", "time_unit": "hour"},
+            [100, 110, 120, 130],
+            [120],
+            ["kilometre"] * 4,
+            2,
+        ),
     ],
 )
 def test_mathematics_units_are_proved_for_every_option(
@@ -695,11 +710,50 @@ def test_mathematics_explanation_trace_must_match_solver() -> None:
 @pytest.mark.parametrize(
     ("family", "parameters", "options", "option_values", "trace", "correct"),
     [
-        ("coding_shift", {"source": "CAT", "shift": 1, "direction": "encode"}, ["DBT", "DBU", "DCU", "EBU"], ["DBT", "DBU", "DCU", "EBU"], ["DBU"], 1),
-        ("direction_path", {"moves": [{"direction": "N", "distance": 3}, {"direction": "E", "distance": 4}]}, ["উত্তর", "দক্ষিণ", "উত্তর-পূর্ব", "পশ্চিম"], ["N", "S", "NE", "W"], [4, 3, "NE"], 2),
-        ("ordering_constraints", {"items": ["A", "B", "C"], "constraints": [{"before": "A", "after": "B"}, {"before": "B", "after": "C"}], "target": "B"}, [1, 2, 3, 4], [1, 2, 3, 4], [1, 2], 1),
-        ("syllogism_finite_sets", {"sets": {"A": ["1", "2"], "B": ["1", "2", "3"]}, "left": "A", "right": "B", "relation": "all"}, ["মিথ্যা", "সত্য", "অনির্ণীত", "উভয়"], [False, True, "unknown", "both"], [True], 1),
-        ("analogy_mapping", {"mapping": {"bird": "nest", "bee": "hive"}, "query": "bee"}, ["den", "hive", "web", "stable"], ["den", "hive", "web", "stable"], ["hive"], 1),
+        (
+            "coding_shift",
+            {"source": "CAT", "shift": 1, "direction": "encode"},
+            ["DBT", "DBU", "DCU", "EBU"],
+            ["DBT", "DBU", "DCU", "EBU"],
+            ["DBU"],
+            1,
+        ),
+        (
+            "direction_path",
+            {"moves": [{"direction": "N", "distance": 3}, {"direction": "E", "distance": 4}]},
+            ["উত্তর", "দক্ষিণ", "উত্তর-পূর্ব", "পশ্চিম"],
+            ["N", "S", "NE", "W"],
+            [4, 3, "NE"],
+            2,
+        ),
+        (
+            "ordering_constraints",
+            {
+                "items": ["A", "B", "C"],
+                "constraints": [{"before": "A", "after": "B"}, {"before": "B", "after": "C"}],
+                "target": "B",
+            },
+            [1, 2, 3, 4],
+            [1, 2, 3, 4],
+            [1, 2],
+            1,
+        ),
+        (
+            "syllogism_finite_sets",
+            {"sets": {"A": ["1", "2"], "B": ["1", "2", "3"]}, "left": "A", "right": "B", "relation": "all"},
+            ["মিথ্যা", "সত্য", "অনির্ণীত", "উভয়"],
+            [False, True, "unknown", "both"],
+            [True],
+            1,
+        ),
+        (
+            "analogy_mapping",
+            {"mapping": {"bird": "nest", "bee": "hive"}, "query": "bee"},
+            ["den", "hive", "web", "stable"],
+            ["den", "hive", "web", "stable"],
+            ["hive"],
+            1,
+        ),
     ],
 )
 def test_typed_reasoning_families_are_machine_solved(
@@ -851,9 +905,7 @@ def test_additional_series_families_are_solved(
         ("alternating_arithmetic_series_next", {"sequence": [1, 1, 1, 1, 1, 1]}),
     ],
 )
-def test_calendar_and_clock_reasoning_reject_invalid_parameters(
-    family: str, parameters: dict
-) -> None:
+def test_calendar_and_clock_reasoning_reject_invalid_parameters(family: str, parameters: dict) -> None:
     candidate = reasoning_candidate()
     candidate["deterministic_proof"] = {
         "version": 1,
@@ -1004,15 +1056,17 @@ def test_duplicate_current_affairs_event_is_rejected_by_knowledge_point(
     first = deepcopy(valid_questions[0])
     second = deepcopy(valid_questions[1])
     for row in (first, second):
-        row.update({
-            "subject_key": "current-affairs",
-            "chapter": "জাতীয় সাম্প্রতিক ঘটনা",
-            "canonical_claim": "একই দপ্তরে একই ব্যক্তির নিয়োগ",
-            "knowledge_entity": "office-x",
-            "knowledge_relation": "appointed_person",
-            "knowledge_answer_value": "person-y",
-            "knowledge_time_scope": "2026-08",
-        })
+        row.update(
+            {
+                "subject_key": "current-affairs",
+                "chapter": "জাতীয় সাম্প্রতিক ঘটনা",
+                "canonical_claim": "একই দপ্তরে একই ব্যক্তির নিয়োগ",
+                "knowledge_entity": "office-x",
+                "knowledge_relation": "appointed_person",
+                "knowledge_answer_value": "person-y",
+                "knowledge_time_scope": "2026-08",
+            }
+        )
 
     accepted, rejected = validate_question_candidates(
         [first, second],
@@ -1021,8 +1075,220 @@ def test_duplicate_current_affairs_event_is_rejected_by_knowledge_point(
     )
 
     assert len(accepted) == 1
-    assert rejected == [{
-        "index": 1,
-        "code": "duplicate_knowledge_point",
-        "message": "Candidate duplicates a knowledge point already accepted in this batch.",
-    }]
+    assert rejected == [
+        {
+            "index": 1,
+            "code": "duplicate_knowledge_point",
+            "message": "Candidate duplicates a knowledge point already accepted in this batch.",
+        }
+    ]
+
+
+@pytest.mark.parametrize(
+    ("family", "parameters", "options", "values", "trace", "units", "correct"),
+    [
+        (
+            "age_ratio",
+            {
+                "older_ratio": 5,
+                "younger_ratio": 3,
+                "age_difference": 12,
+                "years_offset": 4,
+                "requested": "younger_present",
+            },
+            ["১২", "১৪", "১৬", "১৮"],
+            [12, 14, 16, 18],
+            [6, 18, 14],
+            ["year"] * 4,
+            1,
+        ),
+        (
+            "boat_stream",
+            {
+                "boat_speed": 10,
+                "stream_speed": 2,
+                "distance": 24,
+                "requested": "upstream_time",
+                "speed_unit": "kilometre/hour",
+                "distance_unit": "kilometre",
+            },
+            ["২", "৩", "৪", "৬"],
+            [2, 3, 4, 6],
+            [8, 3],
+            ["hour"] * 4,
+            1,
+        ),
+        (
+            "circle_measure",
+            {
+                "radius": 7,
+                "pi_numerator": 22,
+                "pi_denominator": 7,
+                "requested": "area",
+                "length_unit": "centimetre",
+            },
+            ["১৪৪", "১৫৪", "১৬৪", "১৭৬"],
+            [144, 154, 164, 176],
+            [154],
+            ["square_centimetre"] * 4,
+            1,
+        ),
+    ],
+)
+def test_syllabus_gap_mathematics_families_are_solved(
+    family: str,
+    parameters: dict,
+    options: list[str],
+    values: list,
+    trace: list,
+    units: list[str],
+    correct: int,
+) -> None:
+    candidate = mathematics_candidate()
+    candidate["options"] = options
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": values,
+        "option_units": units,
+        "explanation_values": trace,
+        "explanation_conclusion": options[correct],
+    }
+
+    assert verify_candidate(candidate).family == family
+
+
+@pytest.mark.parametrize(
+    ("family", "parameters", "options", "values", "trace", "correct"),
+    [
+        (
+            "two_set_cardinality",
+            {
+                "first_count": 30,
+                "second_count": 25,
+                "intersection": 10,
+                "total_population": 60,
+                "requested": "neither",
+            },
+            ["৫", "১০", "১৫", "২০"],
+            [5, 10, 15, 20],
+            [45, 15],
+            2,
+        ),
+        (
+            "bidirectional_rank_total",
+            {"rank_from_left": 12, "rank_from_right": 9},
+            ["১৮", "১৯", "২০", "২১"],
+            [18, 19, 20, 21],
+            [20],
+            2,
+        ),
+        (
+            "clock_mirror_time",
+            {"hour": 3, "minute": 25},
+            ["08:25", "08:30", "08:35", "09:35"],
+            ["08:25", "08:30", "08:35", "09:35"],
+            ["08:35"],
+            2,
+        ),
+    ],
+)
+def test_syllabus_gap_reasoning_families_are_solved(
+    family: str,
+    parameters: dict,
+    options: list[str],
+    values: list,
+    trace: list,
+    correct: int,
+) -> None:
+    candidate = reasoning_candidate()
+    candidate["options"] = options
+    candidate["correct_index"] = correct
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": values,
+        "explanation_values": trace,
+        "explanation_conclusion": options[correct],
+    }
+
+    assert verify_candidate(candidate).family == family
+
+
+@pytest.mark.parametrize(
+    ("subject", "family", "parameters", "expected_code"),
+    [
+        (
+            "mathematics",
+            "age_ratio",
+            {
+                "older_ratio": 3,
+                "younger_ratio": 3,
+                "age_difference": 10,
+                "years_offset": 0,
+                "requested": "older_present",
+            },
+            "math_proof_invalid",
+        ),
+        (
+            "mathematics",
+            "boat_stream",
+            {
+                "boat_speed": 5,
+                "stream_speed": 5,
+                "distance": 10,
+                "requested": "upstream_time",
+                "speed_unit": "kilometre/hour",
+                "distance_unit": "kilometre",
+            },
+            "math_proof_invalid",
+        ),
+        (
+            "mathematics",
+            "circle_measure",
+            {"radius": 7, "pi_numerator": 4, "pi_denominator": 1, "requested": "area", "length_unit": "metre"},
+            "math_proof_invalid",
+        ),
+        (
+            "reasoning",
+            "two_set_cardinality",
+            {"first_count": 3, "second_count": 4, "intersection": 5, "requested": "union"},
+            "reasoning_proof_invalid",
+        ),
+        (
+            "reasoning",
+            "bidirectional_rank_total",
+            {"rank_from_left": 0, "rank_from_right": 4},
+            "reasoning_proof_invalid",
+        ),
+        (
+            "reasoning",
+            "clock_mirror_time",
+            {"hour": 13, "minute": 0},
+            "reasoning_proof_invalid",
+        ),
+    ],
+)
+def test_syllabus_gap_families_fail_closed_on_invalid_parameters(
+    subject: str,
+    family: str,
+    parameters: dict,
+    expected_code: str,
+) -> None:
+    candidate = mathematics_candidate() if subject == "mathematics" else reasoning_candidate()
+    candidate["deterministic_proof"] = {
+        "version": 1,
+        "family": family,
+        "parameters": parameters,
+        "option_values": [1, 2, 3, 4],
+        "explanation_values": [1],
+        "explanation_conclusion": candidate["options"][candidate["correct_index"]],
+    }
+
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+
+    assert raised.value.code == expected_code

@@ -19,26 +19,62 @@ from services.source_grounding import GroundingBundle, SourceDocument
 from storage import content_inventory_repo
 
 MATHEMATICS_PROOF_FAMILIES = (
-    "arithmetic_expression", "percentage_of", "average", "ratio_share",
-    "simple_interest", "algebra_linear", "time_work", "speed_distance",
-    "profit_loss", "rounded_division", "gcd_lcm", "exact_square_root",
-    "compound_interest", "direct_proportion", "weighted_average",
-    "partnership_share", "percentage_change", "simple_probability",
-    "rectangle_measure", "discount_price", "simultaneous_linear_equations",
-    "triangle_measure", "permutation_combination", "inverse_proportion",
+    "arithmetic_expression",
+    "percentage_of",
+    "average",
+    "ratio_share",
+    "simple_interest",
+    "algebra_linear",
+    "time_work",
+    "speed_distance",
+    "profit_loss",
+    "rounded_division",
+    "gcd_lcm",
+    "exact_square_root",
+    "compound_interest",
+    "direct_proportion",
+    "weighted_average",
+    "partnership_share",
+    "percentage_change",
+    "simple_probability",
+    "rectangle_measure",
+    "discount_price",
+    "simultaneous_linear_equations",
+    "triangle_measure",
+    "permutation_combination",
+    "inverse_proportion",
     "quadratic_equation_root",
+    "age_ratio",
+    "boat_stream",
+    "circle_measure",
 )
 REASONING_PROOF_FAMILIES = (
-    "arithmetic_series_next", "ordering_rank", "odd_one_out_tag", "coding_shift",
-    "direction_path", "ordering_constraints", "syllogism_finite_sets",
-    "analogy_mapping", "calendar_weekday_offset", "clock_smaller_angle",
-    "geometric_series_next", "alphabet_series_next", "quadratic_series_next",
+    "arithmetic_series_next",
+    "ordering_rank",
+    "odd_one_out_tag",
+    "coding_shift",
+    "direction_path",
+    "ordering_constraints",
+    "syllogism_finite_sets",
+    "analogy_mapping",
+    "calendar_weekday_offset",
+    "clock_smaller_angle",
+    "geometric_series_next",
+    "alphabet_series_next",
+    "quadratic_series_next",
     "alternating_arithmetic_series_next",
+    "two_set_cardinality",
+    "bidirectional_rank_total",
+    "clock_mirror_time",
 )
 LANGUAGE_QUESTION_FORMS = {
     "english": ("grammar_rule", "vocabulary", "comprehension", "error_detection"),
     "bengali": (
-        "grammar_rule", "vocabulary", "comprehension", "literature", "linguistics",
+        "grammar_rule",
+        "vocabulary",
+        "comprehension",
+        "literature",
+        "linguistics",
     ),
 }
 
@@ -113,9 +149,7 @@ def _candidate_schema(subject_key: str) -> dict[str, Any]:
     """Constrain model output to the deterministic contract for this subject."""
     schema = deepcopy(CANDIDATE_JSON_SCHEMA)
     properties = schema["items"]["properties"]
-    properties["language_question_form"]["enum"] = list(
-        LANGUAGE_QUESTION_FORMS.get(subject_key, ("generic_fact",))
-    )
+    properties["language_question_form"]["enum"] = list(LANGUAGE_QUESTION_FORMS.get(subject_key, ("generic_fact",)))
     if subject_key in LANGUAGE_QUESTION_FORMS:
         properties["language_verification_json"] = {
             "type": "OBJECT",
@@ -135,8 +169,13 @@ def _candidate_schema(subject_key: str) -> dict[str, Any]:
                 },
             },
             "required": [
-                "version", "authority_type", "rule_id", "source_span",
-                "review_status", "uncertain", "translation_status",
+                "version",
+                "authority_type",
+                "rule_id",
+                "source_span",
+                "review_status",
+                "uncertain",
+                "translation_status",
             ],
         }
     proof_families: tuple[str, ...]
@@ -148,6 +187,7 @@ def _candidate_schema(subject_key: str) -> dict[str, Any]:
         proof_families = ("evidence_span_single_answer",)
     properties["proof_family"]["enum"] = list(proof_families)
     return schema
+
 
 _CANDIDATE_REPAIR_LIMIT = 1
 _CANDIDATE_REPAIR_TARGET = 3
@@ -214,9 +254,7 @@ def process_due_replenishment_jobs(
                 rejection_codes=rejection_codes,
                 error_code="content_rejected" if no_safe_candidates else None,
                 retry_at=(
-                    _replenishment_retry_at(current, int(job.get("retry_count") or 0))
-                    if no_safe_candidates
-                    else None
+                    _replenishment_retry_at(current, int(job.get("retry_count") or 0)) if no_safe_candidates else None
                 ),
             )
             outcomes[outcome_key] = str(completed.get("status") or "due")
@@ -398,12 +436,10 @@ def _retain_novel_candidates(
         )
         for item in candidates.values()
     ]
-    existing_variants, existing_stems, existing_contents = (
-        content_inventory_repo.existing_candidate_identities(
-            variant_fingerprints=[str(row.get("variant_fingerprint") or "") for row in rows],
-            stem_hashes=[str(row.get("stem_hash") or "") for row in rows],
-            content_hashes=[str(row.get("content_hash") or "") for row in rows],
-        )
+    existing_variants, existing_stems, existing_contents = content_inventory_repo.existing_candidate_identities(
+        variant_fingerprints=[str(row.get("variant_fingerprint") or "") for row in rows],
+        stem_hashes=[str(row.get("stem_hash") or "") for row in rows],
+        content_hashes=[str(row.get("content_hash") or "") for row in rows],
     )
     retained: dict[str, dict[str, Any]] = {}
     rejections: list[dict[str, str]] = []
@@ -541,17 +577,11 @@ def _candidate_prompt(
     batch_size: int,
 ) -> str:
     subject = get_subject(subject_key, require_quiz_enabled=True)
-    required_forms = ", ".join(
-        LANGUAGE_QUESTION_FORMS.get(subject_key, ("generic_fact",))
-    )
+    required_forms = ", ".join(LANGUAGE_QUESTION_FORMS.get(subject_key, ("generic_fact",)))
     if subject_key == "mathematics":
-        required_proofs = ", ".join(
-            (*MATHEMATICS_PROOF_FAMILIES, "evidence_span_single_answer")
-        )
+        required_proofs = ", ".join((*MATHEMATICS_PROOF_FAMILIES, "evidence_span_single_answer"))
     elif subject_key == "reasoning":
-        required_proofs = ", ".join(
-            (*REASONING_PROOF_FAMILIES, "evidence_span_single_answer")
-        )
+        required_proofs = ", ".join((*REASONING_PROOF_FAMILIES, "evidence_span_single_answer"))
     else:
         required_proofs = "evidence_span_single_answer"
     difficulty_mix = {
@@ -643,7 +673,15 @@ has positive known_quantity and target_quantity plus non-negative known_value, t
 the constant product then result; quadratic_equation_root has bounded integer a, b,
 and c with non-zero a, two distinct rational roots from a positive perfect-square
 discriminant, and requested smaller or larger, tracing discriminant, its square root,
-then the requested root.
+then the requested root. age_ratio has positive older_ratio, younger_ratio and
+age_difference, a years_offset from the present to the referenced ratio, and requested
+older_present or younger_present; it traces ratio scale, referenced age, then present
+age and uses year units. boat_stream has boat_speed greater than positive stream_speed,
+speed_unit kilometre/hour with distance_unit kilometre or speed_unit metre/second with
+distance_unit metre, requested upstream_speed, downstream_speed, upstream_time, or
+downstream_time, and positive distance for time questions. circle_measure has positive
+radius, positive integer pi_numerator and pi_denominator whose ratio is between 3 and 4,
+length_unit centimetre/metre/kilometre, and requested area or circumference.
 arithmetic_series_next has sequence; ordering_rank has values,
 target, and direction (ascending or descending); odd_one_out_tag has exactly four tags,
 three equal and one different; coding_shift has source, shift, and encode/decode
@@ -662,7 +700,12 @@ difference and traces that second difference, the next first difference, then th
 value; alternating_arithmetic_series_next has six to twelve values whose even-indexed
 and odd-indexed subsequences each have a constant step, at least one non-zero, and
 traces the even step, odd step, then next value. Use ASCII numeric proof values
-even when displayed options use Bengali digits.
+even when displayed options use Bengali digits. two_set_cardinality has non-negative
+first_count, second_count and intersection plus optional total_population, and requested
+union, only_first, only_second, or neither; non-union results trace union then the answer.
+bidirectional_rank_total has positive rank_from_left and rank_from_right and traces their
+deduplicated total. clock_mirror_time has hour 1-12 and minute 0-59 and traces the exact
+HH:MM mirror time string.
 For every evidence-backed question, use proof_family evidence_span_single_answer, copy the four
 canonical source-language values aligned positionally with the four displayed options
 to proof_option_values and proof_evidence_values, and set the conclusion to the displayed
@@ -746,9 +789,7 @@ def _enrich(
                     subject_key,
                     source.micro_topic_key if source else bundle.micro_topic_key,
                 ),
-                "language_verification": _language_verification_from_item(
-                    item, subject_key, source
-                ),
+                "language_verification": _language_verification_from_item(item, subject_key, source),
                 "deterministic_proof": _proof_from_item(item),
             }
         )
@@ -802,11 +843,8 @@ def _language_verification_from_item(
     derived.update(
         {
             "version": 1,
-            "authority_type": (
-                source.kind if source.kind in {"official", "primary"} else "reviewed_reference"
-            ),
-            "rule_id": "source-span-"
-            + hashlib.sha256(f"{source.id}\0{span}".encode()).hexdigest()[:24],
+            "authority_type": (source.kind if source.kind in {"official", "primary"} else "reviewed_reference"),
+            "rule_id": "source-span-" + hashlib.sha256(f"{source.id}\0{span}".encode()).hexdigest()[:24],
             "source_span": span,
             "review_status": "source_proved",
             "translation_status": "not_applicable",
