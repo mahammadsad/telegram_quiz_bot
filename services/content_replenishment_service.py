@@ -47,6 +47,10 @@ MATHEMATICS_PROOF_FAMILIES = (
     "age_ratio",
     "boat_stream",
     "circle_measure",
+    "mixture_replacement",
+    "mean_median_mode",
+    "train_crossing",
+    "solid_measure",
 )
 REASONING_PROOF_FAMILIES = (
     "arithmetic_series_next",
@@ -66,6 +70,9 @@ REASONING_PROOF_FAMILIES = (
     "two_set_cardinality",
     "bidirectional_rank_total",
     "clock_mirror_time",
+    "three_set_cardinality",
+    "family_tree_relation",
+    "circular_seating_constraints",
 )
 LANGUAGE_QUESTION_FORMS = {
     "english": ("grammar_rule", "vocabulary", "comprehension", "error_detection"),
@@ -682,6 +689,16 @@ distance_unit metre, requested upstream_speed, downstream_speed, upstream_time, 
 downstream_time, and positive distance for time questions. circle_measure has positive
 radius, positive integer pi_numerator and pi_denominator whose ratio is between 3 and 4,
 length_unit centimetre/metre/kilometre, and requested area or circumference.
+mixture_replacement has positive total_volume, removed_volume no greater than the total,
+initial_concentration_percent and replacement_concentration_percent from 0 through 100,
+and repetitions 1-20; it traces the retained fraction then final concentration with
+percent units. mean_median_mode has two to twenty values and requested mean, median, or
+a single unique mode. train_crossing has positive train_length, non-negative
+object_length, positive speed, length_unit metre and speed_unit kilometre/hour or
+metre/second; it traces metres-per-second speed, total crossing length, then seconds.
+solid_measure has shape cuboid with positive length/width/height or cylinder with
+positive radius/height and rational pi_numerator/pi_denominator, length_unit centimetre
+or metre, and requested volume or supported surface-area form.
 arithmetic_series_next has sequence; ordering_rank has values,
 target, and direction (ascending or descending); odd_one_out_tag has exactly four tags,
 three equal and one different; coding_shift has source, shift, and encode/decode
@@ -705,7 +722,14 @@ first_count, second_count and intersection plus optional total_population, and r
 union, only_first, only_second, or neither; non-union results trace union then the answer.
 bidirectional_rank_total has positive rank_from_left and rank_from_right and traces their
 deduplicated total. clock_mirror_time has hour 1-12 and minute 0-59 and traces the exact
-HH:MM mirror time string.
+HH:MM mirror time string. three_set_cardinality has three non-negative set counts, three
+pairwise intersections, all_three_intersection, optional total_population, and requested
+union, exactly_one, or neither. family_tree_relation has a two-to-fifteen-entry people
+gender map, parent_edges, subject and reference; only a unique supported kinship is valid.
+circular_seating_constraints has four to eight unique items, an anchor, one-to-n-minus-one
+query_steps, clockwise/counterclockwise direction, and explicit adjacent,
+clockwise_adjacent, opposite, or clockwise_steps constraints; every valid arrangement
+must produce the same answer.
 For every evidence-backed question, use proof_family evidence_span_single_answer, copy the four
 canonical source-language values aligned positionally with the four displayed options
 to proof_option_values and proof_evidence_values, and set the conclusion to the displayed

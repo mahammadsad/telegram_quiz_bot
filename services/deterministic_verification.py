@@ -759,6 +759,109 @@ def _solve_mathematics(family: str, raw: Any) -> _SolvedValue:
                 result = 2 * pi_value * radius
                 return _SolvedValue(result, (result,), length_unit)
             raise ValueError
+        if family == "mixture_replacement":
+            total_volume = _fraction(params["total_volume"])
+            removed_volume = _fraction(params["removed_volume"])
+            initial_percent = _fraction(params["initial_concentration_percent"])
+            replacement_percent = _fraction(params["replacement_concentration_percent"])
+            repetitions = _positive_int(params.get("repetitions"), maximum=20)
+            if (
+                total_volume <= 0
+                or removed_volume <= 0
+                or removed_volume > total_volume
+                or not 0 <= initial_percent <= 100
+                or not 0 <= replacement_percent <= 100
+            ):
+                raise ValueError
+            retention = (total_volume - removed_volume) / total_volume
+            result = replacement_percent + (initial_percent - replacement_percent) * retention**repetitions
+            return _SolvedValue(result, (retention, result), "percent")
+        if family == "mean_median_mode":
+            raw_values = _sequence(params.get("values"))
+            requested = str(params.get("requested") or "")
+            if len(raw_values) not in range(2, 21):
+                raise ValueError
+            values = [_fraction(value) for value in raw_values]
+            if requested == "mean":
+                total = sum(values, Fraction())
+                result = total / len(values)
+                return _SolvedValue(result, (total, result))
+            if requested == "median":
+                ordered = sorted(values)
+                middle = len(ordered) // 2
+                result = (
+                    ordered[middle]
+                    if len(ordered) % 2
+                    else (ordered[middle - 1] + ordered[middle]) / 2
+                )
+                return _SolvedValue(result, (result,))
+            if requested == "mode":
+                counts = {value: values.count(value) for value in set(values)}
+                highest = max(counts.values())
+                modes = [value for value, count in counts.items() if count == highest]
+                if highest < 2 or len(modes) != 1:
+                    raise ValueError
+                return _SolvedValue(modes[0], (modes[0],))
+            raise ValueError
+        if family == "train_crossing":
+            train_length = _fraction(params["train_length"])
+            object_length = _fraction(params.get("object_length", 0))
+            speed = _fraction(params["speed"])
+            speed_unit = _required_unit(
+                params.get("speed_unit"), {"kilometre/hour", "metre/second"}
+            )
+            length_unit = _required_unit(params.get("length_unit"), {"metre"})
+            if train_length <= 0 or object_length < 0 or speed <= 0 or length_unit != "metre":
+                raise ValueError
+            speed_metres_per_second = speed * Fraction(5, 18) if speed_unit == "kilometre/hour" else speed
+            total_length = train_length + object_length
+            result = total_length / speed_metres_per_second
+            if result <= 0 or result > 86400:
+                raise ValueError
+            return _SolvedValue(
+                result,
+                (speed_metres_per_second, total_length, result),
+                "second",
+            )
+        if family == "solid_measure":
+            shape = str(params.get("shape") or "")
+            requested = str(params.get("requested") or "")
+            length_unit = _required_unit(
+                params.get("length_unit"), {"centimetre", "metre"}
+            )
+            if shape == "cuboid":
+                length = _fraction(params["length"])
+                width = _fraction(params["width"])
+                height = _fraction(params["height"])
+                if min(length, width, height) <= 0:
+                    raise ValueError
+                if requested == "volume":
+                    result = length * width * height
+                    return _SolvedValue(result, (result,), f"cubic_{length_unit}")
+                if requested == "total_surface_area":
+                    result = 2 * (length * width + width * height + height * length)
+                    return _SolvedValue(result, (result,), f"square_{length_unit}")
+                raise ValueError
+            if shape == "cylinder":
+                radius = _fraction(params["radius"])
+                height = _fraction(params["height"])
+                pi_value = Fraction(
+                    _positive_int(params.get("pi_numerator"), maximum=10000),
+                    _positive_int(params.get("pi_denominator"), maximum=10000),
+                )
+                if radius <= 0 or height <= 0 or not Fraction(3) < pi_value < Fraction(4):
+                    raise ValueError
+                if requested == "volume":
+                    result = pi_value * radius * radius * height
+                    return _SolvedValue(result, (result,), f"cubic_{length_unit}")
+                if requested == "curved_surface_area":
+                    result = 2 * pi_value * radius * height
+                    return _SolvedValue(result, (result,), f"square_{length_unit}")
+                if requested == "total_surface_area":
+                    result = 2 * pi_value * radius * (radius + height)
+                    return _SolvedValue(result, (result,), f"square_{length_unit}")
+                raise ValueError
+            raise ValueError
     except (KeyError, TypeError, ValueError, ZeroDivisionError) as exc:
         raise DeterministicVerificationError(
             "math_proof_invalid", "The mathematics proof parameters are invalid."
@@ -989,6 +1092,64 @@ def _solve_reasoning(family: str, raw: Any) -> _SolvedValue:
             mirror_minute = mirror_minutes % 60
             result = f"{mirror_hour:02d}:{mirror_minute:02d}"
             return _SolvedValue(result, (result,))
+        if family == "three_set_cardinality":
+            first = _bounded_int(params.get("first_count"), minimum=0, maximum=10**9)
+            second = _bounded_int(params.get("second_count"), minimum=0, maximum=10**9)
+            third = _bounded_int(params.get("third_count"), minimum=0, maximum=10**9)
+            first_second = _bounded_int(
+                params.get("first_second_intersection"), minimum=0, maximum=10**9
+            )
+            first_third = _bounded_int(
+                params.get("first_third_intersection"), minimum=0, maximum=10**9
+            )
+            second_third = _bounded_int(
+                params.get("second_third_intersection"), minimum=0, maximum=10**9
+            )
+            all_three = _bounded_int(
+                params.get("all_three_intersection"), minimum=0, maximum=10**9
+            )
+            if (
+                first_second > min(first, second)
+                or first_third > min(first, third)
+                or second_third > min(second, third)
+                or all_three > min(first_second, first_third, second_third)
+            ):
+                raise ValueError
+            only_first = first - first_second - first_third + all_three
+            only_second = second - first_second - second_third + all_three
+            only_third = third - first_third - second_third + all_three
+            if min(only_first, only_second, only_third) < 0:
+                raise ValueError
+            union = (
+                first
+                + second
+                + third
+                - first_second
+                - first_third
+                - second_third
+                + all_three
+            )
+            requested = str(params.get("requested") or "")
+            if requested == "union":
+                return _SolvedValue(union, (union,))
+            if requested == "exactly_one":
+                result = only_first + only_second + only_third
+            elif requested == "neither":
+                total_population = _bounded_int(
+                    params.get("total_population"), minimum=0, maximum=10**9
+                )
+                if total_population < union:
+                    raise ValueError
+                result = total_population - union
+            else:
+                raise ValueError
+            return _SolvedValue(result, (union, result))
+        if family == "family_tree_relation":
+            result = _solve_family_tree_relation(params)
+            return _SolvedValue(result, (result,))
+        if family == "circular_seating_constraints":
+            result, valid_count = _solve_circular_seating(params)
+            return _SolvedValue(result, (valid_count, result))
     except (TypeError, ValueError) as exc:
         raise DeterministicVerificationError(
             "reasoning_proof_invalid", "The reasoning puzzle is inconsistent or under-constrained."
@@ -1006,6 +1167,140 @@ def _constraint_holds(rule: Any, positions: Mapping[str, int]) -> bool:
     if before not in positions or after not in positions or before == after:
         raise ValueError
     return positions[before] < positions[after]
+
+
+def _solve_family_tree_relation(params: Mapping[str, Any]) -> str:
+    raw_people = _mapping(params.get("people"))
+    if len(raw_people) not in range(2, 16):
+        raise ValueError
+    people = {str(name): str(gender) for name, gender in raw_people.items()}
+    if any(
+        not name or len(name) > 40 or gender not in {"male", "female"}
+        for name, gender in people.items()
+    ):
+        raise ValueError
+    parent_edges = _sequence(params.get("parent_edges"))
+    if not parent_edges or len(parent_edges) > 30:
+        raise ValueError
+    parents: dict[str, set[str]] = {name: set() for name in people}
+    children: dict[str, set[str]] = {name: set() for name in people}
+    for raw_edge in parent_edges:
+        if not isinstance(raw_edge, Mapping):
+            raise ValueError
+        parent = str(raw_edge.get("parent") or "")
+        child = str(raw_edge.get("child") or "")
+        if parent not in people or child not in people or parent == child:
+            raise ValueError
+        parents[child].add(parent)
+        children[parent].add(child)
+        if len(parents[child]) > 2:
+            raise ValueError
+
+    def descendants(name: str, visiting: set[str]) -> set[str]:
+        if name in visiting:
+            raise ValueError
+        next_visiting = {*visiting, name}
+        result: set[str] = set()
+        for child in children[name]:
+            result.add(child)
+            result.update(descendants(child, next_visiting))
+        return result
+
+    for person in people:
+        descendants(person, set())
+
+    subject = str(params.get("subject") or "")
+    reference = str(params.get("reference") or "")
+    if subject not in people or reference not in people or subject == reference:
+        raise ValueError
+    gender = people[subject]
+    relations: set[str] = set()
+    if subject in parents[reference]:
+        relations.add("father" if gender == "male" else "mother")
+    if subject in children[reference]:
+        relations.add("son" if gender == "male" else "daughter")
+    if parents[subject] & parents[reference]:
+        relations.add("brother" if gender == "male" else "sister")
+    reference_grandparents = {
+        grandparent for parent in parents[reference] for grandparent in parents[parent]
+    }
+    if subject in reference_grandparents:
+        relations.add("grandfather" if gender == "male" else "grandmother")
+    subject_grandparents = {
+        grandparent for parent in parents[subject] for grandparent in parents[parent]
+    }
+    if reference in subject_grandparents:
+        relations.add("grandson" if gender == "male" else "granddaughter")
+    if any(parents[subject] & parents[parent] for parent in parents[reference]):
+        relations.add("uncle" if gender == "male" else "aunt")
+    if any(parents[parent] & parents[reference] for parent in parents[subject]):
+        relations.add("nephew" if gender == "male" else "niece")
+    if len(relations) != 1:
+        raise ValueError
+    return relations.pop()
+
+
+def _solve_circular_seating(params: Mapping[str, Any]) -> tuple[str, int]:
+    raw_items = _sequence(params.get("items"))
+    if len(raw_items) not in range(4, 9):
+        raise ValueError
+    items = [str(value) for value in raw_items]
+    anchor = str(params.get("anchor") or "")
+    direction = str(params.get("direction") or "")
+    query_steps = params.get("query_steps")
+    constraints = _sequence(params.get("constraints"))
+    if (
+        len(set(items)) != len(items)
+        or any(not item or len(item) > 40 for item in items)
+        or anchor not in items
+        or direction not in {"clockwise", "counterclockwise"}
+        or isinstance(query_steps, bool)
+        or not isinstance(query_steps, int)
+        or query_steps not in range(1, len(items))
+        or len(constraints) not in range(1, 21)
+    ):
+        raise ValueError
+    others = [item for item in items if item != anchor]
+    answers: set[str] = set()
+    valid_count = 0
+    for tail in permutations(others):
+        order = (anchor, *tail)
+        positions = {item: index for index, item in enumerate(order)}
+        if not all(_circular_constraint_holds(rule, positions, len(items)) for rule in constraints):
+            continue
+        valid_count += 1
+        offset = query_steps if direction == "clockwise" else -query_steps
+        answers.add(order[offset % len(items)])
+    if not valid_count or len(answers) != 1:
+        raise ValueError
+    return answers.pop(), valid_count
+
+
+def _circular_constraint_holds(
+    rule: Any,
+    positions: Mapping[str, int],
+    item_count: int,
+) -> bool:
+    if not isinstance(rule, Mapping):
+        raise ValueError
+    kind = str(rule.get("type") or "")
+    first = str(rule.get("first") or "")
+    second = str(rule.get("second") or "")
+    if first not in positions or second not in positions or first == second:
+        raise ValueError
+    clockwise_distance = (positions[second] - positions[first]) % item_count
+    if kind == "adjacent":
+        return clockwise_distance in {1, item_count - 1}
+    if kind == "clockwise_adjacent":
+        return clockwise_distance == 1
+    if kind == "opposite":
+        return item_count % 2 == 0 and clockwise_distance == item_count // 2
+    if kind == "clockwise_steps":
+        steps = rule.get("steps")
+        if isinstance(steps, bool) or not isinstance(steps, int) or steps not in range(1, item_count):
+            raise ValueError
+        return clockwise_distance == steps
+    raise ValueError
 
 
 def _verify_explanation_values(proof: Mapping[str, Any], expected: Sequence[Any]) -> None:
@@ -1099,28 +1394,48 @@ def _fraction(value: Any) -> Fraction:
     if isinstance(value, bool):
         raise ValueError
     if isinstance(value, Fraction):
-        return value
+        result = value
+        if result.numerator.bit_length() > 256 or result.denominator.bit_length() > 256:
+            raise ValueError
+        return result
     if isinstance(value, int):
+        if abs(value) > 10**15:
+            raise ValueError
         return Fraction(value)
     if isinstance(value, Decimal):
-        return Fraction(value)
-    text = str(value).strip().replace(",", "")
-    if not text:
+        decimal_value = value
+    else:
+        text = str(value).strip().replace(",", "")
+        if not text or len(text) > 64:
+            raise ValueError
+        try:
+            decimal_value = Decimal(text)
+        except InvalidOperation as exc:
+            raise ValueError from exc
+    if not decimal_value.is_finite() or (
+        decimal_value and not -18 <= decimal_value.adjusted() <= 15
+    ):
         raise ValueError
     try:
-        return Fraction(Decimal(text))
-    except (InvalidOperation, ValueError, ZeroDivisionError) as exc:
+        result = Fraction(decimal_value)
+    except (ValueError, ZeroDivisionError) as exc:
         raise ValueError from exc
+    if result.numerator.bit_length() > 256 or result.denominator.bit_length() > 256:
+        raise ValueError
+    return result
 
 
 def _decimal(value: Any) -> Decimal:
     if isinstance(value, bool):
         raise ValueError
+    text = str(value).strip().replace(",", "")
+    if not text or len(text) > 64:
+        raise ValueError
     try:
-        result = Decimal(str(value).strip().replace(",", ""))
+        result = Decimal(text)
     except InvalidOperation as exc:
         raise ValueError from exc
-    if not result.is_finite():
+    if not result.is_finite() or (result and not -18 <= result.adjusted() <= 15):
         raise ValueError
     return result
 
