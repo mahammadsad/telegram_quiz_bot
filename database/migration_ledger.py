@@ -107,6 +107,10 @@ PRODUCTION_LEDGER_SOURCE_MD5: dict[str, tuple[str, str]] = {
         "20260904164836",
         "ab2f7a8b0b28b07ddd3ef42479f30ca1",
     ),
+    "reserve_tier_round_robin_claims": (
+        "20260904172137",
+        "55a6c8aeb8e367f030ffdd83bc3a2f13",
+    ),
 }
 
 
