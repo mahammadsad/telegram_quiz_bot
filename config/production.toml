@@ -1,5 +1,5 @@
 [meta]
-version = "2026-08-24.1"
+version = "2026-09-04.1"
 
 [brand]
 name = "Citizen Affairs Exam Prep"
@@ -45,8 +45,8 @@ answer_free = true
 [database]
 contract_version = "2.2.0"
 request_timeout_seconds = 12
-platform_contract_version = "1.1.0"
-platform_contract_migration_version = "20260831011657"
+platform_contract_version = "1.2.0"
+platform_contract_migration_version = "20260904164836"
 post_finalization_migration_version = "20260821100000"
 quiz_jobs_migration_version = "20260808071500"
 leaderboard_privacy_rpc_fix_migration_version = "20260808084950"

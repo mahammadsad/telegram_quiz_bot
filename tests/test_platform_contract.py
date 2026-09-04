@@ -18,6 +18,7 @@ from database.contract import (
     PRIMARY_SCHEDULER_MIGRATION_VERSION,
     REMINDER_DELIVERY_MIGRATION_VERSION,
     REPLENISHMENT_RETURN_CONTRACT_MIGRATION_VERSION,
+    RESERVE_AWARE_REPLENISHMENT_MIGRATION_VERSION,
     SOURCE_OPTIONAL_REPLENISHMENT_MIGRATION_VERSION,
     VALIDATION_DEAD_LETTER_RECOVERY_MIGRATION_VERSION,
 )
@@ -28,7 +29,13 @@ MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / f"{PLATFORM_CONTRACT_MIGRATION_VERSION}_learner_bootstrap_latency_contract.sql"
+    / f"{PLATFORM_CONTRACT_MIGRATION_VERSION}_reserve_aware_replenishment_claims.sql"
+)
+LEARNER_BOOTSTRAP_MIGRATION = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / f"{LEARNER_BOOTSTRAP_LATENCY_MIGRATION_VERSION}_learner_bootstrap_latency_contract.sql"
 )
 BASE_MIGRATION = ROOT / "supabase" / "migrations" / "20260822190025_platform_contract_v1.sql"
 
@@ -46,7 +53,8 @@ def _ready_contract() -> dict:
 
 def test_platform_contract_remains_the_scheduler_gate_after_additive_migrations() -> None:
     assert MIGRATION.is_file()
-    assert LATEST_MIGRATION_VERSION == LEARNER_BOOTSTRAP_LATENCY_MIGRATION_VERSION
+    assert LATEST_MIGRATION_VERSION == RESERVE_AWARE_REPLENISHMENT_MIGRATION_VERSION
+    assert LEARNER_BOOTSTRAP_LATENCY_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert REPLENISHMENT_RETURN_CONTRACT_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert SOURCE_OPTIONAL_REPLENISHMENT_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert VALIDATION_DEAD_LETTER_RECOVERY_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
@@ -66,7 +74,11 @@ def test_platform_contract_remains_the_scheduler_gate_after_additive_migrations(
     assert "set search_path = ''" in source
     assert "revoke all on function public.get_platform_contract_v1()" in source
     assert "grant execute on function public.get_platform_contract_v1() to service_role" in source
-    contract_chain = source + BASE_MIGRATION.read_text(encoding="utf-8")
+    contract_chain = (
+        source
+        + LEARNER_BOOTSTRAP_MIGRATION.read_text(encoding="utf-8")
+        + BASE_MIGRATION.read_text(encoding="utf-8")
+    )
     assert "generator_provider" in contract_chain
     assert "generator_model" in contract_chain
     assert "supabase_migrations.schema_migrations" in contract_chain

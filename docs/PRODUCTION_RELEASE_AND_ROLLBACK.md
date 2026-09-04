@@ -1,6 +1,6 @@
 # Production release and rollback
 
-This runbook is the production gate for application version `8.7.2`. Passing local unit tests is not production evidence.
+This runbook is the production gate for application version `8.7.3`. Passing local unit tests is not production evidence.
 
 ## Ownership and required inputs
 
@@ -54,7 +54,7 @@ Do **not** schedule or manually call `public.process_due_account_deletions` unti
 ## Staging gate
 
 1. Deploy the exact release commit to staging.
-2. Verify `/version` reports `applicationVersion: 8.7.2`, the expected full `commitSha`, staging environment and build time.
+2. Verify `/version` reports `applicationVersion: 8.7.3`, the expected full `commitSha`, staging environment and build time.
 3. Verify root HTML, CSS, JS, icon, manifest, service worker, `/health/live`, `/health/ready`, an answer-free quiz, server-timed start/submission and dashboard with only the synthetic user.
 4. Test a duplicate submission with the same attempt ID; it must be idempotent.
 5. Submit forged client duration telemetry; it must not become trusted ranking time.
