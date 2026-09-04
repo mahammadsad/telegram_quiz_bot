@@ -103,6 +103,10 @@ PRODUCTION_LEDGER_SOURCE_MD5: dict[str, tuple[str, str]] = {
         "20260831011657",
         "162ec1e833d4d79d39723e8f839abbb1",
     ),
+    "reserve_aware_replenishment_claims": (
+        "20260904164836",
+        "ab2f7a8b0b28b07ddd3ef42479f30ca1",
+    ),
 }
 
 
