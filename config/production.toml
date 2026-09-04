@@ -1,5 +1,5 @@
 [meta]
-version = "2026-09-04.2"
+version = "2026-09-05.1"
 
 [brand]
 name = "Citizen Affairs Exam Prep"
@@ -36,6 +36,8 @@ dispatcher_lease_minutes = 20
 dispatcher_max_retries = 8
 retry_base_seconds = 60
 retry_max_seconds = 1800
+inline_retry_max_passes = 4
+inline_retry_window_seconds = 900
 
 [static_fallback]
 recovery_export_enabled = true

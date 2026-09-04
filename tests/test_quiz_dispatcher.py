@@ -1,6 +1,9 @@
-from datetime import date, datetime, timezone
+import logging
+from datetime import date, datetime, timedelta, timezone
 
-from services import quiz_dispatcher
+import pytest
+
+from services import quiz_dispatch_runtime, quiz_dispatcher
 from services.quiz_lifecycle import RunOutcome
 
 
@@ -155,3 +158,137 @@ def test_global_health_alerts_when_due_quiz_is_over_thirty_minutes_late():
     outcomes = quiz_dispatcher.global_due_outcomes(specs, [], now=now)
 
     assert any(value == "overdue:missing" for value in outcomes.values())
+
+
+def test_dispatch_result_tracks_the_earliest_database_retry_timestamp(monkeypatch):
+    now = datetime(2026, 8, 8, 14, tzinfo=timezone.utc)
+    specs = quiz_dispatcher.daily_job_specs(date(2026, 8, 8))
+    jobs = _jobs(specs[:2])
+    retry_times = iter([
+        now + timedelta(seconds=90),
+        (now + timedelta(seconds=65)).isoformat(),
+    ])
+    monkeypatch.setattr(quiz_dispatcher.quiz_jobs_repo, "ensure_daily", lambda *a, **k: jobs)
+    monkeypatch.setattr(quiz_dispatcher.quiz_jobs_repo, "claim_due", lambda **k: jobs)
+    monkeypatch.setattr(quiz_dispatcher.quiz_jobs_repo, "transition", lambda **k: None)
+    monkeypatch.setattr(
+        quiz_dispatcher.quiz_jobs_repo,
+        "fail",
+        lambda **kwargs: {
+            "status": "retry_wait",
+            "next_retry_at": next(retry_times),
+        },
+    )
+
+    def fail(*args, **kwargs):
+        raise TimeoutError("temporary provider failure")
+
+    result = quiz_dispatcher.dispatch_due_jobs(fail, now=now, worker_id="worker")
+
+    assert result.next_retry_at == now + timedelta(seconds=65)
+
+
+class _FakeClock:
+    def __init__(self, now: datetime) -> None:
+        self.now = now
+        self.sleeps: list[float] = []
+
+    def __call__(self) -> datetime:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.sleeps.append(seconds)
+        self.now += timedelta(seconds=seconds)
+
+
+def test_bounded_inline_retry_waits_until_database_timestamp(monkeypatch):
+    started = datetime(2026, 8, 8, 14, tzinfo=timezone.utc)
+    clock = _FakeClock(started)
+    calls: list[datetime] = []
+    results = iter([
+        quiz_dispatcher.DispatchResult(
+            date(2026, 8, 8),
+            13,
+            1,
+            {"science": "retry_wait:validation_failed"},
+            {"science": "retrying:retry_wait"},
+            started + timedelta(seconds=60),
+        ),
+        quiz_dispatcher.DispatchResult(
+            date(2026, 8, 8),
+            13,
+            1,
+            {"science": "generated_and_posted"},
+            {"science": "posted"},
+        ),
+    ])
+
+    def dispatch_once(**kwargs):
+        calls.append(kwargs["now"])
+        return next(results)
+
+    monkeypatch.setattr(quiz_dispatch_runtime, "dispatch_due_jobs", dispatch_once)
+    result = quiz_dispatch_runtime.dispatch_due_jobs_with_bounded_retries(
+        dispatcher=object(),
+        runner=lambda *a, **k: RunOutcome.GENERATED_AND_POSTED,
+        worker_id="worker",
+        logger=logging.getLogger("test"),
+        max_passes=4,
+        retry_window_seconds=900,
+        clock=clock,
+        sleeper=clock.sleep,
+    )
+
+    assert clock.sleeps == [62.0]
+    assert calls == [started, started + timedelta(seconds=62)]
+    assert result.global_outcomes == {"science": "posted"}
+
+
+def test_bounded_inline_retry_defers_work_outside_window(monkeypatch):
+    started = datetime(2026, 8, 8, 14, tzinfo=timezone.utc)
+    clock = _FakeClock(started)
+    result = quiz_dispatcher.DispatchResult(
+        date(2026, 8, 8),
+        13,
+        1,
+        {"environment": "retry_wait:provider_transient"},
+        {"environment": "retrying:retry_wait"},
+        started + timedelta(seconds=901),
+    )
+    calls = []
+    monkeypatch.setattr(
+        quiz_dispatch_runtime,
+        "dispatch_due_jobs",
+        lambda **kwargs: calls.append(kwargs) or result,
+    )
+
+    observed = quiz_dispatch_runtime.dispatch_due_jobs_with_bounded_retries(
+        dispatcher=object(),
+        runner=lambda *a, **k: RunOutcome.GENERATED_AND_POSTED,
+        worker_id="worker",
+        logger=logging.getLogger("test"),
+        max_passes=4,
+        retry_window_seconds=900,
+        clock=clock,
+        sleeper=clock.sleep,
+    )
+
+    assert observed is result
+    assert len(calls) == 1
+    assert clock.sleeps == []
+
+
+@pytest.mark.parametrize(
+    ("max_passes", "window", "message"),
+    [(0, 900, "max_passes"), (4, -1, "retry_window_seconds")],
+)
+def test_bounded_inline_retry_rejects_invalid_limits(max_passes, window, message):
+    with pytest.raises(ValueError, match=message):
+        quiz_dispatch_runtime.dispatch_due_jobs_with_bounded_retries(
+            dispatcher=object(),
+            runner=lambda *a, **k: RunOutcome.GENERATED_AND_POSTED,
+            worker_id="worker",
+            logger=logging.getLogger("test"),
+            max_passes=max_passes,
+            retry_window_seconds=window,
+        )
