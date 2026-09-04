@@ -294,6 +294,12 @@ QUIZ_JOB_RETRY_MAX_SECONDS = max(
     QUIZ_JOB_RETRY_BASE_SECONDS,
     int(PRODUCTION_CONFIG["scheduler"]["retry_max_seconds"]),
 )
+QUIZ_DISPATCH_INLINE_RETRY_MAX_PASSES = max(
+    1, int(PRODUCTION_CONFIG["scheduler"]["inline_retry_max_passes"])
+)
+QUIZ_DISPATCH_INLINE_RETRY_WINDOW_SECONDS = max(
+    0, int(PRODUCTION_CONFIG["scheduler"]["inline_retry_window_seconds"])
+)
 CURRENT_AFFAIRS_MIN = 2
 CURRENT_AFFAIRS_MAX = 3
 GEOGRAPHY_MIN = 1

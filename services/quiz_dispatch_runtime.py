@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import json
+import time
 from collections.abc import Callable, Iterable, Mapping
-from datetime import date, datetime
+from datetime import date, datetime, timedelta, timezone
 from logging import Logger
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -116,6 +117,64 @@ def dispatch_due_jobs(
             sort_keys=True,
         ),
     )
+    return result
+
+
+def dispatch_due_jobs_with_bounded_retries(
+    *,
+    dispatcher: Any,
+    runner: Callable[..., Any],
+    worker_id: str,
+    logger: Logger,
+    max_passes: int,
+    retry_window_seconds: int,
+    clock: Callable[[], datetime] | None = None,
+    sleeper: Callable[[float], None] = time.sleep,
+) -> Any:
+    """Retry database-scheduled work inside one heartbeat without busy polling."""
+    if max_passes < 1:
+        raise ValueError("max_passes must be at least one")
+    if retry_window_seconds < 0:
+        raise ValueError("retry_window_seconds cannot be negative")
+
+    utcnow = clock or (lambda: datetime.now(timezone.utc))
+    started_at = utcnow().astimezone(timezone.utc)
+    deadline = started_at + timedelta(seconds=retry_window_seconds)
+    result = None
+
+    for pass_number in range(1, max_passes + 1):
+        current = utcnow().astimezone(timezone.utc)
+        result = dispatch_due_jobs(
+            dispatcher=dispatcher,
+            runner=runner,
+            worker_id=worker_id,
+            logger=logger,
+            now=current,
+        )
+        retry_at = result.next_retry_at
+        if retry_at is None or pass_number >= max_passes:
+            break
+
+        wake_at = retry_at.astimezone(timezone.utc) + timedelta(seconds=2)
+        if wake_at > deadline:
+            logger.info(
+                "DISPATCH_INLINE_RETRY_DEFERRED pass=%s retry_at=%s deadline=%s",
+                pass_number,
+                retry_at.isoformat(),
+                deadline.isoformat(),
+            )
+            break
+        wait_seconds = max(0.0, (wake_at - utcnow().astimezone(timezone.utc)).total_seconds())
+        logger.info(
+            "DISPATCH_INLINE_RETRY_WAIT pass=%s wait_seconds=%.1f retry_at=%s",
+            pass_number,
+            wait_seconds,
+            retry_at.isoformat(),
+        )
+        sleeper(wait_seconds)
+
+    if result is None:  # pragma: no cover - max_passes validation guarantees a pass
+        raise RuntimeError("dispatcher did not execute")
     return result
 
 

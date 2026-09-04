@@ -25,6 +25,8 @@ from config.settings import (
     MINIAPP_SHORT_NAME,
     PRODUCTION_CONFIG_HASH,
     PRODUCTION_CONFIG_VERSION,
+    QUIZ_DISPATCH_INLINE_RETRY_MAX_PASSES,
+    QUIZ_DISPATCH_INLINE_RETRY_WINDOW_SECONDS,
     SOURCE_BACKED_ROTATION_ENABLED,
     SUPABASE_SERVICE_KEY,
     SUPABASE_URL,
@@ -1193,6 +1195,15 @@ def run_daily_completeness_check(*, now: datetime | None = None) -> DailyHealthR
 
 
 def dispatch_due_quiz_jobs(*, now: datetime | None = None) -> quiz_dispatcher.DispatchResult:
+    if now is None:
+        return quiz_dispatch_runtime.dispatch_due_jobs_with_bounded_retries(
+            dispatcher=quiz_dispatcher,
+            runner=run_subject_quiz,
+            worker_id=_worker_id(),
+            logger=LOG,
+            max_passes=QUIZ_DISPATCH_INLINE_RETRY_MAX_PASSES,
+            retry_window_seconds=QUIZ_DISPATCH_INLINE_RETRY_WINDOW_SECONDS,
+        )
     return quiz_dispatch_runtime.dispatch_due_jobs(
         dispatcher=quiz_dispatcher,
         runner=run_subject_quiz,

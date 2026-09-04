@@ -35,6 +35,7 @@ class DispatchResult:
     claimed: int
     outcomes: dict[str, str]
     global_outcomes: dict[str, str]
+    next_retry_at: datetime | None = None
 
     @property
     def actionable_failures(self) -> bool:
@@ -96,6 +97,7 @@ def dispatch_due_jobs(
         limit=len(QUIZ_SUBJECTS),
     )
     outcomes: dict[str, str] = {}
+    next_retry_at: datetime | None = None
     for job in claimed:
         subject_key = str(job["subject_key"])
         job_id = str(job["id"])
@@ -142,6 +144,10 @@ def dispatch_due_jobs(
                     max_delay_seconds=QUIZ_JOB_RETRY_MAX_SECONDS,
                 )
                 outcome_text = f"{failure['status']}:{outcome_text}"
+                next_retry_at = _earliest_retry_at(
+                    next_retry_at,
+                    failure.get("next_retry_at"),
+                )
             outcomes[subject_key] = outcome_text
         except Exception as exc:
             category = str(getattr(exc, "category", type(exc).__name__))
@@ -159,6 +165,10 @@ def dispatch_due_jobs(
                     max_delay_seconds=QUIZ_JOB_RETRY_MAX_SECONDS,
                 )
                 outcomes[subject_key] = f"{failure['status']}:{category}"
+                next_retry_at = _earliest_retry_at(
+                    next_retry_at,
+                    failure.get("next_retry_at"),
+                )
             except Exception:
                 # The delivery trigger may already have moved the job to
                 # posting_unknown; normal retry handling must not overwrite it.
@@ -185,7 +195,29 @@ def dispatch_due_jobs(
         len(claimed),
         outcomes,
         global_outcomes,
+        next_retry_at,
     )
+
+
+def _earliest_retry_at(
+    current: datetime | None,
+    candidate: Any,
+) -> datetime | None:
+    """Return the earliest valid UTC retry timestamp emitted by the database."""
+    if not candidate:
+        return current
+    if isinstance(candidate, datetime):
+        parsed = candidate
+    else:
+        try:
+            parsed = datetime.fromisoformat(str(candidate).replace("Z", "+00:00"))
+        except ValueError:
+            LOG.warning("QUIZ_JOB_INVALID_RETRY_AT value=%r", candidate)
+            return current
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    parsed = parsed.astimezone(timezone.utc)
+    return parsed if current is None or parsed < current else current
 
 
 def global_due_outcomes(
