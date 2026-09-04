@@ -38,7 +38,7 @@ jobs:
           import os
           from pathlib import Path
 
-          from database.contract import REMINDER_DELIVERY_MIGRATION_VERSION
+          from database.contract import CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION
 
           expected_ref = "tizxodkcpglmxgtwepor"
           expected_ack = f"APPLY TRACKED MIGRATIONS TO {expected_ref}"
@@ -60,8 +60,8 @@ jobs:
           if missing:
               raise SystemExit("Refusing migration: required production credentials are unavailable.")
           migration = Path("supabase/migrations") / (
-              f"{REMINDER_DELIVERY_MIGRATION_VERSION}_"
-              "durable_reminder_consent_delivery.sql"
+              f"{CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION}_"
+              "current_affairs_economy_rotation.sql"
           )
           if not migration.is_file():
               raise SystemExit("Refusing migration: expected reviewed migration is missing.")
@@ -198,6 +198,8 @@ jobs:
           from urllib.error import HTTPError
           from urllib.request import Request, urlopen
 
+          from database.contract import REMINDER_DELIVERY_MIGRATION_VERSION
+
           url = os.environ["SUPABASE_URL"].rstrip("/") + "/rest/v1/rpc/get_reminder_delivery_contract"
           request = Request(
               url,
@@ -221,7 +223,7 @@ jobs:
                   time.sleep(5)
           expected = {
               "ready": True,
-              "migrationVersion": "20260824033823",
+              "migrationVersion": REMINDER_DELIVERY_MIGRATION_VERSION,
               "consentPolicyVersion": "reminder-consent-v1",
               "deliveryEnabled": False,
               "answerFreePayload": True,

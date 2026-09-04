@@ -1,6 +1,6 @@
 # Audit remediation status
 
-Status as of 30 August 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
+Status as of 5 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
 
 Status meanings:
 
@@ -40,6 +40,31 @@ Status meanings:
 | P2-10 | P2 | Request contracts are isolated in `api_models.py`; public quiz delivery, timed-test attempts, learner workflows, admin moderation, privacy-projected leaderboards, public catalogue, static/PWA delivery and system endpoints are isolated in focused route modules. Scheduled-job health, dispatch and recovery orchestration is isolated from the subject generation/posting entry point. Primary pages use external CSS/JS and no longer need inline runtime styles. | **Implemented** | Service/repository modules, `api_models.py`, `routes/quizzes.py`, `routes/test_attempts.py`, `routes/learner.py`, `routes/admin.py`, `routes/leaderboards.py`, `routes/catalog.py`, `routes/static_pages.py`, `routes/system.py`, `services/quiz_dispatch_runtime.py`, external frontend assets; full pytest, Ruff and mypy pass. | Keep future HTTP and scheduling behavior in focused modules; retain `app.py` and `bot.py` as composition/entry points rather than adding new domain logic there. |
 | P2-11 | P2 | Accidental FUSE artifact is removed/ignored and current release, architecture and rollback documentation is added. | **Implemented** | `.gitignore`, removed `.fuse_hidden*`, remediation/release/architecture docs. | Archive contradictory legacy runbooks after owner review rather than deleting potentially useful history automatically. |
 | P2-12 | P2 | Security, contribution, conduct, roadmap, issue/PR templates and content provenance policy are added. | **Partial / awaiting external action** | root governance files, `.github` templates, `docs/PUBLIC_ROADMAP.md`, `docs/CONTENT_PROVENANCE_AND_LICENSING.md`. | Repository owner must choose an OSI license and confirm code/content ownership. No license was guessed. |
+
+## 5 September delivery reliability checkpoint
+
+- The privacy-safe five-day production SLO readback covered 65 scheduled jobs:
+  all 65 posted, all five days completed, and there were zero missing,
+  terminal, unknown-delivery or still-retrying jobs. Only 50 of 65 jobs
+  (76.92%) posted within the 30-minute objective, below the 95% target.
+- Per-job and event analysis traced the late tail primarily to retryable
+  validation/content-collision failures and occasional provider transients. The
+  database made those retries eligible after roughly one to four minutes, but
+  the worker exited and deferred them to a later 15-minute scheduler heartbeat.
+- Release `1dd919d3be1b00205741751553dd5f700de20e0e` consumes the exact
+  database-authored `next_retry_at` timestamp inside the active dispatcher run.
+  It retains the atomic claim/lease RPC and posting idempotency, retries only
+  `retry_wait` work, and stops after four total passes or a 15-minute retry-start
+  window. Blocked, dead-letter and unknown-delivery states remain fail-closed.
+- The release passed the complete protected CI/security matrix, 752 local
+  Python tests, 272 mobile-browser tests and six HTTPS/service-worker tests.
+  Render serves application `8.7.5`, configuration `2026-09-05.1` and the exact
+  release SHA with all readiness checks green. Canonical deployed smoke
+  `33925182747` and a production no-work dispatcher canary `33925237749` passed;
+  the latter ensured all 13 future jobs and claimed none before their due time.
+- P1-11 remains partial until a representative post-release window demonstrates
+  the on-time objective. No synthetic production failure was introduced merely
+  to exercise retry behavior; normal durable events will provide that evidence.
 
 ## 1 September production and proof-coverage checkpoint
 

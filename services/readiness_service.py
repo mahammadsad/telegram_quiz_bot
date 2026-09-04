@@ -30,6 +30,7 @@ from config.settings import (
 from database.contract import (
     APPLICATION_VERSION,
     CONTENT_REPLENISHMENT_BACKLOG_MIGRATION_VERSION,
+    CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION,
     DAILY_ATTEMPT_TIMING_MIGRATION_VERSION,
     DATABASE_CONTRACT_KEY,
     DATABASE_CONTRACT_VERSION,
@@ -129,6 +130,9 @@ class Readiness:
             "platformContractVersion": PLATFORM_CONTRACT_VERSION,
             "platformContractMigrationVersion": PLATFORM_CONTRACT_MIGRATION_VERSION,
             "sourceRolloutMigrationVersion": SOURCE_ROLLOUT_MIGRATION_VERSION,
+            "currentAffairsEconomyRotationMigrationVersion": (
+                CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION
+            ),
             "quizQualityMigrationVersion": QUIZ_QUALITY_MIGRATION_VERSION,
             "personalLearningMigrationVersion": (PERSONAL_LEARNING_MIGRATION_VERSION),
             "leaderboardPrivacyMigrationVersion": (LEADERBOARD_PRIVACY_MIGRATION_VERSION),
@@ -469,8 +473,12 @@ def assess(*, use_cache: bool = True) -> Readiness:
             source_rollout_ready = bool(
                 contract.get("source_rollout_migration_version") == SOURCE_ROLLOUT_MIGRATION_VERSION
                 and contract.get("source_rollout_migration_applied") is True
+                and contract.get("current_affairs_economy_rotation_migration_version")
+                == CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION
+                and contract.get("current_affairs_economy_rotation_migration_applied") is True
                 and contract.get("source_backed_rotation_ready") is True
                 and contract.get("source_coverage_ready") is True
+                and contract.get("current_affairs_economy_coverage_ready") is True
             )
             quiz_quality_ready = bool(
                 contract.get("quiz_quality_migration_version") == QUIZ_QUALITY_MIGRATION_VERSION

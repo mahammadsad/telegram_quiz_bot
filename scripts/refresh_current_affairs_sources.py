@@ -99,6 +99,7 @@ class RefreshStats:
     skipped: int
     source_status: str = "available"
     isro_source_status: str = "available"
+    pib_source_status: str = "available"
 
 
 CLASSIFICATIONS: dict[str, tuple[str, str, str]] = {
@@ -142,7 +143,40 @@ CLASSIFICATIONS: dict[str, tuple[str, str, str]] = {
         "বিজ্ঞান ও প্রযুক্তি",
         "current-affairs:science-technology:t04",
     ),
+    "economy:t01": (
+        "current-affairs:economy-reports",
+        "অর্থনীতি, প্রতিবেদন ও সূচক",
+        "current-affairs:economy-reports:t01",
+    ),
+    "economy:t02": (
+        "current-affairs:economy-reports",
+        "অর্থনীতি, প্রতিবেদন ও সূচক",
+        "current-affairs:economy-reports:t02",
+    ),
+    "economy:t03": (
+        "current-affairs:economy-reports",
+        "অর্থনীতি, প্রতিবেদন ও সূচক",
+        "current-affairs:economy-reports:t03",
+    ),
+    "economy:t04": (
+        "current-affairs:economy-reports",
+        "অর্থনীতি, প্রতিবেদন ও সূচক",
+        "current-affairs:economy-reports:t04",
+    ),
 }
+
+RBI_POLICY_TERMS = (
+    "monetary policy", "policy repo rate", "standing deposit facility",
+    "cash reserve ratio", "statutory liquidity ratio", "liquidity framework",
+)
+RBI_REPORT_TERMS = (
+    "annual report", "financial stability report", "bulletin", "report on trend",
+    "state finances", "currency and finance", "economic review",
+)
+RBI_SURVEY_TERMS = (
+    "survey", "index", "consumer confidence", "inflation expectations",
+    "bank lending survey", "professional forecasters", "ranking",
+)
 
 SCIENCE_SPACE_TERMS = (
     "isro", "space", "satellite", "rocket", "launch vehicle", "astronomy",
@@ -233,6 +267,7 @@ def main() -> int:
             str(row["source_domain"]) for row in clean_rows
         ).items())),
         "sourceStatus": {
+            "pib": stats.pib_source_status,
             "isro": stats.isro_source_status,
             "rbi": stats.source_status,
         },
@@ -253,17 +288,21 @@ def refresh_rows(
 ) -> tuple[list[dict], RefreshStats]:
     now = _as_utc(now)
     item_batches: list[list[str]] = []
+    pib_endpoint_available = False
     for feed_url in (PIB_RSS_URL, PIB_SECONDARY_RSS_URL):
         try:
             feed_items = parse_rss_items(fetch_text(feed_url))
         except CurrentAffairsRefreshError:
             continue
+        pib_endpoint_available = True
         if feed_items:
             item_batches.append(feed_items)
     try:
         release_index_items = parse_all_release_items(fetch_text(PIB_ALL_RELEASES_URL))
     except CurrentAffairsRefreshError:
         release_index_items = []
+    else:
+        pib_endpoint_available = True
     if release_index_items:
         item_batches.append(release_index_items)
     items = _interleave_unique(item_batches)
@@ -306,6 +345,12 @@ def refresh_rows(
                 # rest of the independently valid refresh batch.
                 skipped += 1
 
+    pib_source_status = (
+        "unavailable"
+        if not pib_endpoint_available
+        else "available" if rows else "available_no_current_rows"
+    )
+
     rbi_rows, rbi_stats = refresh_rbi_rows(
         fetch_text=fetch_text,
         now=now,
@@ -330,6 +375,7 @@ def refresh_rows(
         skipped=skipped,
         source_status=rbi_stats.source_status,
         isro_source_status=isro_stats.source_status,
+        pib_source_status=pib_source_status,
     )
 
 
@@ -895,6 +941,14 @@ def release_is_current(published_at: datetime, now: datetime) -> bool:
 def classify_release(release: Release) -> tuple[str, str, str]:
     headline = f" {release.title} {release.ministry} ".casefold()
     text = f"{headline} {release.body[:1600]} ".casefold()
+    if release.ministry == "Reserve Bank of India":
+        if _contains_any(text, RBI_POLICY_TERMS):
+            return CLASSIFICATIONS["economy:t01"]
+        if _contains_any(text, RBI_REPORT_TERMS):
+            return CLASSIFICATIONS["economy:t03"]
+        if _contains_any(text, RBI_SURVEY_TERMS):
+            return CLASSIFICATIONS["economy:t04"]
+        return CLASSIFICATIONS["economy:t02"]
     if _contains_any(text, SCIENCE_SPACE_TERMS):
         return CLASSIFICATIONS["science:t01"]
     if _contains_any(text, SCIENCE_HEALTH_TERMS):

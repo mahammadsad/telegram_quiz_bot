@@ -64,6 +64,7 @@ ROTATION_CHAPTER_KEYS: dict[str, tuple[str, ...]] = {
     "current-affairs": (
         "current-affairs:national",
         "current-affairs:science-technology",
+        "current-affairs:economy-reports",
     ),
 }
 

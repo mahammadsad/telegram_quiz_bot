@@ -30,7 +30,7 @@ def test_stable_rotation_uses_full_syllabus_while_current_affairs_stays_gated():
         for key in QUIZ_SUBJECT_KEYS
         if key != "current-affairs"
     )
-    assert len(CHAPTERS["current-affairs"]) == 2
+    assert len(CHAPTERS["current-affairs"]) == 3
     assert len(ALL_CHAPTERS["current-affairs"]) > len(CHAPTERS["current-affairs"])
     assert {
         chapter.key
@@ -58,6 +58,7 @@ def test_stable_rotation_uses_full_syllabus_while_current_affairs_stays_gated():
     assert CHAPTERS["current-affairs"] == (
         "জাতীয় সাম্প্রতিক ঘটনা",
         "বিজ্ঞান ও প্রযুক্তি",
+        "অর্থনীতি, প্রতিবেদন ও সূচক",
     )
 
 

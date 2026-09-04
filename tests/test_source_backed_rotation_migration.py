@@ -14,7 +14,12 @@ ROOT = Path(__file__).resolve().parents[1]
 MIGRATION = (
     ROOT / "supabase" / "migrations" / f"{ledger_version('source_backed_rotation_v1')}_source_backed_rotation_v1.sql"
 )
-APPROVED_KEYS = {key for chapter_keys in ROTATION_CHAPTER_KEYS.values() for key in chapter_keys}
+APPROVED_KEYS = {
+    key
+    for chapter_keys in ROTATION_CHAPTER_KEYS.values()
+    for key in chapter_keys
+    if key != "current-affairs:economy-reports"
+}
 
 
 def test_rotation_migration_uses_the_exact_source_approved_allowlist() -> None:
