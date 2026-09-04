@@ -43,6 +43,7 @@ from config.subjects import QUIZ_SUBJECTS, get_subject
 from config.syllabus import get_chapter
 from database.contract import (
     CONTENT_REPLENISHMENT_BACKLOG_MIGRATION_VERSION,
+    CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION,
     DATABASE_CONTRACT_KEY,
     DATABASE_CONTRACT_VERSION,
     PERSONAL_LEARNING_MIGRATION_VERSION,
@@ -1349,7 +1350,7 @@ def preflight() -> dict[str, bool]:
     return values
 
 
-def validate_database_schema() -> None:
+def validate_database_schema(*, allow_source_coverage_pending: bool = False) -> None:
     """Verify the authoritative versioned schema, signatures, grants, and RLS."""
     platform_reasons = platform_contract_failure_reasons(schema_contract_repo.get_platform_contract())
     if platform_reasons:
@@ -1458,8 +1459,17 @@ def validate_database_schema() -> None:
             or (
                 contract.get("source_rollout_migration_version") == SOURCE_ROLLOUT_MIGRATION_VERSION
                 and contract.get("source_rollout_migration_applied") is True
+                and contract.get("current_affairs_economy_rotation_migration_version")
+                == CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION
+                and contract.get("current_affairs_economy_rotation_migration_applied") is True
                 and contract.get("source_backed_rotation_ready") is True
-                and contract.get("source_coverage_ready") is True
+                and (
+                    allow_source_coverage_pending
+                    or (
+                        contract.get("source_coverage_ready") is True
+                        and contract.get("current_affairs_economy_coverage_ready") is True
+                    )
+                )
                 and contract.get("quiz_quality_migration_version") == QUIZ_QUALITY_MIGRATION_VERSION
                 and contract.get("quiz_quality_migration_applied") is True
                 and contract.get("diverse_grounding_ready") is True

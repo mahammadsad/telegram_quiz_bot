@@ -1508,8 +1508,13 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
                 bot.SOURCE_ROLLOUT_MIGRATION_VERSION
             ),
             "source_rollout_migration_applied": True,
+            "current_affairs_economy_rotation_migration_version": (
+                bot.CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION
+            ),
+            "current_affairs_economy_rotation_migration_applied": True,
             "source_backed_rotation_ready": True,
             "source_coverage_ready": True,
+            "current_affairs_economy_coverage_ready": True,
             "quiz_quality_migration_version": (
                 bot.QUIZ_QUALITY_MIGRATION_VERSION
             ),
@@ -1521,6 +1526,14 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
         },
     )
     bot.validate_database_schema()
+
+    contract = bot.schema_contract_repo.get_contract()
+    contract["source_coverage_ready"] = False
+    contract["current_affairs_economy_coverage_ready"] = False
+    monkeypatch.setattr(bot.schema_contract_repo, "get_contract", lambda: contract)
+    with pytest.raises(RuntimeError, match="Database contract is not ready"):
+        bot.validate_database_schema()
+    bot.validate_database_schema(allow_source_coverage_pending=True)
 
 
 def test_database_preflight_fails_closed_on_old_or_misgranted_contract(monkeypatch):

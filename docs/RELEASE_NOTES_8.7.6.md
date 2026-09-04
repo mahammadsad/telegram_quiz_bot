@@ -8,3 +8,6 @@
 - Reports PIB endpoint health independently from RBI and ISRO, so loss of the
   primary government release feed can no longer be hidden by healthy
   supplementary sources.
+- Lets the protected refresh worker pass the exact schema and rotation gate
+  while coverage is being replenished, then retains the strict all-chapter
+  database readback as the final deployment gate.
