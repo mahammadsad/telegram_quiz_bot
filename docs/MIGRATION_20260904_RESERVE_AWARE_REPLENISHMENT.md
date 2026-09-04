@@ -2,6 +2,8 @@
 
 Migration: `20260904164836_reserve_aware_replenishment_claims.sql`
 
+Fairness follow-up: `20260904172137_reserve_tier_round_robin_claims.sql`
+
 ## Purpose
 
 The worker still claims at most 25 jobs and retains `FOR UPDATE SKIP LOCKED`,
@@ -28,6 +30,13 @@ After applying the migration:
 5. The inventory report after a bounded production run must show that the
    largest below-target subject gaps were selected before above-target
    chapter-diversity work.
+
+After applying the fairness follow-up, the current contract must instead report
+`1.3.0`, required migration `20260904172137`, and both
+`reserveAwareReplenishment: true` and
+`reserveRoundRobinReplenishment: true`. The dispatcher orders under-reserve
+work by subject slot before reserve gap, so each deficient subject gets a first
+slot before any deficient subject gets another.
 
 ## Rollback
 

@@ -19,6 +19,7 @@ from database.contract import (
     REMINDER_DELIVERY_MIGRATION_VERSION,
     REPLENISHMENT_RETURN_CONTRACT_MIGRATION_VERSION,
     RESERVE_AWARE_REPLENISHMENT_MIGRATION_VERSION,
+    RESERVE_ROUND_ROBIN_REPLENISHMENT_MIGRATION_VERSION,
     SOURCE_OPTIONAL_REPLENISHMENT_MIGRATION_VERSION,
     VALIDATION_DEAD_LETTER_RECOVERY_MIGRATION_VERSION,
 )
@@ -29,7 +30,13 @@ MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / f"{PLATFORM_CONTRACT_MIGRATION_VERSION}_reserve_aware_replenishment_claims.sql"
+    / f"{PLATFORM_CONTRACT_MIGRATION_VERSION}_reserve_tier_round_robin_claims.sql"
+)
+RESERVE_AWARE_MIGRATION = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / f"{RESERVE_AWARE_REPLENISHMENT_MIGRATION_VERSION}_reserve_aware_replenishment_claims.sql"
 )
 LEARNER_BOOTSTRAP_MIGRATION = (
     ROOT
@@ -53,7 +60,8 @@ def _ready_contract() -> dict:
 
 def test_platform_contract_remains_the_scheduler_gate_after_additive_migrations() -> None:
     assert MIGRATION.is_file()
-    assert LATEST_MIGRATION_VERSION == RESERVE_AWARE_REPLENISHMENT_MIGRATION_VERSION
+    assert LATEST_MIGRATION_VERSION == RESERVE_ROUND_ROBIN_REPLENISHMENT_MIGRATION_VERSION
+    assert RESERVE_AWARE_REPLENISHMENT_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert LEARNER_BOOTSTRAP_LATENCY_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert REPLENISHMENT_RETURN_CONTRACT_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert SOURCE_OPTIONAL_REPLENISHMENT_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
@@ -76,6 +84,7 @@ def test_platform_contract_remains_the_scheduler_gate_after_additive_migrations(
     assert "grant execute on function public.get_platform_contract_v1() to service_role" in source
     contract_chain = (
         source
+        + RESERVE_AWARE_MIGRATION.read_text(encoding="utf-8")
         + LEARNER_BOOTSTRAP_MIGRATION.read_text(encoding="utf-8")
         + BASE_MIGRATION.read_text(encoding="utf-8")
     )
