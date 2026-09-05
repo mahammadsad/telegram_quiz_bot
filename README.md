@@ -133,7 +133,8 @@ answer-free fallback artifact. The schedule and subject identities live in
 subject, waits instead of cancelling an active run, and has no run-ID component.
 Production and staging use the verification contract declared in
 `config/production.toml`. Twelve stable subjects rotate through their full
-catalogues; current affairs remains limited to two source-covered chapters.
+catalogues; current affairs rotates through three source-covered chapters:
+National, Science & Technology, and Economy, Reports & Indices.
 Stable knowledge identities, recent-question prompt exclusions, text similarity
 checks, and database cooldowns prevent frequent repetition.
 

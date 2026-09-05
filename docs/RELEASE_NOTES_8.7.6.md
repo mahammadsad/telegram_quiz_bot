@@ -14,3 +14,10 @@
 - Builds current-affairs grounding inside the requested chapter before applying
   a limit, preventing a high-volume category from starving National, Science,
   or Economy despite valid evidence being present.
+
+Production migrations passed protected run `33948369731`. The application
+schema and platform `1.5.0` contracts are ready, with eight usable grounding
+rows returned for each of the three current-affairs rotation chapters and all
+32 reviewed rotation chapters enabled. Post-migration advisors reported only
+informational findings: 75 service-owned tables with RLS and no client policies,
+and 72 unused indexes. Application deployment verification is still pending.

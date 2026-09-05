@@ -111,6 +111,14 @@ PRODUCTION_LEDGER_SOURCE_MD5: dict[str, tuple[str, str]] = {
         "20260904172137",
         "55a6c8aeb8e367f030ffdd83bc3a2f13",
     ),
+    "current_affairs_economy_rotation": (
+        "20260905040301",
+        "2220940a2539ce54ca8a7727367d57cd",
+    ),
+    "current_affairs_chapter_grounding": (
+        "20260905043800",
+        "192f0fd865be515b060416bf8de41e71",
+    ),
 }
 
 
