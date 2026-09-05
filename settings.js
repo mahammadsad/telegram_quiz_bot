@@ -11,6 +11,14 @@
   var subjects={"history":"ইতিহাস","geography":"ভূগোল","polity":"সংবিধান","economics":"অর্থনীতি","science":"বিজ্ঞান","mathematics":"গণিত","reasoning":"রিজনিং","english":"ইংরেজি","bengali":"বাংলা","computer":"কম্পিউটার","current-affairs":"কারেন্ট অ্যাফেয়ার্স","environment":"পরিবেশ","miscellaneous":"বিবিধ সাধারণ জ্ঞান"};
   var exams={WBCS:"WBCS",WBPSC_CLERKSHIP:"WBPSC Clerkship",WBPSC_MISC:"WBPSC Misc",WBP_CONSTABLE:"WBP Constable",WBP_SI:"WBP SI",KOLKATA_POLICE:"Kolkata Police",PRIMARY_TET:"Primary TET",UPPER_PRIMARY_TET:"Upper Primary TET",SSC:"SSC",RAILWAY:"Railway",BANKING:"Banking"};
   var committedSubjects=[],committedExams=[],savedSnapshot="",activeDialogTrigger=null;
+  var hasTelegramBack=!!(tg&&tg.BackButton&&typeof tg.BackButton.onClick==="function"&&typeof tg.BackButton.show==="function"&&typeof tg.BackButton.hide==="function");
+  if(hasTelegramBack){
+    tg.BackButton.hide();
+    tg.BackButton.onClick(function(){
+      if(el("subject-dialog").open)closeSelector("subject",true);
+      else if(el("exam-dialog").open)closeSelector("exam",true);
+    });
+  }
 
   function el(id){return document.getElementById(id)}
   function api(path){return API_BASE+path}
@@ -98,9 +106,9 @@
   }
   function clearSelector(kind){var config=selectorConfig(kind);el(config.checks).querySelectorAll("input").forEach(function(input){input.checked=false});updateDialogCount(kind)}
   function commitSelector(kind){var config=selectorConfig(kind);setSelectedFor(kind,checked(config.checks));updateSelectionSummaries();closeSelector(kind,true);markDirty()}
-  function openSelector(kind){var config=selectorConfig(kind),dialog=el(config.dialog);checkValues(config.checks,selectedFor(kind));updateDialogCount(kind);activeDialogTrigger=el(config.open);if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");document.body.classList.add("selector-open");window.requestAnimationFrame(function(){var input=dialog.querySelector("input");(input||el(config.close)).focus()})}
+  function openSelector(kind){var config=selectorConfig(kind),dialog=el(config.dialog);checkValues(config.checks,selectedFor(kind));updateDialogCount(kind);activeDialogTrigger=el(config.open);if(typeof dialog.showModal==="function")dialog.showModal();else dialog.setAttribute("open","");syncDialogState();window.requestAnimationFrame(function(){var input=dialog.querySelector("input");(input||el(config.close)).focus()})}
   function closeSelector(kind,restoreFocus){var dialog=el(selectorConfig(kind).dialog);if(!dialog.open)return;if(typeof dialog.close==="function")dialog.close();else dialog.removeAttribute("open");syncDialogState();if(restoreFocus&&activeDialogTrigger)window.requestAnimationFrame(function(){activeDialogTrigger.focus()})}
-  function syncDialogState(){if(!document.querySelector(".selector-dialog[open]"))document.body.classList.remove("selector-open")}
+  function syncDialogState(){var open=!!document.querySelector(".selector-dialog[open]");document.body.classList.toggle("selector-open",open);if(hasTelegramBack){if(open)tg.BackButton.show();else tg.BackButton.hide()}}
   function updateDialogCount(kind){var config=selectorConfig(kind);el(config.count).textContent=countCopy(checked(config.checks).length)}
   function updateSelectionSummaries(){el("subject-summary").textContent=countCopy(committedSubjects.length);el("exam-summary").textContent=committedExams.length?countCopy(committedExams.length):"কোনোটি নয়"}
   function preferenceSnapshot(){return JSON.stringify({targetExams:committedExams.slice().sort(),preferredSubjects:committedSubjects.slice().sort(),dailyQuestionTarget:+el("daily-target").value,preferredLanguage:el("language").value,difficultyPreference:el("difficulty").value,quizMode:el("quiz-mode").value,leaderboardVisible:el("leaderboard-visible").checked,publicDisplayName:el("display-name").value.trim()||null,usernameVisible:el("username-visible").checked,revisionSoundEnabled:el("revision-sound").checked,revisionVibrationEnabled:el("revision-vibration").checked})}

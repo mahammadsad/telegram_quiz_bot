@@ -173,7 +173,15 @@
   });
   el("submit").addEventListener("click",submit);el("next").addEventListener("click",next);el("retry").addEventListener("click",load);
   if(hasTelegramMainAction){tg.MainButton.onClick(telegramMainAction);if(tg.BackButton&&typeof tg.BackButton.hide==="function")tg.BackButton.hide()}
-  document.addEventListener("keydown",function(event){if(answerFrozen||submitting)return;if(["1","2","3","4"].indexOf(event.key)>=0){selected=+event.key-1;savePending(false);renderOptions()}else if(event.key==="Enter"&&selected!==null)submit()});
+  document.addEventListener("keydown",function(event){
+    if(answerFrozen||submitting||!rows[index]||el("practice").classList.contains("hidden"))return;
+    if(event.defaultPrevented||event.ctrlKey||event.metaKey||event.altKey||event.shiftKey||event.isComposing||event.repeat)return;
+    var target=event.target;
+    if(target&&target.closest&&(target.isContentEditable||target.closest("input,select,textarea,a,summary,[role=textbox],button:not(.option)")))return;
+    if(["1","2","3","4"].indexOf(event.key)<0)return;
+    event.preventDefault();selected=+event.key-1;savePending(false);renderOptions();
+    var option=el("options").children[selected];if(option)option.focus();
+  });
   load();
 
   function load(){

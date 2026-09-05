@@ -117,7 +117,7 @@
   function registerWorker() {
     if (!("serviceWorker" in navigator) || location.protocol !== "https:") return;
     var workerUrl = new URL("service-worker.js", document.baseURI);
-    workerUrl.searchParams.set("shell", "8.7.2-ui3");
+    workerUrl.searchParams.set("shell", "8.7.7-ui1");
     var workerScope = new URL("./", workerUrl).pathname;
     navigator.serviceWorker.register(workerUrl.href, {
       scope: workerScope,
@@ -459,7 +459,7 @@
   window.__miniAppContract = Object.freeze({
     locale: "bn",
     supportedLocales: supportedLocales,
-    shellVersion: "8.7.2-ui3",
+    shellVersion: "8.7.7-ui1",
     basePath: new URL("./", document.baseURI).pathname,
     errorCategories: ERROR_CATEGORIES,
   });

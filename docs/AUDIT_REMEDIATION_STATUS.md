@@ -41,6 +41,20 @@ Status meanings:
 | P2-11 | P2 | Accidental FUSE artifact is removed/ignored and current release, architecture and rollback documentation is added. | **Implemented** | `.gitignore`, removed `.fuse_hidden*`, remediation/release/architecture docs. | Archive contradictory legacy runbooks after owner review rather than deleting potentially useful history automatically. |
 | P2-12 | P2 | Security, contribution, conduct, roadmap, issue/PR templates and content provenance policy are added. | **Partial / awaiting external action** | root governance files, `.github` templates, `docs/PUBLIC_ROADMAP.md`, `docs/CONTENT_PROVENANCE_AND_LICENSING.md`. | Repository owner must choose an OSI license and confirm code/content ownership. No license was guessed. |
 
+## 5 September current-affairs and UI follow-up
+
+- P1-03: release `68c37776edad3112a302b4c465a259bafc5b5176` (8.7.6) is live.
+  Migration apply `33948369731`, live readiness, canonical smoke `33948826481`
+  and official-source refresh `33948770167` pass. The strict source readback
+  covers 32 rotation chapters and 134 documents. National, Science and Economy
+  each return eight usable grounding rows after chapter filtering was moved
+  before the limit. PIB/RBI runner availability and the remaining seven
+  current-affairs chapters still need work; breadth is not complete.
+- P2-09 / UI U-13: five newly reproduced keyboard, high-contrast and Telegram
+  selector failures are repaired locally, with 20 focused mobile cases passing.
+  Release 8.7.7 verification and deployment are underway. The real Telegram and
+  assistive-technology acceptance matrix remains separate from automation.
+
 ## 5 September delivery reliability checkpoint
 
 - The privacy-safe five-day production SLO readback covered 65 scheduled jobs:

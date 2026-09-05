@@ -235,6 +235,8 @@
   }
   .option:hover{border-color:#aeb9c8}
   .option.selected{
+    border-width:3px;
+    border-style:double;
     border-color:var(--primary);
     background:#eef9f7;
   }

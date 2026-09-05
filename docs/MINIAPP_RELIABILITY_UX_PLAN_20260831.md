@@ -480,6 +480,21 @@ The real Telegram Android/iOS and
 assistive-technology matrix remains a manual release-signoff item; this entry
 does not claim that external validation is complete.
 
+## Keyboard and contrast follow-up — 2026-09-05
+
+The U-13 and practice action checks reproduced five failures before changes:
+Enter on an answer submitted the previous selection, number keys could crash a
+loading queue, quiz/practice selection disappeared in forced colors, and
+Telegram Back did not dismiss settings selectors. The fixes now pass 20
+browser cases across the four supported widths. Native Enter activates the
+focused control; explicit Submit remains responsible for submission. Number
+shortcuts preserve form editing and browser shortcuts. Selector dismissal
+discards only its uncommitted draft and returns focus. Selection and review
+border patterns carry meaning without color.
+
+This closes those reproduced interaction gaps, not the separate real-device,
+Bengali screen-reader or 200% text matrix. Those checks remain explicit.
+
 ## Decisions intentionally deferred
 
 - No production mutation or deployment is part of this audit.
