@@ -117,7 +117,7 @@
   function registerWorker() {
     if (!("serviceWorker" in navigator) || location.protocol !== "https:") return;
     var workerUrl = new URL("service-worker.js", document.baseURI);
-    workerUrl.searchParams.set("shell", "8.7.2-ui3");
+    workerUrl.searchParams.set("shell", "8.7.7-ui1");
     var workerScope = new URL("./", workerUrl).pathname;
     navigator.serviceWorker.register(workerUrl.href, {
       scope: workerScope,
@@ -444,7 +444,32 @@
     }
   }
 
+  function installDialogFocusLoops() {
+    document.querySelectorAll("dialog").forEach(function (dialog) {
+      dialog.addEventListener("keydown", function (event) {
+        if (event.key !== "Tab" || !dialog.open || event.defaultPrevented) return;
+        var controls = Array.from(dialog.querySelectorAll(
+          "button,input,select,textarea,a[href],summary,[tabindex]",
+        )).filter(function (control) {
+          return !control.disabled && control.tabIndex >= 0 &&
+            control.getClientRects().length > 0 &&
+            getComputedStyle(control).visibility !== "hidden";
+        });
+        if (!controls.length) return;
+        var first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      });
+    });
+  }
+
   function ready() {
+    installDialogFocusLoops();
     installSkipLink();
     announceNetworkState();
     installTelegramLayoutSync();
@@ -459,7 +484,7 @@
   window.__miniAppContract = Object.freeze({
     locale: "bn",
     supportedLocales: supportedLocales,
-    shellVersion: "8.7.2-ui3",
+    shellVersion: "8.7.7-ui1",
     basePath: new URL("./", document.baseURI).pathname,
     errorCategories: ERROR_CATEGORIES,
   });

@@ -81,6 +81,7 @@
   byId("btn-resume").addEventListener("click", resumeDraft);
   byId("btn-new-attempt").addEventListener("click", function(){ discardDraft(); startQuiz(); });
   byId("btn-submit-back").addEventListener("click", hideSubmitConfirmation);
+  byId("submit-modal").addEventListener("cancel", function(event){event.preventDefault();hideSubmitConfirmation();});
   byId("btn-submit-confirm").addEventListener("click", function(){ hideSubmitConfirmation(); finishQuiz(true); });
   byId("btn-retry").addEventListener("click", function(){ retryAction(); });
   byId("btn-home-retry").addEventListener("click", loadHome);
@@ -115,6 +116,9 @@
 
   document.addEventListener("keydown", function(event){
     if (screen !== "quiz" || isQuestionMapOpen() || isSubmitModalOpen()) return;
+    if (event.defaultPrevented || event.ctrlKey || event.metaKey || event.altKey || event.shiftKey || event.isComposing || event.repeat) return;
+    var target = event.target;
+    if (target && target.closest && (target.isContentEditable || target.closest("input,select,textarea,a,summary,button:not(.option)"))) return;
     if (["1","2","3","4"].indexOf(event.key) >= 0) {
       answers[current] = Number(event.key) - 1;
       saveDraft();
@@ -288,6 +292,7 @@
     document.body.dataset.screen = name;
     if (name !== "quiz" && isQuestionMapOpen()) closeQuestionMap(false);
     Object.keys(screens).forEach(function(key){ screens[key].classList.toggle("hidden", key !== name); });
+    if (name === "quiz") byId("q-text").focus();
     syncTelegramButtons();
   }
 
@@ -904,14 +909,16 @@
         ? " প্রতিটি ভুল উত্তরে " + bn(formatScore(marking.wrongPenalty)) + " নম্বর কাটা হবে।"
         : "");
     byId("submit-modal").classList.remove("hidden");
+    byId("submit-modal").showModal();
     byId("btn-submit-back").focus();
     syncTelegramButtons();
   }
 
   function hideSubmitConfirmation(){
+    byId("submit-modal").close();
     byId("submit-modal").classList.add("hidden");
     syncTelegramButtons();
-    if (screen === "quiz") byId("btn-next").focus();
+    if (screen === "quiz") byId(hasTelegramActions ? "q-text" : "btn-next").focus();
   }
 
   function openDashboard(){

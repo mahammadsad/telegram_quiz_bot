@@ -1,6 +1,6 @@
 # Production release and rollback
 
-This runbook is the production gate for application version `8.7.6`. Passing local unit tests is not production evidence.
+This runbook is the production gate for application version `8.7.7`. Passing local unit tests is not production evidence.
 
 ## Ownership and required inputs
 
@@ -40,6 +40,14 @@ Never print service keys, bot tokens or synthetic `initData` in logs.
 
 ## Database migration order
 
+Release 8.7.7 has no new database migrations. Its rollback target is release
+`68c37776edad3112a302b4c465a259bafc5b5176` (8.7.6), which supports the current
+platform 1.5.0 contract. The current-affairs migrations `20260905040301` and
+`20260905043800` are already applied and pinned. Do not roll back to an older
+application that requires a different platform contract.
+
+The following historical prerequisite order is retained for new environments:
+
 Apply exactly in this order using the repository's normal Supabase migration mechanism:
 
 1. `supabase/migrations/20260820090000_server_timed_daily_attempts.sql`
@@ -54,7 +62,7 @@ Do **not** schedule or manually call `public.process_due_account_deletions` unti
 ## Staging gate
 
 1. Deploy the exact release commit to staging.
-2. Verify `/version` reports `applicationVersion: 8.7.6`, the expected full `commitSha`, staging environment and build time.
+2. Verify `/version` reports `applicationVersion: 8.7.7`, the expected full `commitSha`, staging environment and build time.
 3. Verify root HTML, CSS, JS, icon, manifest, service worker, `/health/live`, `/health/ready`, an answer-free quiz, server-timed start/submission and dashboard with only the synthetic user.
 4. Test a duplicate submission with the same attempt ID; it must be idempotent.
 5. Submit forged client duration telemetry; it must not become trusted ranking time.

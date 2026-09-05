@@ -40,9 +40,9 @@
   .question{font-size:21px;font-weight:800;margin:10px 0 18px;outline:0;scroll-margin-top:16px}
   .options{display:grid;gap:10px}
   .option{display:grid;grid-template-columns:34px 1fr;align-items:center;gap:10px;width:100%;padding:12px;border:1.5px solid var(--line);border-radius:14px;background:transparent;color:var(--text);text-align:left;cursor:pointer}.option:disabled{cursor:default;opacity:1}
-  .option.selected{border-color:var(--button);background:color-mix(in srgb,var(--button) 10%,var(--surface))}
-  .option.correct{border-color:var(--success);background:color-mix(in srgb,var(--success) 10%,var(--surface))}
-  .option.wrong{border-color:var(--danger);background:color-mix(in srgb,var(--danger) 10%,var(--surface))}
+  .option.selected{border:3px double var(--button);background:color-mix(in srgb,var(--button) 10%,var(--surface))}
+  .option.correct{border:4px double var(--success);background:color-mix(in srgb,var(--success) 10%,var(--surface))}
+  .option.wrong{border:2px dashed var(--danger);background:color-mix(in srgb,var(--danger) 10%,var(--surface))}
   .key{display:grid;place-items:center;width:30px;height:30px;border:1px solid var(--line);border-radius:50%;font-weight:800}
   .actions{display:flex;gap:10px;margin-top:16px}.btn{display:inline-flex;min-height:48px;flex:1;align-items:center;justify-content:center;border:1px solid var(--line);border-radius:14px;padding:11px 14px;background:transparent;color:var(--text);font-weight:800;text-align:center;text-decoration:none;cursor:pointer}.btn:disabled{cursor:not-allowed;opacity:.55}.primary{background:var(--button);border-color:var(--button);color:var(--button-text)}
   .mark{display:flex;align-items:center;gap:9px;margin-top:14px;color:var(--hint);font-weight:700}.mark input{width:20px;height:20px}

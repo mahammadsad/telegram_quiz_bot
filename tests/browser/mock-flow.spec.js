@@ -243,6 +243,30 @@ async function installMockAttemptApi(page, { failFirstProgress = false } = {}) {
   return state;
 }
 
+test("mock confirmation isolates keyboard input and returns focus on Escape", async ({ page }) => {
+  await installTelegramMock(page, { nativeActions: false });
+  await installMockAttemptApi(page);
+  await page.goto(`/mock.html?test=${TEST_ID}`);
+  await page.locator("#btn-start").click();
+  await expect(page.locator("#screen-test")).toBeVisible();
+  await page.locator(".option").first().click();
+  await page.locator("#btn-submit").click();
+  await expect(page.locator("#submit-modal")).toBeVisible();
+  await page.keyboard.press("2");
+  await page.keyboard.press("ArrowRight");
+  const draft = await page.evaluate((id) => JSON.parse(localStorage.getItem(`telegram-mock-draft:${id}`)), TEST_ID);
+  expect(draft.answers[question(1, 1, "").questionId]).toBe(0);
+  await expect(page.locator("#question-text")).toHaveText("Which number is prime?");
+  await expect(page.locator("#btn-submit-back")).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator("#btn-submit-confirm")).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#btn-submit-back")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#submit-modal")).toBeHidden();
+  await expect(page.locator("#btn-submit")).toBeFocused();
+});
+
 test("timed multi-section mock persists, resumes, advances, and renders analysis", async ({ page }) => {
   await installTelegramMock(page);
   const api = await installMockAttemptApi(page);

@@ -20,4 +20,16 @@ schema and platform `1.5.0` contracts are ready, with eight usable grounding
 rows returned for each of the three current-affairs rotation chapters and all
 32 reviewed rotation chapters enabled. Post-migration advisors reported only
 informational findings: 75 service-owned tables with RLS and no client policies,
-and 72 unused indexes. Application deployment verification is still pending.
+and 72 unused indexes. Render deployment `dep-dadr0m95efls739dbeig` serves
+`68c37776edad3112a302b4c465a259bafc5b5176`, with live/ready probes and canonical
+smoke `33948826481` passing. Production source refresh `33948770167` passed
+the strict readback of 32 chapters and 134 documents despite PIB/RBI being
+unavailable from that runner. Wider category coverage remains open.
+
+The staging National gap was subsequently repaired by importing four existing
+verified public sources and their 15 exact-span claims across four National
+micro-topics. The standard source-bundle validator accepted the inputs; staging
+now reports schema, source coverage and platform readiness and returns eight
+National grounding rows. No learner data was copied.
+Protected staging refresh `33961418916` then passed the strict readback of
+32 chapters and 134 documents.

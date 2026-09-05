@@ -119,7 +119,7 @@
         <span id="answered-count" class="num">উত্তর ০</span>
       </div>
       <div class="question-tools"><button class="mark-btn" id="btn-mark" type="button" aria-pressed="false">☆ রিভিউয়ের জন্য চিহ্নিত করুন</button><span class="muted" id="mode-label"></span></div>
-      <p class="q-text" id="q-text">-</p>
+      <h2 class="q-text" id="q-text" tabindex="-1">-</h2>
       <div class="options" id="options-wrap"></div>
       <div class="actions browser-only">
         <button class="btn btn-secondary" id="btn-prev">আগের</button>
@@ -154,7 +154,7 @@
   <div class="navigator-legend" aria-label="প্রশ্নের অবস্থার চিহ্ন"><span><b aria-hidden="true">●</b> বর্তমান</span><span><b aria-hidden="true">✓</b> উত্তর দেওয়া</span><span><b aria-hidden="true">★</b> চিহ্নিত</span></div>
   <nav class="navigator" id="question-navigator" aria-label="প্রশ্ন নেভিগেটর"></nav>
 </dialog>
-<div class="modal hidden" id="submit-modal" role="dialog" aria-modal="true" aria-labelledby="submit-title"><div class="modal-card"><h2 id="submit-title">উত্তরপত্র সাবমিট করবেন?</h2><p id="submit-summary"></p><div class="actions"><button class="btn btn-secondary" id="btn-submit-back" type="button">ফিরে যান</button><button class="btn btn-primary" id="btn-submit-confirm" type="button">তবুও সাবমিট করুন</button></div></div></div>
+<dialog class="modal hidden" id="submit-modal" aria-labelledby="submit-title"><div class="modal-card"><h2 id="submit-title">উত্তরপত্র সাবমিট করবেন?</h2><p id="submit-summary"></p><div class="actions"><button class="btn btn-secondary" id="btn-submit-back" type="button">ফিরে যান</button><button class="btn btn-primary" id="btn-submit-confirm" type="button">তবুও সাবমিট করুন</button></div></div></dialog>
 <nav class="bottom-nav" aria-label="প্রধান নেভিগেশন">
   <a class="active" id="nav-quiz" href="./" aria-current="page"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="M6 3h12a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Z"/><path d="m8 9 1.5 1.5L13 7"/><path d="M8 16h8"/></svg><span>কুইজ</span></a>
   <a href="practice.html?source=due"><svg aria-hidden="true" viewBox="0 0 24 24"><path d="m4 20 4.5-1 10-10a2.1 2.1 0 0 0-3-3l-10 10L4 20Z"/><path d="m14 7 3 3"/></svg><span>অনুশীলন</span></a>
