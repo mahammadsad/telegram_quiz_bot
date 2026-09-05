@@ -502,6 +502,19 @@ focus to a visible question/control in both Telegram and browser presentation.
 This closes those reproduced interaction gaps, not the separate real-device,
 Bengali screen-reader or 200% text matrix. Those checks remain explicit.
 
+## Syllabus recovery follow-up — 2026-09-05
+
+The syllabus catalogue no longer waits for the authenticated progress request.
+It stays usable during a delayed or failed progress read and provides a separate
+Bengali retry. Recovery preserves filters, open chapters and keyboard focus;
+progress badges update in place. Public availability now follows the actual
+generation gates, correcting the historical current-affairs flags, and its copy
+distinguishes rotation eligibility from a quiz already being available today.
+
+The delayed-progress failure was reproduced before the fix. The focused syllabus
+and accessibility cases pass across all four supported viewport widths. Native
+Telegram and Bengali screen-reader acceptance remain separate checks.
+
 ## Decisions intentionally deferred
 
 - No production mutation or deployment is part of this audit.

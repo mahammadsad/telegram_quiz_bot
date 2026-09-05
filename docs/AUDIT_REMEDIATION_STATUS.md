@@ -51,9 +51,33 @@ Status meanings:
   before the limit. PIB/RBI runner availability and the remaining seven
   current-affairs chapters still need work; breadth is not complete.
 - P2-09 / UI U-13: five newly reproduced keyboard, high-contrast and Telegram
-  selector failures are repaired locally, with 20 focused mobile cases passing.
-  Release 8.7.7 verification and deployment are underway. The real Telegram and
-  assistive-technology acceptance matrix remains separate from automation.
+  selector failures are repaired, with 20 focused mobile cases passing. Follow-up
+  modal isolation and focus restoration checks also pass. Protected Tests
+  `33961845027`, Security `33961845026`, authenticated staging lifecycle smoke
+  `33961975834`, and production canonical smoke `33977610142` passed. Production
+  serves exact release `019fd21341afa630cdb7603975764274f595f66c`
+  (8.7.7) with HTTP 200 readiness. The real Telegram and assistive-technology
+  acceptance matrix remains separate from automation.
+
+## 5 September syllabus and source-recovery follow-up
+
+- P2-08 / UI recovery: the public syllabus projection used historical flags,
+  advertising five unavailable current-affairs chapters while hiding the
+  enabled Economy chapter. It now derives availability and counts from the
+  same runtime syllabus as generation, including both stable-subject modes.
+- Public discovery now renders independently of personal progress. Progress
+  failures show a Bengali retry action; success updates badges in place without
+  resetting filters, expanded chapters or keyboard focus. Rotation copy describes
+  eligibility rather than promising an already published quiz for every chapter.
+- P1-03: the ISRO adapter no longer assumes the index is date-sorted and stops
+  only at the explicit item budget. RBI now distinguishes a reachable feed with
+  no usable rows from a usable source. Existing evidence validation is retained.
+- Release 8.7.8 passes 84 targeted Python checks, 24 targeted mobile-browser
+  checks (including accessibility), Ruff and mypy. A bounded read-only ISRO
+  canary accepted three releases and rejected nine expired/inapplicable entries.
+  Staging and protected CI remain release gates. PIB availability and further
+  reviewed current-affairs chapters remain open; no additional chapter was
+  enabled without evidence.
 
 ## 5 September delivery reliability checkpoint
 
