@@ -131,6 +131,7 @@ def test_rbi_rss_release_is_canonicalized_and_retains_only_safe_official_text():
     assert release.url.startswith("https://www.rbi.org.in/")
     assert "ignore prior" not in release.body
     assert row["source_domain"] == "rbi.org.in"
+    assert row["micro_topic_key"] == "current-affairs:economy-reports:t01"
     assert row["fact_version"].startswith("rbi-rbi-63426-")
     assert len(validate_source_bundle([row])) == 1
 
@@ -144,6 +145,32 @@ def test_rbi_outage_is_explicitly_reported_without_blocking_other_official_sourc
 
     assert rows == []
     assert stats.source_status == "unavailable"
+
+
+def test_pib_outage_is_explicit_when_other_official_sources_remain_healthy():
+    xml = f"""<rss><channel><item>
+    <title>RBI publishes its annual report</title>
+    <description><![CDATA[<p>{_long_body("annual report and banking conditions")}</p>]]></description>
+    <link>https://www.rbi.org.in/scripts/BS_PressReleaseDisplay.aspx?prid=63427</link>
+    <pubDate>Sat, 22 Aug 2026 13:55:00</pubDate>
+    </item></channel></rss>"""
+
+    def fetch(url: str) -> str:
+        if url == RBI_PRESS_RELEASES_RSS_URL:
+            return xml
+        raise CurrentAffairsRefreshError("source unavailable")
+
+    rows, stats = refresh_rows(
+        fetch_text=fetch,
+        now=datetime(2026, 8, 22, 14, tzinfo=timezone.utc),
+        max_items=10,
+    )
+
+    assert len(rows) == 1
+    assert rows[0]["micro_topic_key"] == "current-affairs:economy-reports:t03"
+    assert stats.pib_source_status == "unavailable"
+    assert stats.source_status == "available"
+    assert stats.isro_source_status == "unavailable"
 
 
 def test_isro_press_release_is_canonical_current_and_exact_span_safe():
@@ -431,6 +458,21 @@ def test_classifier_and_coverage_gate_require_both_chapters_and_topic_diversity(
         ))
         for index, marker in enumerate(markers)
     ]
+    for index, marker in enumerate((
+        "monetary policy repo rate",
+        "banking regulation update",
+        "annual report on trend and progress",
+        "consumer confidence survey index",
+    )):
+        release = _release(2290400 + index, marker)
+        rows.append(release_to_source_row(Release(
+            prid=f"rbi-{release.prid}",
+            url=f"https://www.rbi.org.in/scripts/BS_PressReleaseDisplay.aspx?prid={release.prid}",
+            ministry="Reserve Bank of India",
+            title=release.title,
+            published_at=release.published_at,
+            body=release.body,
+        ), datetime(2026, 7, 28, tzinfo=timezone.utc)))
     clean = validate_source_bundle(rows)
 
     assert {
@@ -446,21 +488,29 @@ def test_classifier_and_coverage_gate_require_both_chapters_and_topic_diversity(
         "current-affairs:science-technology:t03",
         "current-affairs:science-technology:t04",
     }
+    assert {row["micro_topic_key"] for row in rows[8:]} == {
+        "current-affairs:economy-reports:t01",
+        "current-affairs:economy-reports:t02",
+        "current-affairs:economy-reports:t03",
+        "current-affairs:economy-reports:t04",
+    }
     assert validate_current_affairs_coverage(
         clean,
         minimum_per_chapter=4,
     ) == {
         "current-affairs:national": 4,
         "current-affairs:science-technology": 4,
+        "current-affairs:economy-reports": 4,
     }
 
     with pytest.raises(CurrentAffairsRefreshError, match="below"):
-        validate_current_affairs_coverage(clean[:7], minimum_per_chapter=4)
+        validate_current_affairs_coverage(clean[:7] + clean[8:], minimum_per_chapter=4)
 
-    counts, missing = current_affairs_coverage(clean[:7], minimum_per_chapter=4)
+    counts, missing = current_affairs_coverage(clean[:7] + clean[8:], minimum_per_chapter=4)
     assert counts == {
         "current-affairs:national": 4,
         "current-affairs:science-technology": 3,
+        "current-affairs:economy-reports": 4,
     }
     assert missing == ["current-affairs:science-technology"]
 

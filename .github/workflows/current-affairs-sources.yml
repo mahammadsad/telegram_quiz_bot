@@ -90,7 +90,7 @@ jobs:
           python - <<'PY'
           from bot import validate_database_schema
 
-          validate_database_schema()
+          validate_database_schema(allow_source_coverage_pending=True)
           print("database_contract_identity=true")
           PY
       - name: Validate official source coverage

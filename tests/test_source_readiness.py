@@ -33,7 +33,7 @@ def test_full_readiness_checks_all_31_chapters_without_returning_facts() -> None
         loader=lambda *_: SimpleNamespace(documents=(object(), object())),
     )
 
-    assert result == {"scope": "all", "chapters": 31, "documents": 62}
+    assert result == {"scope": "all", "chapters": 32, "documents": 64}
 
 
 def test_readiness_fails_with_only_safe_chapter_keys() -> None:
