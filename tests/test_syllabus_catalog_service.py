@@ -1,5 +1,6 @@
 import pytest
 
+from config import syllabus
 from services import syllabus_catalog_service
 
 
@@ -37,3 +38,24 @@ def test_catalogue_rejects_unknown_filters(exam_key: str | None, subject_key: st
             exam_key=exam_key,
             subject_key=subject_key,
         )
+
+
+@pytest.mark.parametrize("stable_source_optional", [False, True])
+def test_daily_availability_tracks_generation_gates(monkeypatch, stable_source_optional) -> None:
+    monkeypatch.setattr(syllabus, "SOURCE_OPTIONAL_STABLE_SUBJECTS_ENABLED", stable_source_optional)
+    monkeypatch.setattr(syllabus_catalog_service, "SYLLABUS", syllabus._build_catalogue())
+    payload = syllabus_catalog_service.syllabus_catalog(exam_key=None, subject_key=None)
+    by_subject = {subject["key"]: subject for subject in payload["subjects"]}
+    current = by_subject["current-affairs"]
+    assert {chapter["key"] for chapter in current["chapters"] if chapter["availableInDailyRotation"]} == {
+        "current-affairs:national",
+        "current-affairs:science-technology",
+        "current-affairs:economy-reports",
+    }
+    assert current["availableChapterCount"] == 3
+    history = by_subject["history"]
+    assert history["availableChapterCount"] == (history["chapterCount"] if stable_source_optional else 2)
+    assert payload["summary"]["availableChapterCount"] == sum(
+        chapter["availableInDailyRotation"]
+        for subject in payload["subjects"] for chapter in subject["chapters"]
+    )
