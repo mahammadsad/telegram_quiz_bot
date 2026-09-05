@@ -31,3 +31,5 @@ verified public sources and their 15 exact-span claims across four National
 micro-topics. The standard source-bundle validator accepted the inputs; staging
 now reports schema, source coverage and platform readiness and returns eight
 National grounding rows. No learner data was copied.
+Protected staging refresh `33961418916` then passed the strict readback of
+32 chapters and 134 documents.

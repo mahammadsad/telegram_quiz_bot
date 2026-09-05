@@ -42,6 +42,20 @@ async function openSubmissionConfirmation(page) {
   await expect(page.locator("#submit-modal")).toBeVisible();
 }
 
+test("quiz confirmation traps focus and Escape returns to the active question", async ({ page }) => {
+  await openIntro(page);
+  await startWithTelegramMainButton(page);
+  await openSubmissionConfirmation(page);
+  await expect(page.locator("#btn-submit-back")).toBeFocused();
+  await page.keyboard.press("Shift+Tab");
+  await expect(page.locator("#btn-submit-confirm")).toBeFocused();
+  await page.keyboard.press("Tab");
+  await expect(page.locator("#btn-submit-back")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#submit-modal")).toBeHidden();
+  await expect(page.locator("#q-text")).toBeFocused();
+});
+
 test("complete quiz lifecycle hides answers until submission and recovers the result", async ({
   page,
 }, testInfo) => {

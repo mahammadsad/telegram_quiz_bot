@@ -60,6 +60,7 @@ for (const screen of ["quiz", "practice"]) {
       await expect(page.locator("#practice")).toBeVisible();
     }
     await page.locator(".option").first().click();
+    await page.keyboard.press("Control+2");
     await expect(page.locator(".option").first()).toHaveAttribute("aria-pressed", "true");
     const borders = await page.locator(".option").evaluateAll((options) => options.slice(0, 2).map((option) => {
       const style = getComputedStyle(option);

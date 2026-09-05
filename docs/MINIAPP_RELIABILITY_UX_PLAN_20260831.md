@@ -492,6 +492,13 @@ shortcuts preserve form editing and browser shortcuts. Selector dismissal
 discards only its uncommitted draft and returns focus. Selection and review
 border patterns carry meaning without color.
 
+The follow-up also found that mock shortcuts edited answers behind the submit
+confirmation, custom confirmations allowed focus to escape, and the daily quiz
+tried to focus a non-focusable question paragraph. Submission confirmations
+now use native modal dialogs with a shared focus loop and Escape handling.
+The daily question is a focusable semantic heading; modal cancellation returns
+focus to a visible question/control in both Telegram and browser presentation.
+
 This closes those reproduced interaction gaps, not the separate real-device,
 Bengali screen-reader or 200% text matrix. Those checks remain explicit.
 

@@ -444,7 +444,32 @@
     }
   }
 
+  function installDialogFocusLoops() {
+    document.querySelectorAll("dialog").forEach(function (dialog) {
+      dialog.addEventListener("keydown", function (event) {
+        if (event.key !== "Tab" || !dialog.open || event.defaultPrevented) return;
+        var controls = Array.from(dialog.querySelectorAll(
+          "button,input,select,textarea,a[href],summary,[tabindex]",
+        )).filter(function (control) {
+          return !control.disabled && control.tabIndex >= 0 &&
+            control.getClientRects().length > 0 &&
+            getComputedStyle(control).visibility !== "hidden";
+        });
+        if (!controls.length) return;
+        var first = controls[0], last = controls[controls.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      });
+    });
+  }
+
   function ready() {
+    installDialogFocusLoops();
     installSkipLink();
     announceNetworkState();
     installTelegramLayoutSync();
