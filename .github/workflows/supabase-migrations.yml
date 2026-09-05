@@ -38,7 +38,7 @@ jobs:
           import os
           from pathlib import Path
 
-          from database.contract import CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION
+          from database.contract import CURRENT_AFFAIRS_CHAPTER_GROUNDING_MIGRATION_VERSION
 
           expected_ref = "tizxodkcpglmxgtwepor"
           expected_ack = f"APPLY TRACKED MIGRATIONS TO {expected_ref}"
@@ -60,8 +60,8 @@ jobs:
           if missing:
               raise SystemExit("Refusing migration: required production credentials are unavailable.")
           migration = Path("supabase/migrations") / (
-              f"{CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION}_"
-              "current_affairs_economy_rotation.sql"
+              f"{CURRENT_AFFAIRS_CHAPTER_GROUNDING_MIGRATION_VERSION}_"
+              "current_affairs_chapter_grounding.sql"
           )
           if not migration.is_file():
               raise SystemExit("Refusing migration: expected reviewed migration is missing.")

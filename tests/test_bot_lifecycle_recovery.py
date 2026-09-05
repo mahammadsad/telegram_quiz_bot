@@ -1512,9 +1512,14 @@ def test_database_preflight_uses_the_authoritative_exact_contract(monkeypatch):
                 bot.CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION
             ),
             "current_affairs_economy_rotation_migration_applied": True,
+            "current_affairs_chapter_grounding_migration_version": (
+                bot.CURRENT_AFFAIRS_CHAPTER_GROUNDING_MIGRATION_VERSION
+            ),
+            "current_affairs_chapter_grounding_migration_applied": True,
             "source_backed_rotation_ready": True,
             "source_coverage_ready": True,
             "current_affairs_economy_coverage_ready": True,
+            "current_affairs_generation_coverage_ready": True,
             "quiz_quality_migration_version": (
                 bot.QUIZ_QUALITY_MIGRATION_VERSION
             ),

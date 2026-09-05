@@ -5,6 +5,7 @@ from pathlib import Path
 from database.contract import (
     BOOKMARK_PROJECTION_MIGRATION_VERSION,
     CONTENT_REPLENISHMENT_BACKLOG_MIGRATION_VERSION,
+    CURRENT_AFFAIRS_CHAPTER_GROUNDING_MIGRATION_VERSION,
     CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION,
     DASHBOARD_TRANSACTION_MIGRATION_VERSION,
     FAIR_CONTENT_REPLENISHMENT_MIGRATION_VERSION,
@@ -31,7 +32,7 @@ MIGRATION = (
     ROOT
     / "supabase"
     / "migrations"
-    / f"{PLATFORM_CONTRACT_MIGRATION_VERSION}_current_affairs_economy_rotation.sql"
+    / f"{PLATFORM_CONTRACT_MIGRATION_VERSION}_current_affairs_chapter_grounding.sql"
 )
 RESERVE_AWARE_MIGRATION = (
     ROOT
@@ -52,6 +53,12 @@ ROUND_ROBIN_MIGRATION = (
     / "migrations"
     / f"{RESERVE_ROUND_ROBIN_REPLENISHMENT_MIGRATION_VERSION}_reserve_tier_round_robin_claims.sql"
 )
+ECONOMY_ROTATION_MIGRATION = (
+    ROOT
+    / "supabase"
+    / "migrations"
+    / f"{CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION}_current_affairs_economy_rotation.sql"
+)
 
 
 def _ready_contract() -> dict:
@@ -67,7 +74,8 @@ def _ready_contract() -> dict:
 
 def test_platform_contract_remains_the_scheduler_gate_after_additive_migrations() -> None:
     assert MIGRATION.is_file()
-    assert LATEST_MIGRATION_VERSION == CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION
+    assert LATEST_MIGRATION_VERSION == CURRENT_AFFAIRS_CHAPTER_GROUNDING_MIGRATION_VERSION
+    assert CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert RESERVE_ROUND_ROBIN_REPLENISHMENT_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert RESERVE_AWARE_REPLENISHMENT_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
     assert LEARNER_BOOTSTRAP_LATENCY_MIGRATION_VERSION < LATEST_MIGRATION_VERSION
@@ -92,6 +100,7 @@ def test_platform_contract_remains_the_scheduler_gate_after_additive_migrations(
     assert "grant execute on function public.get_platform_contract_v1() to service_role" in source
     contract_chain = (
         source
+        + ECONOMY_ROTATION_MIGRATION.read_text(encoding="utf-8")
         + ROUND_ROBIN_MIGRATION.read_text(encoding="utf-8")
         + RESERVE_AWARE_MIGRATION.read_text(encoding="utf-8")
         + LEARNER_BOOTSTRAP_MIGRATION.read_text(encoding="utf-8")

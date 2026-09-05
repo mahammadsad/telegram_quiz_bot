@@ -11,3 +11,6 @@
 - Lets the protected refresh worker pass the exact schema and rotation gate
   while coverage is being replenished, then retains the strict all-chapter
   database readback as the final deployment gate.
+- Builds current-affairs grounding inside the requested chapter before applying
+  a limit, preventing a high-volume category from starving National, Science,
+  or Economy despite valid evidence being present.

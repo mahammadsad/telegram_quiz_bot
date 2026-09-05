@@ -16,6 +16,8 @@ from psycopg.types.json import Jsonb
 
 from config.source_rollout import ROTATION_CHAPTER_KEYS
 from database.contract import (
+    CURRENT_AFFAIRS_CHAPTER_GROUNDING_MIGRATION_VERSION,
+    CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION,
     DATABASE_CONTRACT_VERSION,
     LEADERBOARD_PRIVACY_MIGRATION_VERSION,
     LEADERBOARD_PRIVACY_RPC_FIX_MIGRATION_VERSION,
@@ -782,6 +784,16 @@ def test_exact_database_contract_and_permissions(database_url: str) -> None:
     assert contract["source_rollout_migration_applied"] is True
     assert contract["source_backed_rotation_ready"] is True
     assert isinstance(contract["source_coverage_ready"], bool)
+    assert contract["current_affairs_economy_rotation_migration_version"] == (
+        CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION
+    )
+    assert contract["current_affairs_economy_rotation_migration_applied"] is True
+    assert contract["current_affairs_chapter_grounding_migration_version"] == (
+        CURRENT_AFFAIRS_CHAPTER_GROUNDING_MIGRATION_VERSION
+    )
+    assert contract["current_affairs_chapter_grounding_migration_applied"] is True
+    assert isinstance(contract["current_affairs_economy_coverage_ready"], bool)
+    assert isinstance(contract["current_affairs_generation_coverage_ready"], bool)
     assert contract["quiz_quality_migration_version"] == QUIZ_QUALITY_MIGRATION_VERSION
     assert contract["quiz_quality_migration_applied"] is True
     assert contract["diverse_grounding_ready"] is True

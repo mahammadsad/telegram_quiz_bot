@@ -267,7 +267,7 @@ def test_production_migration_workflow_is_manual_and_fail_closed() -> None:
     assert "get_reminder_delivery_contract" in source
     assert "deliveryEnabled" in source
     assert "REMINDER_DELIVERY_MIGRATION_VERSION" in source
-    assert "CURRENT_AFFAIRS_ECONOMY_ROTATION_MIGRATION_VERSION" in source
+    assert "CURRENT_AFFAIRS_CHAPTER_GROUNDING_MIGRATION_VERSION" in source
     assert "schedule:" not in source
     assert "push:" not in source
 
