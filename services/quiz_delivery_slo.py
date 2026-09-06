@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections import Counter
 from collections.abc import Iterable, Mapping
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from config.subjects import QUIZ_SUBJECTS
 
@@ -16,6 +17,20 @@ SLO_POLICY_VERSION = 1
 DELIVERY_COMPLETENESS_TARGET = 0.99
 ON_TIME_DELIVERY_TARGET = 0.95
 TERMINAL_FAILURE_RATE_LIMIT = 0.01
+ON_TIME_GRACE = timedelta(minutes=30)
+
+
+def latest_closed_delivery_date(now: datetime) -> date:
+    """Exclude dates whose final scheduled delivery still has time remaining."""
+    if now.tzinfo is None or now.utcoffset() is None:
+        raise ValueError("delivery report clock must be timezone-aware")
+    latest_slot = max(
+        time.fromisoformat(subject.scheduled_time_ist)
+        for subject in QUIZ_SUBJECTS if subject.scheduled_time_ist
+    )
+    # Subtract grace first so a late-night slot also closes on the right date.
+    cutoff = now.astimezone(ZoneInfo("Asia/Kolkata")) - ON_TIME_GRACE
+    return cutoff.date() - timedelta(days=int(cutoff.time() < latest_slot))
 
 
 def quiz_delivery_slo_report(
@@ -23,7 +38,7 @@ def quiz_delivery_slo_report(
     *,
     start_date: date,
     end_date: date,
-    on_time_grace: timedelta = timedelta(minutes=30),
+    on_time_grace: timedelta = ON_TIME_GRACE,
 ) -> dict[str, Any]:
     """Aggregate job delivery without exposing content, users, or Telegram IDs."""
     day_count = (end_date - start_date).days + 1

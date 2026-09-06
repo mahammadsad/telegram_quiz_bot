@@ -4,6 +4,18 @@
 the append-only durable quiz-job history. The default window is 14 days and the
 maximum is 31 days.
 
+By default the final date is the latest closed daily delivery window in
+`Asia/Kolkata`, independent of the runner's timezone. A window closes after the
+last configured quiz slot plus the 30-minute on-time allowance (currently
+19:30 IST). Morning/manual runs therefore report through yesterday; the normal
+21:00 IST scheduled run includes today's completed schedule. This prevents
+future jobs from being counted as failed delivery or active retries. Missing or
+late jobs in a closed window remain visible and still fail the same objectives.
+
+Use `--end-date YYYY-MM-DD` for an explicit historical or in-progress snapshot.
+An explicitly selected unfinished day includes all 13 expected jobs and can
+miss objectives while some jobs are still legitimately waiting for their slots.
+
 Definitions:
 
 - expected jobs: 13 subjects for every calendar day in the requested window;

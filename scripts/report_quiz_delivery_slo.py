@@ -5,21 +5,24 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from config.settings import require_env, supabase_project_ref_matches  # noqa: E402
-from services.quiz_delivery_slo import quiz_delivery_slo_report  # noqa: E402
+from services.quiz_delivery_slo import latest_closed_delivery_date, quiz_delivery_slo_report  # noqa: E402
 from storage import quiz_jobs_repo  # noqa: E402
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--days", type=int, default=14)
-    parser.add_argument("--end-date", type=date.fromisoformat, default=date.today())
+    parser.add_argument(
+        "--end-date", type=date.fromisoformat,
+        help="Explicit final IST schedule date; default: latest closed daily delivery window.",
+    )
     parser.add_argument(
         "--fail-on-terminal",
         action="store_true",
@@ -38,14 +41,15 @@ def main() -> int:
     require_env("EXPECTED_SUPABASE_PROJECT_REF")
     if not supabase_project_ref_matches():
         raise RuntimeError("Supabase project ownership check failed.")
-    start_date = args.end_date - timedelta(days=args.days - 1)
+    end_date = args.end_date or latest_closed_delivery_date(datetime.now(timezone.utc))
+    start_date = end_date - timedelta(days=args.days - 1)
     rows = quiz_jobs_repo.list_delivery_slo_window(
-        start_date.isoformat(), args.end_date.isoformat()
+        start_date.isoformat(), end_date.isoformat()
     )
     report = quiz_delivery_slo_report(
         rows,
         start_date=start_date,
-        end_date=args.end_date,
+        end_date=end_date,
     )
     print(json.dumps(report, sort_keys=True))
     terminal_failed = bool(
