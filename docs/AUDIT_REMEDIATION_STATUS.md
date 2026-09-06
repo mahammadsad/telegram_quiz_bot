@@ -1,6 +1,6 @@
 # Audit remediation status
 
-Status as of 5 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
+Status as of 6 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
 
 Status meanings:
 
@@ -75,9 +75,27 @@ Status meanings:
 - Release 8.7.8 passes 84 targeted Python checks, 24 targeted mobile-browser
   checks (including accessibility), Ruff and mypy. A bounded read-only ISRO
   canary accepted three releases and rejected nine expired/inapplicable entries.
-  Staging and protected CI remain release gates. PIB availability and further
+  Protected Tests `33978359959` and Security `33978359990` subsequently passed.
+  Production now serves 8.7.8 at `653f22b6da7bce8d423dffced92d3479cb322a36`,
+  with HTTP 200 readiness and canonical smoke `34003727479`. Staging also
+  passed authenticated candidate, rollback and restored-candidate smoke
+  `33978692499`, `33978857895` and `34003536542`. PIB availability and further
   reviewed current-affairs chapters remain open; no additional chapter was
   enabled without evidence.
+
+## 6 September delivery reporting follow-up
+
+- Production read-only run `34003507084`, taken before the first daily slot,
+  included all 13 not-yet-due jobs for 6 September and reported 80% completeness.
+  The four completed dates in that window actually posted all 52 expected jobs;
+  eight were late. The report therefore mixed incomplete and closed schedules.
+- The default report window now ends at the most recent final IST quiz slot plus
+  the 30-minute allowance. The 21:00 IST scheduled diagnostic still includes
+  today's closed schedule; morning runs exclude the still-open day. Explicit
+  `--end-date` snapshots keep their requested scope. Objective thresholds and
+  historical failures remain unchanged. Boundary, runner-timezone, rollover,
+  schedule-change and CLI checks pass; a fresh production readback remains the
+  verification gate for the corrected reporting window.
 
 ## 5 September delivery reliability checkpoint
 
