@@ -87,7 +87,7 @@ def test_pwa_shell_routes_and_cache_boundaries() -> None:
     assert 'fetch(request, {cache: "no-store"})' in source
 
     shell = CLIENT.get("/miniapp-shell.js").text
-    assert 'workerUrl.searchParams.set("shell", "8.7.7-ui1")' in shell
+    assert 'workerUrl.searchParams.set("shell", "8.7.8-ui1")' in shell
     assert 'updateViaCache: "none"' in shell
     assert "registration.update()" in shell
 

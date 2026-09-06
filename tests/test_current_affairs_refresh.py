@@ -233,6 +233,47 @@ def test_isro_refresh_is_supplementary_and_rejects_noncanonical_pages():
         canonical_isro_release_url("https://www.isro.gov.in/a/%2e%2e/secret.html")
 
 
+def test_isro_stale_index_entry_does_not_hide_later_current_release():
+    urls = [f"https://www.isro.gov.in/{name}.html" for name in ("old", "current", "outside_budget")]
+    listing = "".join(f'<a href="{url}">Press release</a>' for url in urls)
+    requests = []
+
+    def fetch(url):
+        requests.append(url)
+        if url == ISRO_PRESS_RELEASES_URL:
+            return listing
+        date_text = "January 1, 2026" if url == urls[0] else "August 12, 2026"
+        return (
+            "<html><head><title>ISRO confirms a satellite mission milestone</title></head><body>"
+            f'<p class="pageContent">{date_text}</p>'
+            f'<p class="pageContent">{_long_body("ISRO satellite mission")}</p></body></html>'
+        )
+
+    rows, stats = refresh_isro_rows(
+        fetch_text=fetch, now=datetime(2026, 8, 13, tzinfo=timezone.utc), max_items=2,
+    )
+    assert [row["source_url"] for row in rows] == [urls[1]]
+    assert requests == [ISRO_PRESS_RELEASES_URL, *urls[:2]]
+    assert stats.skipped == 1
+    assert stats.source_status == "available"
+
+
+@pytest.mark.parametrize("publication", [None, "Thu, 01 Jan 2026 12:00:00", "invalid date"])
+def test_rbi_reachable_feed_without_usable_rows_reports_degraded_coverage(publication):
+    item = "" if publication is None else (
+        "<item><title>RBI publishes annual report</title>"
+        f"<description>{_long_body('banking annual report')}</description>"
+        "<link>https://www.rbi.org.in/scripts/BS_PressReleaseDisplay.aspx?prid=63427</link>"
+        f"<pubDate>{publication}</pubDate></item>"
+    )
+    rows, stats = refresh_rbi_rows(
+        fetch_text=lambda _url: f"<rss><channel>{item}</channel></rss>",
+        now=datetime(2026, 8, 13, tzinfo=timezone.utc), max_items=2,
+    )
+    assert rows == []
+    assert stats.source_status == "available_no_current_rows"
+
+
 def test_refresh_combines_every_official_pib_endpoint_for_broad_coverage():
     primary_url = (
         "https://www.pib.gov.in/PressReleaseIframePage.aspx?PRID=2290301"

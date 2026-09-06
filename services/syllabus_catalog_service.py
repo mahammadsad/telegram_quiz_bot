@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from config.subjects import SUBJECTS
-from config.syllabus_catalog import CATALOGUE_ROWS, EXAM_TAGS, SUBJECT_EXAM_TAGS
+from config.syllabus import SYLLABUS
+from config.syllabus_catalog import EXAM_TAGS, SUBJECT_EXAM_TAGS
 
 EXAM_NAMES: dict[str, str] = {
     "WBCS": "WBCS",
@@ -26,11 +27,11 @@ def syllabus_catalog(*, exam_key: str | None, subject_key: str | None) -> dict:
     clean_subject = subject_key.strip().lower() if subject_key else None
     if clean_exam and clean_exam not in EXAM_TAGS:
         raise ValueError("Unknown exam key.")
-    if clean_subject and clean_subject not in CATALOGUE_ROWS:
+    if clean_subject and clean_subject not in SYLLABUS:
         raise ValueError("Unknown subject key.")
 
     subjects: list[dict] = []
-    for key, chapters in CATALOGUE_ROWS.items():
+    for key, chapters in SYLLABUS.items():
         exam_keys = SUBJECT_EXAM_TAGS[key]
         if clean_subject and key != clean_subject:
             continue
@@ -38,19 +39,19 @@ def syllabus_catalog(*, exam_key: str | None, subject_key: str | None) -> dict:
             continue
         projected_chapters = [
             {
-                "key": f"{key}:{chapter_key}",
-                "name": chapter_name,
-                "priority": priority,
-                "availableInDailyRotation": rotation_enabled,
+                "key": chapter.key,
+                "name": chapter.name,
+                "priority": chapter.priority,
+                "availableInDailyRotation": chapter.rotation_enabled,
                 "microTopics": [
                     {
-                        "key": f"{key}:{chapter_key}:t{index:02d}",
-                        "name": micro_topic,
+                        "key": micro_topic.key,
+                        "name": micro_topic.name,
                     }
-                    for index, micro_topic in enumerate(micro_topics, start=1)
+                    for micro_topic in chapter.micro_topics
                 ],
             }
-            for chapter_key, chapter_name, priority, rotation_enabled, micro_topics in chapters
+            for chapter in chapters
         ]
         subjects.append(
             {
@@ -58,8 +59,8 @@ def syllabus_catalog(*, exam_key: str | None, subject_key: str | None) -> dict:
                 "name": SUBJECTS[key].telegram_display_name,
                 "examKeys": list(exam_keys),
                 "chapterCount": len(projected_chapters),
-                "microTopicCount": sum(len(chapter[4]) for chapter in chapters),
-                "availableChapterCount": sum(1 for chapter in chapters if chapter[3]),
+                "microTopicCount": sum(len(chapter.micro_topics) for chapter in chapters),
+                "availableChapterCount": sum(chapter.rotation_enabled for chapter in chapters),
                 "chapters": projected_chapters,
             }
         )

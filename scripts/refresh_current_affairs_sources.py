@@ -408,7 +408,10 @@ def refresh_rbi_rows(*, fetch_text, now: datetime, max_items: int) -> tuple[list
             rows.append(release_to_source_row(release, now))
         except (CurrentAffairsRefreshError, ValueError):
             skipped += 1
-    return rows, RefreshStats(rss_items=len(raw_items), accepted=len(rows), skipped=skipped)
+    status = "available" if rows else "available_no_current_rows"
+    return rows, RefreshStats(
+        rss_items=len(raw_items), accepted=len(rows), skipped=skipped, source_status=status,
+    )
 
 
 def refresh_isro_rows(*, fetch_text, now: datetime, max_items: int) -> tuple[list[dict], RefreshStats]:
@@ -430,12 +433,8 @@ def refresh_isro_rows(*, fetch_text, now: datetime, max_items: int) -> tuple[lis
             release = parse_isro_release(release_url, fetch_text(release_url))
             if not release_is_current(release.published_at, now):
                 skipped += 1
-                # The official index is reverse chronological. Once it reaches
-                # an expired page, older pages cannot restore freshness.
-                if now - _as_utc(release.published_at) > timedelta(
-                    days=CURRENT_AFFAIRS_SOURCE_MAX_AGE_DAYS
-                ):
-                    break
+                # An index can pin or reorder entries. Inspect the remaining
+                # bounded candidates instead of assuming every later page is old.
                 continue
             rows.append(release_to_source_row(release, now))
         except (CurrentAffairsRefreshError, ValueError):
