@@ -94,8 +94,35 @@ Status meanings:
   today's closed schedule; morning runs exclude the still-open day. Explicit
   `--end-date` snapshots keep their requested scope. Objective thresholds and
   historical failures remain unchanged. Boundary, runner-timezone, rollover,
-  schedule-change and CLI checks pass; a fresh production readback remains the
-  verification gate for the corrected reporting window.
+  schedule-change and CLI checks pass. Corrected production readback
+  `34003806531` covers 1–5 September: 65/65 posted and 53/65 on time, with no
+  missing, terminal, retrying or unknown deliveries. Readback `34003840594`
+  confirms 5 September alone closed at 13/13 posted and on time. This one day
+  does not establish sustained compliance with the five-day timing objective.
+- Release `e81386ef69612c106518df7b4996064c6e061699` passed protected Tests
+  `34003806204` (811 Python, 308 mobile-browser and six service-worker checks),
+  Security `34003806215`, authenticated staging smoke `34004095133` and
+  canonical production smoke `34004375325`. Production readiness is HTTP 200.
+  App/shell versions remain 8.7.8 / 8.7.8-ui1; no migration or scheduling
+  threshold changed. Application rollback targets `653f22b6da7bce8d423dffced92d3479cb322a36`.
+
+## 6 September official-source transport follow-up
+
+- P1-03: the final-URL check happened after urllib automatically contacted
+  redirects. Source downloads now validate the initial HTTPS URL and every hop
+  before contact, allowing only the originating approved authority and its
+  root/www alias on port 443. Foreign hosts, cross-authority redirects,
+  insecure URLs, embedded credentials and nonstandard ports fail closed.
+- Redirects have a five-hop budget and their discarded bodies are closed without
+  reading them. Error responses are closed too; only the existing bounded
+  transient-status retry policy remains. Missing/malformed targets, loops,
+  rejected content types/encodings and oversized final responses have offline
+  regression coverage using urllib's real opener/error machinery.
+- A bounded read-only live canary accepted four RBI releases and three ISRO
+  releases, skipping one expired/inapplicable ISRO entry. This neither imports
+  rows nor enables additional chapters. PIB availability and the remaining
+  editorial coverage gaps remain open. Protected CI and deployment verification
+  are still required for this transport follow-up.
 
 ## 5 September delivery reliability checkpoint
 
