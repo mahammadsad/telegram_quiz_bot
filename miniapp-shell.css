@@ -3,3 +3,9 @@
 .network-status{position:sticky;top:0;z-index:9999;background:#7c2d12;color:#fff;padding:10px 16px;text-align:center;font-size:14px;font-weight:700;line-height:1.4}.network-status[hidden]{display:none}
 :where(button,a,input,select,textarea,[tabindex]):focus-visible{outline:3px solid #f59e0b!important;outline-offset:3px!important}
 @media(prefers-reduced-motion:reduce){.skip-link{transition:none!important}}
+
+/* Equal navigation tracks must shrink below a large Bengali label's intrinsic
+   width. Wrapping preserves every destination without shrinking its text. */
+nav.bottom,nav.bottom-nav{grid-template-columns:repeat(4,minmax(0,1fr))}
+nav.bottom a,nav.bottom-nav a{min-width:0;overflow-wrap:anywhere;white-space:normal}
+nav.bottom a span,nav.bottom-nav a span{max-width:100%}
