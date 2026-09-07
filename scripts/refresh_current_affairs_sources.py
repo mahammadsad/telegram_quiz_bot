@@ -63,6 +63,7 @@ RBI_USER_AGENT = (
     "+https://citizenaffairs.in/bn/)"
 )
 MAX_RESPONSE_BYTES = 5_000_000
+MAX_SOURCE_REDIRECTS = 5
 MAX_FACT_SUMMARY_CHARS = 3_600
 DEFAULT_MAX_ITEMS = 80
 DEFAULT_MINIMUM_PER_CHAPTER = 4
@@ -468,32 +469,82 @@ def _interleave_unique(batches: list[list[str]]) -> list[str]:
             return items
 
 
-def fetch_text(url: str) -> str:
-    requested_domain = (urlparse(url).hostname or "").lower().removeprefix("www.")
-    if requested_domain not in {"isro.gov.in", "pib.gov.in", "rbi.org.in"}:
+def _official_fetch_domain(url: str) -> str:
+    try:
+        parsed = urlparse(url)
+        domain = (parsed.hostname or "").lower().removeprefix("www.")
+        valid = (
+            parsed.scheme == "https"
+            and parsed.port in {None, 443}
+            and parsed.username is None
+            and parsed.password is None
+            and not any(ord(character) <= 32 or ord(character) == 127 for character in url)
+            and domain in {"isro.gov.in", "pib.gov.in", "rbi.org.in"}
+        )
+    except ValueError as exc:
+        raise CurrentAffairsRefreshError("Current-affairs source URL is invalid.") from exc
+    if not valid:
         raise CurrentAffairsRefreshError("Current-affairs source host is not approved.")
+    return domain
+
+
+class _NoAutomaticSourceRedirects(urllib.request.HTTPRedirectHandler):
+    def http_error_302(self, req, fp, code, msg, headers):
+        # Handle the redirect ourselves before contacting its target. The
+        # default handler parses Location and reads the discarded body first.
+        return None
+
+    http_error_301 = http_error_303 = http_error_307 = http_error_308 = http_error_302
+
+
+def _open_official_response(opener, url: str, domain: str, headers: dict[str, str]):
+    for hop in range(MAX_SOURCE_REDIRECTS + 1):
+        if _official_fetch_domain(url) != domain:
+            raise CurrentAffairsRefreshError("Official current-affairs source redirected outside its host.")
+        request = urllib.request.Request(url, headers=headers)
+        try:
+            return opener.open(request, timeout=30)
+        except HTTPError as exc:
+            if exc.code not in {301, 302, 303, 307, 308}:
+                raise
+            location = exc.headers.get("Location") or exc.headers.get("URI")
+            exc.close()
+            if not location:
+                raise CurrentAffairsRefreshError("Official current-affairs source redirect has no target.") from exc
+            if hop == MAX_SOURCE_REDIRECTS:
+                raise CurrentAffairsRefreshError("Official current-affairs source redirect limit was exceeded.") from exc
+            try:
+                url = urljoin(url, location)
+            except ValueError as invalid_url:
+                raise CurrentAffairsRefreshError("Official current-affairs source redirect target is invalid.") from invalid_url
+    raise CurrentAffairsRefreshError("Official current-affairs source redirect limit was exceeded.")
+
+
+def fetch_text(url: str) -> str:
+    requested_domain = _official_fetch_domain(url)
     user_agent = (
         PIB_USER_AGENT if requested_domain == "pib.gov.in" else RBI_USER_AGENT
     )
-    request = urllib.request.Request(
-        url,
-        headers={
-            "User-Agent": user_agent,
-            "Accept": "application/rss+xml, application/xml, text/html;q=0.9",
-        },
-    )
+    headers = {
+        "User-Agent": user_agent,
+        "Accept": "application/rss+xml, application/xml, text/html;q=0.9",
+    }
+    opener = urllib.request.build_opener(_NoAutomaticSourceRedirects())
     last_error: Exception | None = None
     for attempt in range(1, FETCH_ATTEMPTS + 1):
         try:
-            with urllib.request.urlopen(request, timeout=30) as response:
+            with _open_official_response(opener, url, requested_domain, headers) as response:
                 payload = response.read(MAX_RESPONSE_BYTES + 1)
                 status = getattr(response, "status", 200)
                 encoding = response.headers.get_content_charset() or "utf-8"
                 content_type = response.headers.get_content_type().lower()
                 final_url = response.geturl()
             break
+        except CurrentAffairsRefreshError:
+            raise
         except HTTPError as exc:
             last_error = exc
+            exc.close()
             if 400 <= exc.code < 500 and exc.code != 429:
                 raise CurrentAffairsRefreshError(
                     "Official current-affairs source request was rejected."
@@ -506,11 +557,7 @@ def fetch_text(url: str) -> str:
         raise CurrentAffairsRefreshError(
             "Official current-affairs source request failed."
         ) from last_error
-    final = urlparse(final_url)
-    if (
-        final.scheme != "https"
-        or (final.hostname or "").lower().removeprefix("www.") != requested_domain
-    ):
+    if _official_fetch_domain(final_url) != requested_domain:
         raise CurrentAffairsRefreshError("Official current-affairs source redirected outside its host.")
     if status != 200 or len(payload) > MAX_RESPONSE_BYTES:
         raise CurrentAffairsRefreshError("Official current-affairs source response was rejected.")
