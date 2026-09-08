@@ -441,7 +441,16 @@ def record_quiz_pack(
             "question content identity collision at position",
             "question classification collision at position",
         )
-        if any(marker in message for marker in collision_markers):
+        # Variant identity can also reject a fresh evidence/content version of
+        # an existing question. Do not treat unrelated unique constraints (or
+        # permissions/network errors mentioning this name) as content rotation.
+        variant_collision = (
+            getattr(exc, "code", None) == "23505"
+            and getattr(exc, "message", None) == (
+                'duplicate key value violates unique constraint "idx_questions_variant_fingerprint_unique"'
+            )
+        )
+        if variant_collision or any(marker in message for marker in collision_markers):
             raise QuizContentCollisionError(
                 f"Atomic quiz save rejected recently used content in {quiz_id}; regenerate safely."
             ) from exc

@@ -107,6 +107,7 @@ class GeminiProviderPool:
         prompt: str,
         response_schema: dict,
         preferred_model: str | None = None,
+        alternate_model: str | None = None,
     ) -> tuple[str, dict]:
         if not self.providers:
             raise GeminiGenerationError("not_configured", [], retryable=False)
@@ -115,8 +116,10 @@ class GeminiProviderPool:
         if not providers:
             raise GeminiGenerationError("providers_cooling_down", [], retryable=True)
 
+        active_model = preferred_model or self.primary_model
+        alternate_used = False
         for provider in providers:
-            model = preferred_model or self.primary_model
+            model = active_model
             attempt_number = 0
             model_fallback_used = False
             while attempt_number < self.max_attempts:
@@ -142,6 +145,26 @@ class GeminiProviderPool:
                         status or "unknown",
                         _safe_error_detail(exc),
                     )
+                    if (
+                        preferred_model
+                        and alternate_model
+                        and alternate_model != model
+                        and not alternate_used
+                        and attempt_number < self.max_attempts
+                        and (category == MODEL_UNAVAILABLE or (category == TRANSIENT and status != 429))
+                    ):
+                        # Only an explicit repair caller may nominate its already
+                        # successful generator. Verifiers remain pinned. Spend the
+                        # next existing attempt, never restart/extend the budget.
+                        LOG.warning(
+                            "GEMINI_REPAIR_MODEL_FAILOVER provider=%s failed_model=%s next_model=%s error_category=%s",
+                            provider.label, model, alternate_model, category,
+                        )
+                        model = active_model = alternate_model
+                        alternate_used = True
+                        if category == TRANSIENT:
+                            self._sleep(self.retry_with_backoff(attempt_number, exc))
+                        continue
                     if (
                         category in (MODEL_UNAVAILABLE, NON_RETRYABLE)
                         and preferred_model is None

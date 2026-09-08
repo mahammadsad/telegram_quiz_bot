@@ -1,6 +1,6 @@
 # Audit remediation status
 
-Status as of 6 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
+Status as of 8 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
 
 Status meanings:
 
@@ -40,6 +40,35 @@ Status meanings:
 | P2-10 | P2 | Request contracts are isolated in `api_models.py`; public quiz delivery, timed-test attempts, learner workflows, admin moderation, privacy-projected leaderboards, public catalogue, static/PWA delivery and system endpoints are isolated in focused route modules. Scheduled-job health, dispatch and recovery orchestration is isolated from the subject generation/posting entry point. Primary pages use external CSS/JS and no longer need inline runtime styles. | **Implemented** | Service/repository modules, `api_models.py`, `routes/quizzes.py`, `routes/test_attempts.py`, `routes/learner.py`, `routes/admin.py`, `routes/leaderboards.py`, `routes/catalog.py`, `routes/static_pages.py`, `routes/system.py`, `services/quiz_dispatch_runtime.py`, external frontend assets; full pytest, Ruff and mypy pass. | Keep future HTTP and scheduling behavior in focused modules; retain `app.py` and `bot.py` as composition/entry points rather than adding new domain logic there. |
 | P2-11 | P2 | Accidental FUSE artifact is removed/ignored and current release, architecture and rollback documentation is added. | **Implemented** | `.gitignore`, removed `.fuse_hidden*`, remediation/release/architecture docs. | Archive contradictory legacy runbooks after owner review rather than deleting potentially useful history automatically. |
 | P2-12 | P2 | Security, contribution, conduct, roadmap, issue/PR templates and content provenance policy are added. | **Partial / awaiting external action** | root governance files, `.github` templates, `docs/PUBLIC_ROADMAP.md`, `docs/CONTENT_PROVENANCE_AND_LICENSING.md`. | Repository owner must choose an OSI license and confirm code/content ownership. No license was guessed. |
+
+## 8 September delivery recovery and UI checkpoint
+
+- P2-09 / mobile UI: release `182b9c07268776869e045cf6c1f577149bd8018f`
+  (8.7.9) is live with exact-SHA production smoke `34176107816`. Protected
+  Tests `34158204179` and Security `34158204219` passed, including 336 mobile
+  cases and 838 Python cases. Staging authenticated candidate, rollback and
+  restored-candidate runs `34158616478`, `34158821026` and `34158969388` passed.
+  Doubled-text checks exercise wrapping and measured bottom-navigation clearance;
+  they do not replace native Telegram or Bengali assistive-technology testing.
+- P0-02 / P1-11: closed-window report `34158167968` records 65/65 posted for
+  3–7 September, but only 58/65 on time (89.2308%). The narrower 5–7 September
+  report `34158240584` records 39/39 posted and 37/39 on time (94.8718%); this
+  remains below 95%, not a passing rounded result.
+- Read-only durable events identify the two late jobs as 6 September
+  Miscellaneous (111.22 minutes) and 7 September Reasoning (65.88 minutes).
+  Workflow `34080069424`, job `101613578946`, shows the normal generator
+  responding successfully, followed by four approximately two-minute repair
+  model deadline failures. Release 8.7.10 allows that repair to fall back to
+  the already successful generator within its existing attempt budget, then
+  revalidates the entire replacement and uses the separately pinned verifier.
+- Miscellaneous also hit SQLSTATE `23505` for the exact
+  `idx_questions_variant_fingerprint_unique` constraint. The application now
+  maps only that structured uniqueness error to the existing content-collision
+  retry policy, so chapter rotation is not lost. Other constraints and errors
+  remain untouched; no database constraint or content gate is weakened.
+- Release 8.7.10 is pending protected CI and staged release evidence. The two
+  historical jobs are already posted; no replay is needed or authorized by
+  this repair. Observe normal dispatch before claiming sustained timing gains.
 
 ## 5 September current-affairs and UI follow-up
 

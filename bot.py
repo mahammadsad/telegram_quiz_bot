@@ -561,6 +561,11 @@ def generate_mcqs(
             prompt=active_prompt,
             response_schema=_mcq_response_schema(grounding_bundle),
             preferred_model=repair_model,
+            alternate_model=(
+                str(generation_history[0].get("model") or "") or None
+                if repair_number > 0
+                else None
+            ),
         )
         generation_history.append(call_metadata)
         validation_error: QuizValidationError | None = None

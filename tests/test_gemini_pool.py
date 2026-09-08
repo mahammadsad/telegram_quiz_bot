@@ -135,6 +135,91 @@ def test_cooling_provider_is_skipped_on_next_generation():
     assert len(clients["primary-secret"].models.calls) == 2
 
 
+@pytest.mark.parametrize("error", [ApiError(503), ApiError(504), ApiError(404), TimeoutError("timeout")])
+def test_repair_can_use_explicit_previously_successful_model_within_existing_budget(error):
+    pool, clients = make_pool([error, "repaired batch"], ["unused"])
+    text, metadata = pool.generate_subject_quiz(
+        prompt="regenerate a complete batch", response_schema={"type": "array"},
+        preferred_model="repair-model", alternate_model="successful-generator",
+    )
+    assert text == "repaired batch"
+    assert metadata["model"] == "successful-generator"
+    assert metadata["attempts"] == 2
+    assert [call["model"] for call in clients["primary-secret"].models.calls] == [
+        "repair-model", "successful-generator",
+    ]
+    assert clients["secondary-secret"].models.calls == []
+
+
+def test_verifier_preferred_model_remains_pinned_without_explicit_alternate():
+    pool, clients = make_pool([ApiError(504), ApiError(504)], ["verified"])
+    _, metadata = pool.generate_subject_quiz(
+        prompt="verify", response_schema={}, preferred_model="independent-verifier",
+    )
+    assert metadata["model"] == "independent-verifier"
+    assert all(call["model"] == "independent-verifier" for client in clients.values() for call in client.models.calls)
+
+
+def test_alternate_model_is_not_restarted_at_failed_repair_model_on_key_failover():
+    pool, clients = make_pool([ApiError(504), ApiError(503)], ["repaired"])
+    _, metadata = pool.generate_subject_quiz(
+        prompt="repair", response_schema={}, preferred_model="repair-model",
+        alternate_model="successful-generator",
+    )
+    assert metadata["provider"] == "secondary"
+    assert metadata["model"] == "successful-generator"
+    assert clients["secondary-secret"].models.calls[0]["model"] == "successful-generator"
+
+
+def test_repair_alternate_does_not_bypass_quota_or_key_retry_policy():
+    pool, clients = make_pool([ApiError(429), ApiError(429)], ["repaired"])
+    _, metadata = pool.generate_subject_quiz(
+        prompt="repair", response_schema={}, preferred_model="repair-model",
+        alternate_model="successful-generator",
+    )
+    assert metadata["model"] == "repair-model"
+    assert len(clients["primary-secret"].models.calls) == 2
+
+
+def test_repair_alternate_does_not_add_an_attempt_when_budget_is_one():
+    pool, clients = make_pool([ApiError(504)], [ApiError(504)], GEMINI_MAX_ATTEMPTS_PER_KEY="1")
+    with pytest.raises(GeminiGenerationError) as caught:
+        pool.generate_subject_quiz(
+            prompt="repair", response_schema={}, preferred_model="repair-model",
+            alternate_model="successful-generator",
+        )
+    assert caught.value.retryable
+    assert len(caught.value.attempts) == 2
+    assert all(len(client.models.calls) == 1 for client in clients.values())
+
+
+@pytest.mark.parametrize("error", [ApiError(400), Exception("safety blocked")])
+def test_repair_alternate_never_bypasses_request_or_safety_rejection(error):
+    pool, clients = make_pool([error], ["unused"])
+    with pytest.raises(GeminiGenerationError) as caught:
+        pool.generate_subject_quiz(
+            prompt="repair", response_schema={}, preferred_model="repair-model",
+            alternate_model="successful-generator",
+        )
+    assert not caught.value.retryable
+    assert len(clients["primary-secret"].models.calls) == 1
+    assert clients["secondary-secret"].models.calls == []
+
+
+def test_failed_repair_and_alternate_preserve_total_attempt_budget():
+    pool, clients = make_pool([ApiError(504), ApiError(504)], [ApiError(504), ApiError(504)])
+    with pytest.raises(GeminiGenerationError) as caught:
+        pool.generate_subject_quiz(
+            prompt="repair", response_schema={}, preferred_model="repair-model",
+            alternate_model="successful-generator",
+        )
+    assert caught.value.retryable
+    assert len(caught.value.attempts) == 4
+    assert [call["model"] for client in clients.values() for call in client.models.calls] == [
+        "repair-model", "successful-generator", "successful-generator", "successful-generator",
+    ]
+
+
 @pytest.mark.parametrize(
     ("error", "category"),
     [(ApiError(429), TRANSIENT), (ApiError(401, "invalid key"), KEY_FAILURE), (ApiError(400), NON_RETRYABLE), (ApiError(404), MODEL_UNAVAILABLE), (Exception("safety blocked"), SAFETY_BLOCK)],
