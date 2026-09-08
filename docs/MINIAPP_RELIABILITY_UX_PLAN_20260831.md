@@ -515,7 +515,20 @@ The delayed-progress failure was reproduced before the fix. The focused syllabus
 and accessibility cases pass across all four supported viewport widths. Native
 Telegram and Bengali screen-reader acceptance remain separate checks.
 
-## Decisions intentionally deferred
+## Large-text reflow follow-up — 2026-09-08
+
+The deterministic doubled-text test reproduced overflow in the daily quiz
+summary/review controls and home/settings navigation at 320 CSS pixels.
+Navigation tracks now shrink and wrap their Bengali labels without reducing
+font size; the quiz summary and review tools also reflow. The shell measures
+navigation height so home content and the settings sticky save action reserve
+space for enlarged labels instead of assuming the original navigation height.
+
+The automated stress tests hold the viewport fixed and double computed text
+sizes. They are not native Android/iOS text scaling or browser-chrome zoom QA.
+Real Telegram and Bengali assistive-technology acceptance remains separate.
+
+## Decisions intentionally deferred (audit boundaries)
 
 - No production mutation or deployment is part of this audit.
 - No Render upgrade is included in the current plan execution unless the owner

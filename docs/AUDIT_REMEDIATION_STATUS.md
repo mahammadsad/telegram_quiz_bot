@@ -121,8 +121,12 @@ Status meanings:
 - A bounded read-only live canary accepted four RBI releases and three ISRO
   releases, skipping one expired/inapplicable ISRO entry. This neither imports
   rows nor enables additional chapters. PIB availability and the remaining
-  editorial coverage gaps remain open. Protected CI and deployment verification
-  are still required for this transport follow-up.
+  editorial coverage gaps remain open. Protected Tests `34017479892` passed
+  838 Python, 308 mobile-browser and six service-worker checks; Security
+  `34017479894` passed. Exact candidate passed authenticated staging smoke
+  `34157724998`. Production serves merge `082dc01aca7cff6f11a8b352045de9af725997e9`
+  with HTTP 200 readiness and canonical smoke `34157946875`. No migration or
+  new chapter activation was part of this release.
 
 ## 5 September delivery reliability checkpoint
 

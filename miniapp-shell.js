@@ -117,7 +117,7 @@
   function registerWorker() {
     if (!("serviceWorker" in navigator) || location.protocol !== "https:") return;
     var workerUrl = new URL("service-worker.js", document.baseURI);
-    workerUrl.searchParams.set("shell", "8.7.8-ui1");
+    workerUrl.searchParams.set("shell", "8.7.9-ui1");
     var workerScope = new URL("./", workerUrl).pathname;
     navigator.serviceWorker.register(workerUrl.href, {
       scope: workerScope,
@@ -444,6 +444,22 @@
     }
   }
 
+  function installNavigationSizeSync() {
+    var nav = document.querySelector("nav.bottom, nav.bottom-nav");
+    if (!nav) return;
+    function syncSize() {
+      document.documentElement.style.setProperty(
+        "--miniapp-bottom-nav-height", Math.ceil(nav.getBoundingClientRect().height) + "px",
+      );
+    }
+    syncSize();
+    if (typeof ResizeObserver === "function") {
+      new ResizeObserver(syncSize).observe(nav);
+    }
+    window.addEventListener("resize", syncSize, {passive: true});
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(syncSize);
+  }
+
   function installDialogFocusLoops() {
     document.querySelectorAll("dialog").forEach(function (dialog) {
       dialog.addEventListener("keydown", function (event) {
@@ -473,6 +489,7 @@
     installSkipLink();
     announceNetworkState();
     installTelegramLayoutSync();
+    installNavigationSizeSync();
     registerWorker();
     window.addEventListener("online", announceNetworkState);
     window.addEventListener("offline", announceNetworkState);
@@ -484,7 +501,7 @@
   window.__miniAppContract = Object.freeze({
     locale: "bn",
     supportedLocales: supportedLocales,
-    shellVersion: "8.7.8-ui1",
+    shellVersion: "8.7.9-ui1",
     basePath: new URL("./", document.baseURI).pathname,
     errorCategories: ERROR_CATEGORIES,
   });
