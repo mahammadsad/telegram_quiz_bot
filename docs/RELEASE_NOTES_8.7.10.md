@@ -10,6 +10,9 @@
   database constraints and permission failures still propagate unchanged.
 - No timeout, retry budget, content-quality gate, scheduler, migration or
   frontend cache contract is changed. Shell assets remain 8.7.9-ui1.
+- The HTTPS service-worker upgrade test waits for the replacement document to
+  load before inspecting its launch state. This removes a navigation-context
+  race without retrying or weakening its one-refresh and preserved-launch checks.
 
 Regression tests cover timeout recovery through the full generation pipeline,
 rejection of an invalid replacement, verifier pinning, bounded attempts and
