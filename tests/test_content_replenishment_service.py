@@ -5,7 +5,10 @@ from copy import deepcopy
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
+import pytest
+
 from services import content_replenishment_service, question_verification
+from services.gemini_provider_pool import GeminiGenerationError
 from services.source_grounding import GroundingBundle, SourceDocument
 
 
@@ -481,3 +484,120 @@ def test_replenishment_retries_malformed_generation_once_without_verifier(monkey
     else:
         raise AssertionError("malformed candidate generation must fail closed")
     assert calls == 2
+
+
+@pytest.mark.parametrize("failure_stage", ["generator", "verifier", "malformed_batch", "malformed_verifier", "successful_repair"])
+def test_optional_repair_failure_retains_only_previously_verified_candidates(
+    monkeypatch, valid_questions, failure_stage,
+) -> None:
+    candidates = generated_candidates(valid_questions)
+    verification = verifier_results()
+    for item in verification:
+        if item["question_number"] > 2:
+            item.update(verdict="rejected", confidence=0.1)
+    failure = GeminiGenerationError(
+        "transient", [{"provider": "primary", "model": "repair-model", "category": "transient"}] * 2,
+        retryable=True,
+    )
+    responses = [
+        (json.dumps(candidates), "first-generator"),
+        (json.dumps(verification), "verifier"),
+    ]
+    if failure_stage == "successful_repair":
+        responses.extend([(json.dumps(candidates), "second-generator"), (json.dumps(verifier_results()), "verifier")])
+    elif failure_stage == "malformed_verifier":
+        responses.extend([(json.dumps(candidates), "second-generator"), ("not-json", "verifier")])
+    elif failure_stage == "verifier":
+        responses.extend([(json.dumps(candidates), "second-generator"), failure])
+    else:
+        responses.append(failure if failure_stage == "generator" else ("not-json", "second-generator"))
+
+    class Pool:
+        verifier_model = "verifier"
+
+        def generate_subject_quiz(self, **kwargs):
+            outcome = responses.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            text, model = outcome
+            return text, {"provider": "primary", "model": model, "attempts": 1}
+
+    saved = []
+    monkeypatch.setattr(
+        content_replenishment_service.content_inventory_repo, "existing_candidate_identities",
+        lambda **kwargs: (set(), set(), set()),
+    )
+    monkeypatch.setattr(
+        content_replenishment_service.content_inventory_repo, "save_verified_candidates",
+        lambda rows, context: saved.extend(rows) or {"accepted_count": len(rows)},
+    )
+    result = content_replenishment_service.generate_and_store_candidate_batch(
+        "history", "আধুনিক ভারত", grounding(valid_questions), Pool(),
+    )
+    assert len(saved) == len(result.accepted) == (4 if failure_stage == "successful_repair" else 2)
+    assert responses == []
+    assert result.generation_context["repair_attempted"] is True
+    if failure_stage != "successful_repair":
+        expected_code = {
+            "malformed_batch": "invalid_candidate_batch",
+            "malformed_verifier": "repair_verification_invalid",
+        }.get(failure_stage, "repair_provider_unavailable")
+        assert expected_code in result.generation_context["rejection_codes"]
+    assert all(row["gemini_model"] == "first-generator" for row in saved[:2])
+    assert all(row["verification_checks"]["generator_model"] == row["gemini_model"] for row in saved)
+    assert all(row["verification_checks"]["independent_model"] is True for row in saved)
+    if failure_stage == "successful_repair":
+        assert all(row["gemini_model"] == "second-generator" for row in saved[2:])
+    if failure_stage in {"generator", "verifier"}:
+        assert result.generation_context["repair_provider_failure"] == {
+            "stage": "generation" if failure_stage == "generator" else "verification",
+            "category": "transient", "attempts": 2,
+        }
+        assert result.generation_context["attempts"] == (3 if failure_stage == "generator" else 2)
+    else:
+        assert result.generation_context["repair_provider_failure"] is None
+
+
+@pytest.mark.parametrize("failure_stage", ["generator", "verifier"])
+@pytest.mark.parametrize("failure_category", ["transient", "safety_block", "key_failure", "unexpected"])
+def test_repair_recovery_never_saves_unverified_rows_or_masks_terminal_errors(
+    monkeypatch, valid_questions, failure_stage, failure_category,
+) -> None:
+    verification = verifier_results()
+    for item in verification:
+        if failure_category == "transient" or item["question_number"] > 2:
+            item.update(verdict="rejected", confidence=0.1)
+    error = (
+        RuntimeError("unexpected implementation error")
+        if failure_category == "unexpected"
+        else GeminiGenerationError(failure_category, [], retryable=failure_category == "transient")
+    )
+    batch = json.dumps(generated_candidates(valid_questions))
+    responses = [batch, json.dumps(verification)]
+    if failure_stage == "verifier":
+        responses.append(batch)
+    responses.append(error)
+
+    class Pool:
+        def generate_subject_quiz(self, **kwargs):
+            outcome = responses.pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return outcome, {"provider": "primary", "model": "test-model", "attempts": 1}
+
+    saved = []
+    monkeypatch.setattr(
+        content_replenishment_service.content_inventory_repo, "existing_candidate_identities",
+        lambda **kwargs: (set(), set(), set()),
+    )
+    monkeypatch.setattr(
+        content_replenishment_service.content_inventory_repo, "save_verified_candidates",
+        lambda rows, context: saved.extend(rows) or {"accepted_count": len(rows)},
+    )
+    with pytest.raises(type(error)) as raised:
+        content_replenishment_service.generate_and_store_candidate_batch(
+            "history", "আধুনিক ভারত", grounding(valid_questions), Pool(),
+        )
+    assert raised.value is error
+    assert responses == []
+    assert saved == []

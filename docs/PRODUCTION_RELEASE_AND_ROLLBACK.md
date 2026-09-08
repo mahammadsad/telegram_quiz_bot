@@ -1,6 +1,6 @@
 # Production release and rollback
 
-This runbook is the production gate for application version `8.7.10`. Passing local unit tests is not production evidence.
+This runbook is the production gate for application version `8.7.11`. Passing local unit tests is not production evidence.
 
 ## Ownership and required inputs
 
@@ -40,8 +40,8 @@ Never print service keys, bot tokens or synthetic `initData` in logs.
 
 ## Database migration order
 
-Release 8.7.10 has no new database migrations. Its rollback target is release
-`182b9c07268776869e045cf6c1f577149bd8018f` (8.7.9), which supports the current
+Release 8.7.11 has no new database migrations. Its rollback target is release
+`324aef152efb677623f85d1bc9b2fd89828ff47c` (8.7.10), which supports the current
 platform 1.5.0 contract. The current-affairs migrations `20260905040301` and
 `20260905043800` are already applied and pinned. Do not roll back to an older
 application that requires a different platform contract.
@@ -62,7 +62,7 @@ Do **not** schedule or manually call `public.process_due_account_deletions` unti
 ## Staging gate
 
 1. Deploy the exact release commit to staging.
-2. Verify `/version` reports `applicationVersion: 8.7.10`, the expected full `commitSha`, staging environment and build time.
+2. Verify `/version` reports `applicationVersion: 8.7.11`, the expected full `commitSha`, staging environment and build time.
 3. Verify root HTML, CSS, JS, icon, manifest, service worker, `/health/live`, `/health/ready`, an answer-free quiz, server-timed start/submission and dashboard with only the synthetic user.
 4. Test a duplicate submission with the same attempt ID; it must be idempotent.
 5. Submit forged client duration telemetry; it must not become trusted ranking time.

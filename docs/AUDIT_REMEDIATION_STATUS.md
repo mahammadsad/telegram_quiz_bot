@@ -41,6 +41,31 @@ Status meanings:
 | P2-11 | P2 | Accidental FUSE artifact is removed/ignored and current release, architecture and rollback documentation is added. | **Implemented** | `.gitignore`, removed `.fuse_hidden*`, remediation/release/architecture docs. | Archive contradictory legacy runbooks after owner review rather than deleting potentially useful history automatically. |
 | P2-12 | P2 | Security, contribution, conduct, roadmap, issue/PR templates and content provenance policy are added. | **Partial / awaiting external action** | root governance files, `.github` templates, `docs/PUBLIC_ROADMAP.md`, `docs/CONTENT_PROVENANCE_AND_LICENSING.md`. | Repository owner must choose an OSI license and confirm code/content ownership. No license was guessed. |
 
+## 8 September verified-inventory recovery
+
+- P0-02 / P1-02: release `324aef152efb677623f85d1bc9b2fd89828ff47c`
+  (8.7.10) is live and passed production smoke `34195527284`. Protected Tests
+  `34194981610` passed 855 Python, 336 mobile and six HTTPS service-worker tests;
+  Security `34194981586` passed. Authenticated staging candidate and rollback
+  smoke `34195180812` and `34194872650` passed without reversing migrations.
+- Latest inventory report `34175862378`, generated 8 September at 01:14 UTC,
+  shows 14.1–23.9 eligible subject-level days, but only two complete chapter
+  difficulty sets each for Bengali, Mathematics and Reasoning. Subject totals
+  are not proof of broad chapter coverage. Seven-day replenishment accepted 242
+  and rejected 705 candidates (25.55% acceptance), with six provider errors.
+- New regression tests reproduce another yield loss: two already verified,
+  novel candidates were discarded when an optional repair timed out, returned
+  malformed generation, or failed its verifier call. Release 8.7.11 retains
+  only those previously certified candidates on expected retryable repair
+  failures. Zero-yield and terminal failures still propagate; all publication
+  gates and the atomic persistence boundary remain unchanged.
+- The same tests expose and repair incorrect per-question generator attribution
+  when two passes use different models. Each row now retains its own
+  server-created verification provenance instead of the batch's last model.
+- 8.7.11 is pending protected CI and release evidence. This fixes a reproduced
+  loss path; it does not attribute all historical provider errors to that path,
+  claim a live yield improvement, or complete the remaining source/coverage work.
+
 ## 8 September delivery recovery and UI checkpoint
 
 - P2-09 / mobile UI: release `182b9c07268776869e045cf6c1f577149bd8018f`

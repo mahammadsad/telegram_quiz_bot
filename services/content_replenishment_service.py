@@ -13,8 +13,8 @@ from config.settings import DETERMINISTIC_PROOF_REQUIRED, DETERMINISTIC_PROOF_VE
 from config.subjects import get_subject
 from services import question_verification, quiz_pack_service
 from services.content_identity import attach_candidate_identities
-from services.gemini_provider_pool import GeminiProviderPool
-from services.question_validation import validate_question_candidates
+from services.gemini_provider_pool import GeminiGenerationError, GeminiProviderPool
+from services.question_validation import QuizValidationError, validate_question_candidates
 from services.source_grounding import GroundingBundle, SourceDocument
 from storage import content_inventory_repo
 
@@ -313,13 +313,24 @@ def generate_and_store_candidate_batch(
     generation_history: list[dict[str, Any]] = []
     candidate_count = 0
     latency_ms = 0
+    repair_attempted = False
+    repair_provider_failure: dict[str, Any] | None = None
 
     for repair_number in range(_CANDIDATE_REPAIR_LIMIT + 1):
+        repair_attempted = repair_number > 0
         started = datetime.now(timezone.utc)
-        raw_text, generation = pool.generate_subject_quiz(
-            prompt=active_prompt,
-            response_schema=_candidate_schema(subject_key),
-        )
+        try:
+            raw_text, generation = pool.generate_subject_quiz(
+                prompt=active_prompt,
+                response_schema=_candidate_schema(subject_key),
+            )
+        except GeminiGenerationError as exc:
+            if not repair_attempted or not accepted_by_identity or not exc.retryable:
+                raise
+            latency_ms += int((datetime.now(timezone.utc) - started).total_seconds() * 1000)
+            repair_provider_failure = {"stage": "generation", "category": exc.category, "attempts": len(exc.attempts)}
+            rejected.append({"code": "repair_provider_unavailable"})
+            break
         latency_ms += int((datetime.now(timezone.utc) - started).total_seconds() * 1000)
         generation_history.append(generation)
         try:
@@ -327,10 +338,12 @@ def generate_and_store_candidate_batch(
         except (TypeError, json.JSONDecodeError):
             raw = []
         if not isinstance(raw, list) or len(raw) != batch_size:
+            rejected.append({"code": "invalid_candidate_batch"})
             if repair_number < _CANDIDATE_REPAIR_LIMIT:
-                rejected.append({"code": "invalid_candidate_batch"})
                 active_prompt = _candidate_repair_prompt(prompt, {"invalid_candidate_batch"})
                 continue
+            if accepted_by_identity:
+                break
             raise ValueError("generator returned an invalid candidate batch")
 
         candidate_count += len(raw)
@@ -346,12 +359,26 @@ def generate_and_store_candidate_batch(
         rejected.extend(pass_rejections)
         verification: dict[str, Any] = {"rejection_reasons": []}
         if structural:
-            verified, verification = question_verification.verify_question_candidates(
-                structural,
-                bundle,
-                pool,
-                generator_metadata=generation,
-            )
+            try:
+                verified, verification = question_verification.verify_question_candidates(
+                    structural,
+                    bundle,
+                    pool,
+                    generator_metadata=generation,
+                )
+            except GeminiGenerationError as exc:
+                if not repair_attempted or not accepted_by_identity or not exc.retryable:
+                    raise
+                # The new pass has not been verified. Retain only candidates
+                # that completed every check in a previous pass.
+                repair_provider_failure = {"stage": "verification", "category": exc.category, "attempts": len(exc.attempts)}
+                rejected.append({"code": "repair_provider_unavailable"})
+                break
+            except QuizValidationError as exc:
+                if not repair_attempted or not accepted_by_identity or not exc.retryable:
+                    raise
+                rejected.append({"code": "repair_verification_invalid"})
+                break
             for candidate in verified:
                 clean_rows, identity_rejections = validate_question_candidates(
                     [candidate],
@@ -390,11 +417,17 @@ def generate_and_store_candidate_batch(
 
     accepted = list(accepted_by_identity.values())[:batch_size]
     generation = _aggregate_generation_metadata(generation_history)
+    if repair_provider_failure and repair_provider_failure["stage"] == "generation":
+        generation["attempts"] += repair_provider_failure["attempts"]
     rows = [
         {
             **quiz_pack_service.question_row_from_validated_candidate(
                 item,
-                {"subject_key": subject_key, "chapter": chapter, "generation_model": generation.get("model")},
+                {
+                    "subject_key": subject_key,
+                    "chapter": chapter,
+                    "generation_model": (item.get("verification_checks") or {}).get("generator_model") or generation.get("model"),
+                },
             ),
             "knowledge_key": item["knowledge_key"],
             "canonical_claim": item["canonical_claim"],
@@ -420,7 +453,8 @@ def generate_and_store_candidate_batch(
         "source_document_ids": sorted(bundle.source_ids),
         "candidate_count": candidate_count,
         "accepted_count": len(rows),
-        "repair_attempted": len(generation_history) > 1,
+        "repair_attempted": repair_attempted,
+        "repair_provider_failure": repair_provider_failure,
         "rejection_codes": sorted({str(item.get("code")) for item in rejected}),
         "novelty_metrics": {"stable_identity_version": 1},
     }
@@ -445,7 +479,7 @@ def _retain_novel_candidates(
             {
                 "subject_key": subject_key,
                 "chapter": chapter,
-                "generation_model": generation_model,
+                "generation_model": (item.get("verification_checks") or {}).get("generator_model") or generation_model,
             },
         )
         for item in candidates.values()
