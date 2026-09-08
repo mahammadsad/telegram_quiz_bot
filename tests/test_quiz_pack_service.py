@@ -472,6 +472,43 @@ def test_atomic_database_collision_is_a_retryable_domain_error(
     assert "P0001" not in str(raised.value)
 
 
+@pytest.mark.parametrize("code,constraint,is_collision", [
+    ("23505", "idx_questions_variant_fingerprint_unique", True),
+    ("23505", "quiz_runs_pkey", False),
+    ("23505", "idx_questions_variant_fingerprint_unique_other", False),
+    ("42501", "idx_questions_variant_fingerprint_unique", False),
+])
+def test_only_reviewed_variant_unique_violation_rotates_content(
+    monkeypatch, valid_questions, code, constraint, is_collision,
+):
+    from postgrest.exceptions import APIError
+
+    monkeypatch.setattr(service.questions_repo, "get_by_content_hash", lambda *args: None)
+    monkeypatch.setattr(service.questions_repo, "get_latest_by_stem", lambda *args: {"id": "old"})
+    original = APIError({
+        "code": code,
+        "message": f'duplicate key value violates unique constraint "{constraint}"',
+        "details": "private fingerprint must not appear in the domain error",
+    })
+
+    def reject(**kwargs):
+        raise original
+
+    monkeypatch.setattr(service.quiz_packs_repo, "save_atomic", reject)
+    expected = service.QuizContentCollisionError if is_collision else APIError
+    with pytest.raises(expected) as raised:
+        service.record_quiz_pack(
+            QUIZ_ID, valid_questions,
+            {"subject_key": "history", "chapter": "আধুনিক ভারত"}, worker_id="worker-1",
+        )
+    if is_collision:
+        assert raised.value.retryable is True
+        assert "private fingerprint" not in str(raised.value)
+        assert "23505" not in str(raised.value)
+    else:
+        assert raised.value is original
+
+
 def test_unrecognized_atomic_database_error_is_not_reclassified(monkeypatch, valid_questions):
     monkeypatch.setattr(service.questions_repo, "get_by_content_hash", lambda *args: None)
     monkeypatch.setattr(service.questions_repo, "get_latest_by_stem", lambda *args: {"id": "old"})

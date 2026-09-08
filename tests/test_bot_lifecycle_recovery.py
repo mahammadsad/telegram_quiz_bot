@@ -16,7 +16,7 @@ from database.contract import (
     PLATFORM_CONTRACT_VERSION,
 )
 from errors import QuizContentCollisionError
-from services.gemini_provider_pool import GeminiGenerationError
+from services.gemini_provider_pool import GeminiGenerationError, GeminiProviderPool
 from services.inventory_quiz_service import InventoryQuiz
 from services.question_validation import QuizValidationError
 from services.question_verification import CHECK_FIELDS
@@ -655,6 +655,48 @@ def test_invalid_repaired_json_is_never_accepted():
     assert pool.calls == 2
 
 
+@pytest.mark.parametrize("repair_valid", [True, False])
+def test_repair_model_timeout_recovers_only_a_fully_revalidated_batch(valid_questions, monkeypatch, repair_valid):
+    invalid = [dict(row, difficulty="medium") for row in valid_questions]
+    pool = GeminiProviderPool(
+        environ={
+            "GEMINI_API_KEY_PRIMARY": "fixture-key",
+            "GEMINI_MODEL_PRIMARY": "generator",
+            "GEMINI_MODEL_FALLBACK": "repair-model",
+            "GEMINI_VERIFIER_MODEL": "independent-verifier",
+            "GEMINI_MAX_ATTEMPTS_PER_KEY": "2",
+        },
+        sleep=lambda _: None,
+    )
+    calls = []
+
+    def generate_call(provider, model, prompt, schema):
+        calls.append(model)
+        if model == "repair-model":
+            raise TimeoutError("repair backend timed out")
+        if model == "independent-verifier":
+            return json.dumps(verifier_rows())
+        rows = valid_questions if repair_valid and len(calls) > 1 else invalid
+        return json.dumps(rows, ensure_ascii=False)
+
+    monkeypatch.setattr(pool, "_call", generate_call)
+    if repair_valid:
+        clean, metadata = bot.generate_mcqs(
+            "history", "আধুনিক ভারত", pool=pool, grounding_bundle=grounding_bundle(),
+        )
+        assert len(clean) == 10
+        assert metadata["model"] == "generator"
+        assert metadata["attempts"] == 3
+        assert clean[0]["verification_checks"]["independent_model"] is True
+        assert calls == ["generator", "repair-model", "generator", "independent-verifier"]
+    else:
+        with pytest.raises(QuizValidationError):
+            bot.generate_mcqs(
+                "history", "আধুনিক ভারত", pool=pool, grounding_bundle=grounding_bundle(),
+            )
+        assert calls == ["generator", "repair-model", "generator"]
+
+
 def test_semantically_invalid_json_gets_one_full_repair(valid_questions, caplog):
     invalid = [dict(row, difficulty="medium") for row in valid_questions]
 
@@ -698,6 +740,9 @@ def test_semantically_invalid_json_gets_one_full_repair(valid_questions, caplog)
     assert len(pool.calls) == 3
     assert pool.calls[0]["preferred_model"] is None
     assert pool.calls[1]["preferred_model"] == "repair-model"
+    assert pool.calls[0]["alternate_model"] is None
+    assert pool.calls[1]["alternate_model"] == "generator"
+    assert "alternate_model" not in pool.calls[2]
     assert "difficulty_distribution" in pool.calls[1]["prompt"]
     assert invalid[0]["question"] not in pool.calls[1]["prompt"]
     assert "difficulty_distribution" in caplog.text

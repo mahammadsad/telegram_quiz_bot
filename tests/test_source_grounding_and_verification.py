@@ -325,6 +325,7 @@ def test_different_model_is_recorded_as_independent(valid_questions):
     )
     assert metadata["independent_model"] is True
     assert calls[0]["preferred_model"] == "gemini-verifier"
+    assert "alternate_model" not in calls[0]
     assert accepted[0]["verification_checks"]["independent_model"] is True
     assert accepted[0]["verification_checks"]["generator_model"] == "gemini-generator"
     assert accepted[0]["verification_checks"]["verifier_model"] == "gemini-verifier"

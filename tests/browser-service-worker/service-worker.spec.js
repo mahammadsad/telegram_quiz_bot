@@ -189,14 +189,20 @@ test("a legacy Telegram shell refreshes once without stalling activation", async
   await page.goto(
     "/tests/browser-service-worker/harness.html#tgWebAppData=retained-test-launch",
   );
-  await page.evaluate(async () => {
-    const legacy = await caches.open("quiz-miniapp-shell-v8.7.1-ui2");
-    await legacy.put("/index.js", new Response("legacy", { status: 200 }));
-    void navigator.serviceWorker.register(
-      "/service-worker.js?upgrade-recovery=8.7.9-ui1",
-      { scope: "/", updateViaCache: "none" },
-    );
-  });
+  // A navigation request is emitted before the replacement document commits.
+  // Wait for that document's load before evaluating its launch/controller state;
+  // polling the request count alone races destruction of the old JS context.
+  await Promise.all([
+    page.waitForEvent("load"),
+    page.evaluate(async () => {
+      const legacy = await caches.open("quiz-miniapp-shell-v8.7.1-ui2");
+      await legacy.put("/index.js", new Response("legacy", { status: 200 }));
+      void navigator.serviceWorker.register(
+        "/service-worker.js?upgrade-recovery=8.7.9-ui1",
+        { scope: "/", updateViaCache: "none" },
+      );
+    }),
+  ]);
 
   await expect.poll(() => navigationRequests).toBe(2);
   await expect.poll(async () => page.evaluate(() => ({
