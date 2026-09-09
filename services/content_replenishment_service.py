@@ -257,6 +257,7 @@ def process_due_replenishment_jobs(
                 bundle,
                 pool,
                 batch_size=int(job.get("generation_batch_size") or 5),
+                difficulty_counts=rows[0].get("difficulty_counts"),
             )
             rejection_codes = sorted({str(item.get("code") or "content_invalid") for item in result.rejected})
             no_safe_candidates = not result.accepted
@@ -303,10 +304,11 @@ def generate_and_store_candidate_batch(
     pool: GeminiProviderPool,
     *,
     batch_size: int = 5,
+    difficulty_counts: dict[str, int] | None = None,
 ) -> ReplenishmentBatchResult:
     if batch_size not in range(3, 6):
         raise ValueError("candidate batch size must be between 3 and 5")
-    prompt = _candidate_prompt(subject_key, chapter, bundle, batch_size)
+    prompt = _candidate_prompt(subject_key, chapter, bundle, batch_size, difficulty_counts)
     active_prompt = prompt
     accepted_by_identity: dict[str, dict[str, Any]] = {}
     rejected: list[dict[str, Any]] = []
@@ -371,7 +373,11 @@ def generate_and_store_candidate_batch(
                     raise
                 # The new pass has not been verified. Retain only candidates
                 # that completed every check in a previous pass.
-                repair_provider_failure = {"stage": "verification", "category": exc.category, "attempts": len(exc.attempts)}
+                repair_provider_failure = {
+                    "stage": "verification",
+                    "category": exc.category,
+                    "attempts": len(exc.attempts),
+                }
                 rejected.append({"code": "repair_provider_unavailable"})
                 break
             except QuizValidationError as exc:
@@ -426,7 +432,8 @@ def generate_and_store_candidate_batch(
                 {
                     "subject_key": subject_key,
                     "chapter": chapter,
-                    "generation_model": (item.get("verification_checks") or {}).get("generator_model") or generation.get("model"),
+                    "generation_model": (item.get("verification_checks") or {}).get("generator_model")
+                    or generation.get("model"),
                 },
             ),
             "knowledge_key": item["knowledge_key"],
@@ -618,11 +625,40 @@ def _candidate_repair_prompt(prompt: str, rejection_codes: set[str]) -> str:
     )
 
 
+def _candidate_difficulty_mix(batch_size: int, counts: dict[str, int] | None = None) -> str:
+    """Target verified chapter deficits; never rewrite a candidate's difficulty."""
+    defaults = {3: (1, 1, 1), 4: (1, 2, 1), 5: (2, 2, 1)}
+    if batch_size not in defaults:
+        raise ValueError("candidate batch size must be between 3 and 5")
+    labels = ("easy", "medium", "hard")
+    if counts is None:
+        allocation = dict(zip(labels, defaults[batch_size], strict=True))
+    else:
+        if (
+            not isinstance(counts, dict)
+            or set(counts) != set(labels)
+            or any(type(counts[label]) is not int or counts[label] < 0 for label in labels)
+        ):
+            raise ValueError("invalid verified chapter difficulty counts")
+        targets = dict(zip(labels, (3, 5, 2), strict=True))
+        allocation = dict.fromkeys(labels, 0)
+        for _ in range(batch_size):
+            deficits = {label: targets[label] - counts[label] - allocation[label] for label in labels}
+            if max(deficits.values()) > 0:
+                chosen = max(labels, key=lambda label: deficits[label])
+            else:
+                # Once gaps are filled, distribute remaining slots proportionally.
+                chosen = min(labels, key=lambda label: (counts[label] + allocation[label]) / targets[label])
+            allocation[chosen] += 1
+    return f"{allocation['easy']} easy, {allocation['medium']} medium, and {allocation['hard']} hard"
+
+
 def _candidate_prompt(
     subject_key: str,
     chapter: str,
     bundle: GroundingBundle,
     batch_size: int,
+    difficulty_counts: dict[str, int] | None = None,
 ) -> str:
     subject = get_subject(subject_key, require_quiz_enabled=True)
     required_forms = ", ".join(LANGUAGE_QUESTION_FORMS.get(subject_key, ("generic_fact",)))
@@ -632,11 +668,7 @@ def _candidate_prompt(
         required_proofs = ", ".join((*REASONING_PROOF_FAMILIES, "evidence_span_single_answer"))
     else:
         required_proofs = "evidence_span_single_answer"
-    difficulty_mix = {
-        3: "1 easy, 1 medium, and 1 hard",
-        4: "1 easy, 2 medium, and 1 hard",
-        5: "2 easy, 2 medium, and 1 hard",
-    }[batch_size]
+    difficulty_mix = _candidate_difficulty_mix(batch_size, difficulty_counts)
     return f"""Create exactly {batch_size} independent Bengali MCQ candidates for verified inventory.
 Subject key: {subject.key}
 Chapter: {chapter}

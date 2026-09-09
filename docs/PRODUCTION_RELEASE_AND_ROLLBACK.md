@@ -1,6 +1,6 @@
 # Production release and rollback
 
-This runbook is the production gate for application version `8.7.11`. Passing local unit tests is not production evidence.
+This runbook is the production gate for application version `8.7.12`. Passing local unit tests is not production evidence.
 
 ## Ownership and required inputs
 
@@ -40,11 +40,14 @@ Never print service keys, bot tokens or synthetic `initData` in logs.
 
 ## Database migration order
 
-Release 8.7.11 has no new database migrations. Its rollback target is release
-`324aef152efb677623f85d1bc9b2fd89828ff47c` (8.7.10), which supports the current
-platform 1.5.0 contract. The current-affairs migrations `20260905040301` and
-`20260905043800` are already applied and pinned. Do not roll back to an older
-application that requires a different platform contract.
+Release 8.7.12 adds `20260909040332_difficulty_aware_replenishment.sql`, applied
+through protected workflow `34310571247` after read-only plan `34310230116`.
+Its four function definitions and service-only permissions match staging;
+all 65 production migration sources are pinned. The platform contract remains
+1.5.0. Application rollback is `24d549a2c93c27347de4aad6e73497787131519e`
+(8.7.11), retaining the additive migration. The old application safely ignores
+optional difficulty metadata. See `RELEASE_NOTES_8.7.12.md` for a separate
+forward-migration rollback of queue eligibility; never delete content or jobs.
 
 The following historical prerequisite order is retained for new environments:
 

@@ -38,7 +38,7 @@ jobs:
           import os
           from pathlib import Path
 
-          from database.contract import CURRENT_AFFAIRS_CHAPTER_GROUNDING_MIGRATION_VERSION
+          from database.contract import DIFFICULTY_AWARE_REPLENISHMENT_MIGRATION_VERSION
 
           expected_ref = "tizxodkcpglmxgtwepor"
           expected_ack = f"APPLY TRACKED MIGRATIONS TO {expected_ref}"
@@ -60,8 +60,8 @@ jobs:
           if missing:
               raise SystemExit("Refusing migration: required production credentials are unavailable.")
           migration = Path("supabase/migrations") / (
-              f"{CURRENT_AFFAIRS_CHAPTER_GROUNDING_MIGRATION_VERSION}_"
-              "current_affairs_chapter_grounding.sql"
+              f"{DIFFICULTY_AWARE_REPLENISHMENT_MIGRATION_VERSION}_"
+              "difficulty_aware_replenishment.sql"
           )
           if not migration.is_file():
               raise SystemExit("Refusing migration: expected reviewed migration is missing.")
@@ -122,6 +122,17 @@ jobs:
                       if error.code != 404 or attempt == 5:
                           raise
                       time.sleep(5)
+
+          counts = rpc("get_verified_chapter_difficulty_counts")
+          if not isinstance(counts, list) or any(
+              not isinstance(row, dict)
+              or not row.get("chapter_id")
+              or any(type(row.get(key)) is not int or row[key] < 0
+                     for key in ("easy", "medium", "hard", "total"))
+              for row in counts
+          ):
+              raise SystemExit("Verified chapter difficulty count contract is invalid.")
+          print("Private chapter difficulty-count RPC verified.")
 
           latency = rpc("get_learner_bootstrap_latency_contract")
           if latency != {
