@@ -135,6 +135,7 @@ def test_malformed_difficulty_metadata_fails_closed(counts) -> None:
 
 
 def test_zero_yield_job_backs_off_without_weakening_rejections(monkeypatch) -> None:
+    monkeypatch.setattr(content_replenishment_service, "monotonic", lambda: 0.0)
     now = datetime(2026, 8, 24, 8, 0, tzinfo=timezone.utc)
     job = {
         "id": "job-1",

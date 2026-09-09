@@ -1,6 +1,6 @@
 # Production release and rollback
 
-This runbook is the production gate for application version `8.7.12`. Passing local unit tests is not production evidence.
+This runbook is the production gate for application version `8.7.13`. Passing local unit tests is not production evidence.
 
 ## Ownership and required inputs
 
@@ -39,6 +39,12 @@ Never print service keys, bot tokens or synthetic `initData` in logs.
 6. Confirm the rollback owner is present and the previous known-good application commit is available.
 
 ## Database migration order
+
+Release 8.7.13 has no new migrations. Its application rollback target is
+`1dc389345cedc8d0b73515b25f55051a778db0f7` (8.7.12), retaining all 65 migrations.
+Verify a two-batch staging worker canary and authenticated rollback/restore
+before promotion. An interrupted worker must recover through existing durable
+ownership; do not reset its jobs or replay ambiguous completion writes.
 
 Release 8.7.12 adds `20260909040332_difficulty_aware_replenishment.sql`, applied
 through protected workflow `34310571247` after read-only plan `34310230116`.
