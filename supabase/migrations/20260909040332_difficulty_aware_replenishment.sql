@@ -7,15 +7,11 @@ stable
 security invoker
 set search_path = ''
 as $$
-    select topic.chapter_id,
-        count(*) filter (where question.difficulty = 'easy'),
-        count(*) filter (where question.difficulty = 'medium'),
-        count(*) filter (where question.difficulty = 'hard'),
-        count(*)
+    -- Filter once before joining the catalogue, avoiding subject-wide fanout
+    -- across every chapter when the planner underestimates eligible inventory.
+    with verified as materialized (
+    select question.micro_topic_id, question.subject, question.difficulty
     from public.questions question
-    join public.quiz_micro_topics topic on topic.id = question.micro_topic_id
-    join public.quiz_chapters chapter
-      on chapter.id = topic.chapter_id and chapter.subject_key = question.subject
     join public.source_documents source on source.id = question.source_document_id
     where question.status = 'active'
       and question.verification_status = 'verified'
@@ -37,6 +33,16 @@ as $$
             and (fact.expires_at is null or fact.expires_at >= p_now)
             and (fact.effective_until is null or fact.effective_until >= p_now)
       )
+    )
+    select topic.chapter_id,
+        count(*) filter (where question.difficulty = 'easy'),
+        count(*) filter (where question.difficulty = 'medium'),
+        count(*) filter (where question.difficulty = 'hard'),
+        count(*)
+    from verified question
+    join public.quiz_micro_topics topic on topic.id = question.micro_topic_id
+    join public.quiz_chapters chapter
+      on chapter.id = topic.chapter_id and chapter.subject_key = question.subject
     group by topic.chapter_id;
 $$;
 

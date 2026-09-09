@@ -72,9 +72,10 @@ def inventory():
                 insert into public.questions (question_text, option_a, option_b, option_c,
                     option_d, correct_option, subject, topic, difficulty, question_hash,
                     normalized_text, micro_topic_id, source_document_id, knowledge_point_id,
-                    variant_fingerprint, verification_status, inventory_status, review_required)
+                    variant_fingerprint, stem_hash, content_hash, content_version,
+                    verification_status, inventory_status, review_required)
                 values (%s, 'A', 'B', 'C', 'D', 'A', 'computer', 'Difficulty test', %s,
-                    %s, %s, %s, %s, %s, %s, 'verified', 'verified', false)
+                    %s, %s, %s, %s, %s, %s, %s, %s, 1, 'verified', 'verified', false)
             """,
                 (
                     f"Synthetic difficulty question {index}",
@@ -84,6 +85,8 @@ def inventory():
                     topic,
                     source,
                     knowledge,
+                    identity,
+                    identity,
                     identity,
                 ),
             )
