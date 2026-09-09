@@ -1,6 +1,14 @@
 # Audit remediation status
 
-Status as of 8 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
+Status as of 9 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
+
+In progress: 8.7.12 addresses P0-02/P1-02/P2-01 difficulty coverage. Protected
+inventory report `34298405159` and a read-only production check found Computer
+Operating Systems (13 easy / 6 medium / 0 hard) and Databases (10 / 10 / 0)
+without open jobs: the old 12-question topic threshold hid missing difficulty.
+The candidate adds source-safe chapter counts to queue eligibility and bounded
+generation targeting. See `RELEASE_NOTES_8.7.12.md` for scope and release gates.
+This is not yet production evidence and does not mark content coverage complete.
 
 Status meanings:
 

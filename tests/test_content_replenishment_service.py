@@ -93,6 +93,47 @@ def verifier_results():
     ]
 
 
+@pytest.mark.parametrize(
+    "size, expected",
+    [(3, "1 easy, 1 medium, and 1 hard"), (4, "1 easy, 2 medium, and 1 hard"), (5, "2 easy, 2 medium, and 1 hard")],
+)
+def test_legacy_bundle_keeps_balanced_difficulty_mix(size, expected) -> None:
+    assert content_replenishment_service._candidate_difficulty_mix(size) == expected
+
+
+@pytest.mark.parametrize(
+    "counts, expected",
+    [
+        ({"easy": 13, "medium": 6, "hard": 0}, "0 easy, 2 medium, and 3 hard"),
+        ({"easy": 10, "medium": 10, "hard": 0}, "0 easy, 1 medium, and 4 hard"),
+        ({"easy": 0, "medium": 0, "hard": 0}, "2 easy, 3 medium, and 0 hard"),
+    ],
+)
+def test_generation_targets_actual_chapter_gaps(counts, expected) -> None:
+    original = counts.copy()
+    assert content_replenishment_service._candidate_difficulty_mix(5, counts) == expected
+    assert counts == original
+
+
+@pytest.mark.parametrize(
+    "counts",
+    [
+        {},
+        {"easy": 2},
+        {"easy": True, "medium": 0, "hard": 0},
+        {"easy": -1, "medium": 0, "hard": 0},
+        {"easy": "3", "medium": 0, "hard": 0},
+        {"easy": 3.0, "medium": 0, "hard": 0},
+        {"easy": 3, "medium": 5, "hard": 2, "other": 1},
+        [],
+        "unknown",
+    ],
+)
+def test_malformed_difficulty_metadata_fails_closed(counts) -> None:
+    with pytest.raises(ValueError, match="difficulty counts"):
+        content_replenishment_service._candidate_difficulty_mix(5, counts)
+
+
 def test_zero_yield_job_backs_off_without_weakening_rejections(monkeypatch) -> None:
     now = datetime(2026, 8, 24, 8, 0, tzinfo=timezone.utc)
     job = {
@@ -486,9 +527,13 @@ def test_replenishment_retries_malformed_generation_once_without_verifier(monkey
     assert calls == 2
 
 
-@pytest.mark.parametrize("failure_stage", ["generator", "verifier", "malformed_batch", "malformed_verifier", "successful_repair"])
+@pytest.mark.parametrize(
+    "failure_stage", ["generator", "verifier", "malformed_batch", "malformed_verifier", "successful_repair"]
+)
 def test_optional_repair_failure_retains_only_previously_verified_candidates(
-    monkeypatch, valid_questions, failure_stage,
+    monkeypatch,
+    valid_questions,
+    failure_stage,
 ) -> None:
     candidates = generated_candidates(valid_questions)
     verification = verifier_results()
@@ -496,7 +541,8 @@ def test_optional_repair_failure_retains_only_previously_verified_candidates(
         if item["question_number"] > 2:
             item.update(verdict="rejected", confidence=0.1)
     failure = GeminiGenerationError(
-        "transient", [{"provider": "primary", "model": "repair-model", "category": "transient"}] * 2,
+        "transient",
+        [{"provider": "primary", "model": "repair-model", "category": "transient"}] * 2,
         retryable=True,
     )
     responses = [
@@ -524,15 +570,20 @@ def test_optional_repair_failure_retains_only_previously_verified_candidates(
 
     saved = []
     monkeypatch.setattr(
-        content_replenishment_service.content_inventory_repo, "existing_candidate_identities",
+        content_replenishment_service.content_inventory_repo,
+        "existing_candidate_identities",
         lambda **kwargs: (set(), set(), set()),
     )
     monkeypatch.setattr(
-        content_replenishment_service.content_inventory_repo, "save_verified_candidates",
+        content_replenishment_service.content_inventory_repo,
+        "save_verified_candidates",
         lambda rows, context: saved.extend(rows) or {"accepted_count": len(rows)},
     )
     result = content_replenishment_service.generate_and_store_candidate_batch(
-        "history", "আধুনিক ভারত", grounding(valid_questions), Pool(),
+        "history",
+        "আধুনিক ভারত",
+        grounding(valid_questions),
+        Pool(),
     )
     assert len(saved) == len(result.accepted) == (4 if failure_stage == "successful_repair" else 2)
     assert responses == []
@@ -551,7 +602,8 @@ def test_optional_repair_failure_retains_only_previously_verified_candidates(
     if failure_stage in {"generator", "verifier"}:
         assert result.generation_context["repair_provider_failure"] == {
             "stage": "generation" if failure_stage == "generator" else "verification",
-            "category": "transient", "attempts": 2,
+            "category": "transient",
+            "attempts": 2,
         }
         assert result.generation_context["attempts"] == (3 if failure_stage == "generator" else 2)
     else:
@@ -561,7 +613,10 @@ def test_optional_repair_failure_retains_only_previously_verified_candidates(
 @pytest.mark.parametrize("failure_stage", ["generator", "verifier"])
 @pytest.mark.parametrize("failure_category", ["transient", "safety_block", "key_failure", "unexpected"])
 def test_repair_recovery_never_saves_unverified_rows_or_masks_terminal_errors(
-    monkeypatch, valid_questions, failure_stage, failure_category,
+    monkeypatch,
+    valid_questions,
+    failure_stage,
+    failure_category,
 ) -> None:
     verification = verifier_results()
     for item in verification:
@@ -587,16 +642,21 @@ def test_repair_recovery_never_saves_unverified_rows_or_masks_terminal_errors(
 
     saved = []
     monkeypatch.setattr(
-        content_replenishment_service.content_inventory_repo, "existing_candidate_identities",
+        content_replenishment_service.content_inventory_repo,
+        "existing_candidate_identities",
         lambda **kwargs: (set(), set(), set()),
     )
     monkeypatch.setattr(
-        content_replenishment_service.content_inventory_repo, "save_verified_candidates",
+        content_replenishment_service.content_inventory_repo,
+        "save_verified_candidates",
         lambda rows, context: saved.extend(rows) or {"accepted_count": len(rows)},
     )
     with pytest.raises(type(error)) as raised:
         content_replenishment_service.generate_and_store_candidate_batch(
-            "history", "আধুনিক ভারত", grounding(valid_questions), Pool(),
+            "history",
+            "আধুনিক ভারত",
+            grounding(valid_questions),
+            Pool(),
         )
     assert raised.value is error
     assert responses == []
