@@ -7,6 +7,7 @@ import json
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from time import monotonic
 from typing import Any
 
 from config.settings import DETERMINISTIC_PROOF_REQUIRED, DETERMINISTIC_PROOF_VERSION
@@ -231,24 +232,42 @@ def process_due_replenishment_jobs(
     now: datetime | None = None,
     limit: int = 5,
 ) -> ReplenishmentRunResult:
+    if type(limit) is not int or not 1 <= limit <= 25:
+        raise ValueError("replenishment limit must be between 1 and 25 batches")
+    started = monotonic()
     current = now or datetime.now(timezone.utc)
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
+
+    def current_time() -> datetime:
+        # An explicit `now` is the run's logical start, not a frozen clock for
+        # every later claim, source-expiry check and retry in a long run.
+        return current + timedelta(seconds=max(0.0, monotonic() - started))
+
     ensured = content_inventory_repo.ensure_due_replenishment_jobs(now=current)
-    jobs = content_inventory_repo.claim_replenishment_jobs(
-        worker_id=worker_id,
-        now=current,
-        limit=limit,
-    )
+    claimed_count = 0
     outcomes: dict[str, str] = {}
-    for job in jobs:
+    for _ in range(limit):
+        # Do not spend the lease of a later job waiting on this batch's model
+        # calls. Preserve database-side reserve priority and claim fencing.
+        jobs = content_inventory_repo.claim_replenishment_jobs(
+            worker_id=worker_id,
+            now=current_time(),
+            limit=1,
+        )
+        if not jobs:
+            break
+        if len(jobs) != 1:
+            raise RuntimeError("single replenishment claim returned multiple jobs")
+        job = jobs[0]
+        claimed_count += 1
         job_id = str(job["id"])
         subject_key = str(job["subject_key"])
         outcome_key = f"{subject_key}:{str(job.get('micro_topic_id') or '')[:8]}"
         try:
             rows = content_inventory_repo.get_replenishment_bundle(
                 job_id,
-                now=current,
+                now=current_time(),
             )
             bundle = _bundle_from_rows(rows)
             result = generate_and_store_candidate_batch(
@@ -259,6 +278,18 @@ def process_due_replenishment_jobs(
                 batch_size=int(job.get("generation_batch_size") or 5),
                 difficulty_counts=rows[0].get("difficulty_counts"),
             )
+        except Exception as exc:
+            content_inventory_repo.complete_replenishment_batch(
+                job_id=job_id,
+                worker_id=worker_id,
+                accepted_count=0,
+                rejected_count=0,
+                rejection_codes=[],
+                error_code=type(exc).__name__,
+                retry_at=_replenishment_retry_at(current_time(), int(job.get("retry_count") or 0)),
+            )
+            outcomes[outcome_key] = f"retry_wait:{type(exc).__name__}"
+        else:
             rejection_codes = sorted({str(item.get("code") or "content_invalid") for item in result.rejected})
             no_safe_candidates = not result.accepted
             completed = content_inventory_repo.complete_replenishment_batch(
@@ -269,22 +300,15 @@ def process_due_replenishment_jobs(
                 rejection_codes=rejection_codes,
                 error_code="content_rejected" if no_safe_candidates else None,
                 retry_at=(
-                    _replenishment_retry_at(current, int(job.get("retry_count") or 0)) if no_safe_candidates else None
+                    _replenishment_retry_at(current_time(), int(job.get("retry_count") or 0))
+                    if no_safe_candidates
+                    else None
                 ),
             )
             outcomes[outcome_key] = str(completed.get("status") or "due")
-        except Exception as exc:
-            content_inventory_repo.complete_replenishment_batch(
-                job_id=job_id,
-                worker_id=worker_id,
-                accepted_count=0,
-                rejected_count=0,
-                rejection_codes=[],
-                error_code=type(exc).__name__,
-                retry_at=_replenishment_retry_at(current, int(job.get("retry_count") or 0)),
-            )
-            outcomes[outcome_key] = f"retry_wait:{type(exc).__name__}"
-    return ReplenishmentRunResult(len(ensured), len(jobs), outcomes)
+    # Completion errors intentionally propagate: an ambiguous durable write
+    # must not be followed by a second completion or another claimed batch.
+    return ReplenishmentRunResult(len(ensured), claimed_count, outcomes)
 
 
 def _replenishment_retry_at(current: datetime, prior_retry_count: int) -> datetime:
