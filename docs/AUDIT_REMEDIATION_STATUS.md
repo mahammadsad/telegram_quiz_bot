@@ -8,7 +8,9 @@ Operating Systems (13 easy / 6 medium / 0 hard) and Databases (10 / 10 / 0)
 without open jobs: the old 12-question topic threshold hid missing difficulty.
 The candidate adds source-safe chapter counts to queue eligibility and bounded
 generation targeting. See `RELEASE_NOTES_8.7.12.md` for scope and release gates.
-This is not yet production evidence and does not mark content coverage complete.
+The migration is applied and verified in production through `34310571247`;
+the application release remains gated on the final candidate checks. This
+does not mark content coverage complete or certify live hard-question yield.
 
 Status meanings:
 
