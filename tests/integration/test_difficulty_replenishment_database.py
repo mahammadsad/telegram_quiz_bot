@@ -13,7 +13,7 @@ pytestmark = pytest.mark.database_integration
 
 
 @pytest.fixture
-def inventory():
+def inventory(request):
     url = os.getenv("TEST_DATABASE_URL", "")
     if not url:
         pytest.skip("TEST_DATABASE_URL is not configured")
@@ -79,7 +79,11 @@ def inventory():
             """,
                 (
                     f"Synthetic difficulty question {index}",
-                    "easy" if index < 10 else "medium",
+                    "hard"
+                    if getattr(request, "param", "gap") == "balanced" and index >= 18
+                    else "easy"
+                    if index < 10
+                    else "medium",
                     identity,
                     identity,
                     topic,
@@ -126,13 +130,9 @@ def test_full_total_without_hard_questions_ensures_and_returns_one_job(inventory
     )
 
 
+@pytest.mark.parametrize("inventory", ["balanced"], indirect=True)
 def test_sufficient_difficulty_mix_does_not_create_surplus_job(inventory):
     conn, _, topic, _, _ = inventory
-    conn.execute(
-        """update public.questions set difficulty = 'hard' where id in
-        (select id from public.questions where micro_topic_id = %s and difficulty = 'easy' limit 2)""",
-        (topic,),
-    )
     jobs = conn.execute("select * from public.ensure_due_content_replenishment_jobs()").fetchall()
     assert not any(job["micro_topic_id"] == topic for job in jobs)
 
@@ -145,8 +145,11 @@ def test_difficulty_gap_never_bypasses_activation_or_source_review(inventory, ga
     elif gate == "inactive_chapter":
         conn.execute("update public.quiz_chapters set active = false where id = %s", (chapter,))
     elif gate == "unapproved_current_affairs":
-        conn.execute("""update public.quiz_chapters set subject_key = 'current-affairs',
-            rotation_enabled = false where id = %s""", (chapter,))
+        conn.execute(
+            """update public.quiz_chapters set subject_key = 'current-affairs',
+            rotation_enabled = false where id = %s""",
+            (chapter,),
+        )
     else:
         conn.execute("update public.source_documents set review_required = true where id = %s", (source,))
     jobs = conn.execute("select * from public.ensure_due_content_replenishment_jobs()").fetchall()
