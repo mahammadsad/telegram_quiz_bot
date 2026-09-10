@@ -964,6 +964,40 @@ def test_semantically_invalid_json_twice_fails_closed(valid_questions):
     assert caught.value.retryable is True
 
 
+@pytest.mark.parametrize("message", [
+    "Quiz micro-topic diversity is below the grounded-pack requirement.",
+    "Quiz micro-topics are not balanced across the grounded pack.",
+])
+def test_repeated_topic_distribution_failure_gets_one_targeted_repair(
+    monkeypatch, valid_questions, message
+):
+    def reject_distribution(*args, **kwargs):
+        raise QuizValidationError(message)
+
+    monkeypatch.setattr(bot, "validate_questions", reject_distribution)
+
+    class Pool:
+        def __init__(self):
+            self.calls = []
+
+        def generate_subject_quiz(self, **kwargs):
+            self.calls.append(kwargs)
+            return json.dumps(valid_questions, ensure_ascii=False), {
+                "provider": "primary", "model": "generator", "attempts": 1,
+            }
+
+    pool = Pool()
+    with pytest.raises(QuizValidationError, match="after one repair attempt.*micro_topic_diversity"):
+        bot.generate_mcqs(
+            "history", "আধুনিক ভারত", pool=pool,
+            grounding_bundle=grounding_bundle(),
+        )
+
+    assert len(pool.calls) == 2
+    assert "Redistribute all ten questions" in pool.calls[1]["prompt"]
+    assert "No micro_topic_key may appear more than three times" in pool.calls[1]["prompt"]
+
+
 def test_deterministic_reason_code_gets_targeted_repair_hint():
     error = bot.QuizValidationError(
         "Question 1 failed deterministic verification.",
