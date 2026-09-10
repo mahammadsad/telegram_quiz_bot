@@ -1,6 +1,6 @@
 # Production release and rollback
 
-This runbook is the production gate for application version `8.7.13`. Passing local unit tests is not production evidence.
+This runbook is the production gate for application version `8.7.14`. Passing local unit tests is not production evidence.
 
 ## Ownership and required inputs
 
@@ -39,6 +39,12 @@ Never print service keys, bot tokens or synthetic `initData` in logs.
 6. Confirm the rollback owner is present and the previous known-good application commit is available.
 
 ## Database migration order
+
+Release 8.7.14 has no new migrations. Its application rollback target is
+`fc94faa09ee89b74274a26282b390ffd357d5116` (8.7.13), retaining all 65 migrations.
+Verify protected generation-repair regressions and authenticated staging
+rollback/restore before promotion. Do not replay already-posted historical jobs
+or weaken validation to manufacture a successful generation canary.
 
 Release 8.7.13 has no new migrations. Its application rollback target is
 `1dc389345cedc8d0b73515b25f55051a778db0f7` (8.7.12), retaining all 65 migrations.

@@ -1,6 +1,6 @@
 # Audit remediation status
 
-Status as of 9 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
+Status as of 10 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
 
 Deployed: 8.7.12 addresses P0-02/P1-02/P2-01 difficulty coverage. Protected
 inventory report `34298405159` and a read-only production check found Computer
@@ -13,10 +13,24 @@ application `1dc389345cedc8d0b73515b25f55051a778db0f7` passed production smoke
 `34341936971`, with release evidence in PR #107. This does not mark content
 coverage complete or certify live hard-question yield.
 
-In progress: 8.7.13 claims inventory jobs just before processing and advances
+Deployed: 8.7.13 claims inventory jobs just before processing and advances
 claim/grounding/retry timestamps with elapsed time. Completion errors stop the
 worker without an ambiguous second write. See `RELEASE_NOTES_8.7.13.md` for
 scope, clock-controlled regressions, release gates and residual deadline risk.
+Release `fc94faa09ee89b74274a26282b390ffd357d5116` passed production smoke
+`34404059181`, protected Tests `34342599682` (910 Python/database, 336 mobile,
+six HTTPS service-worker cases), Security `34342599746`, and authenticated
+staging candidate/rollback/restore `34402947939`, `34403222096`, `34403815245`.
+Staging canary `34342778372` confirmed sequential claims, a fresh retry after
+missing grounding, and four verified accepted questions from the next batch.
+
+In progress: 8.7.14 fixes topic-distribution repair routing. Seven-day delivery
+report `34404035708` records 91/91 posted but 81/91 on time (89.011%). Two
+9 September Polity attempts in `34324505211` received topic-identity repair
+instructions after a topic-balance failure. Regression tests reproduce the
+wrong routing; specific distribution markers now take precedence, without
+changing validators or the one-repair ceiling. See `RELEASE_NOTES_8.7.14.md`.
+Content breadth, sustained on-time delivery and native UI QA remain open.
 
 Status meanings:
 
