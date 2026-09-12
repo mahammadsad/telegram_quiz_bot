@@ -26,7 +26,7 @@ Never print service keys, bot tokens or synthetic `initData` in logs.
    git rev-parse HEAD
    ```
 
-4. Create and verify a production database backup/restore point. Record its identifier outside the repository.
+4. Create and verify a production database backup/restore point. Record its identifier outside the repository. Migration plan/apply workflows now require a provider-reported `COMPLETED` backup no older than 48 hours through a read-only Management API check. Enabled backup/PITR settings alone do not pass. This metadata check does not substitute for a restore drill; no learner data is downloaded or restored by the gate.
 5. Confirm production secrets and these non-secret values in Render:
 
    ```text
@@ -86,7 +86,7 @@ Do **not** schedule or manually call `public.process_due_account_deletions` unti
 ## Staging gate
 
 1. Deploy the exact release commit to staging.
-2. Verify `/version` reports `applicationVersion: 8.7.11`, the expected full `commitSha`, staging environment and build time.
+2. Verify `/version` reports `applicationVersion: 8.7.15`, the expected full `commitSha`, staging environment and build time.
 3. Verify root HTML, CSS, JS, icon, manifest, service worker, `/health/live`, `/health/ready`, an answer-free quiz, server-timed start/submission and dashboard with only the synthetic user.
 4. Test a duplicate submission with the same attempt ID; it must be idempotent.
 5. Submit forged client duration telemetry; it must not become trusted ranking time.

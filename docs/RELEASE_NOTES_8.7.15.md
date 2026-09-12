@@ -50,6 +50,27 @@ apply has been verified.
 
 ## Rollback and remaining work
 
+Pre-release verification (13 September IST): 931 protected Python/database
+tests, 336 mobile tests and 6 service-worker tests passed for `4b7af56`.
+Staging migration source MD5 `aedfc1cf07a0ca76d807425381565c32` and service-only
+permissions were read back; advisors reported no warnings/errors. Initial
+canary `34697038030` stopped on an HTTP 504 during schema validation, before
+any claim. Readback confirmed zero claim events before its single retry.
+Attempt 2 passed: English 3 accepted / 2 rejected, Environment 5 accepted /
+0 rejected, with each claim following the preceding completion. It did not
+publish to Telegram or prove production Mathematics coverage. Candidate
+staging deploy `dep-daisdvgae00c73fp30p0` and authenticated lifecycle smoke
+`34720718216` passed. Read-only production plan `34697098474` contained only
+this migration; production application is still 8.7.14.
+
+The runbook backup requirement was not enforced by migration automation.
+Plan/apply workflows now check the exact production project's Management API
+for a completed backup within 48 hours and fail closed on missing, stale or
+unavailable evidence. No backup data, identifiers or credentials are printed,
+downloaded or restored. This does not certify a restore drill or authorize
+destructive recovery. The updated candidate must repeat CI and staging gates;
+production migration/source pin and promotion remain pending.
+
 Application rollback is `a8b79650e655d21f33e43f5a1b987804b29ba4df` (8.7.14),
 retaining the compatible migration. Application rollback does **not** revert
 database claim ordering. If that behavior itself needs reversal, use a reviewed

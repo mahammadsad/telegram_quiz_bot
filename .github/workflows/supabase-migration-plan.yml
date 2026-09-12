@@ -71,3 +71,6 @@ jobs:
           npx --yes supabase@2.77.0 db push
           --password "$SUPABASE_DB_PASSWORD"
           --include-all --dry-run --yes
+
+      - name: Confirm a recent completed production backup
+        run: python scripts/check_production_backup.py
