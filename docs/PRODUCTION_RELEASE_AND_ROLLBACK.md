@@ -1,6 +1,6 @@
 # Production release and rollback
 
-This runbook is the production gate for application version `8.7.14`. Passing local unit tests is not production evidence.
+This runbook is the production gate for application version `8.7.15`. Passing local unit tests is not production evidence.
 
 ## Ownership and required inputs
 
@@ -39,6 +39,15 @@ Never print service keys, bot tokens or synthetic `initData` in logs.
 6. Confirm the rollback owner is present and the previous known-good application commit is available.
 
 ## Database migration order
+
+Release 8.7.15 adds `20260912132928_durable_replenishment_job_rotation.sql`.
+Verify disposable queue fairness tests, staging source/permissions/canary and
+the exact production migration plan before applying. Pin its source only after
+production readback. Application rollback is
+`a8b79650e655d21f33e43f5a1b987804b29ba4df` (8.7.14), keeping the compatible
+migration. Reversing database claim ordering itself needs a reviewed forward
+migration, not an application rollback or migration-ledger deletion. See
+`RELEASE_NOTES_8.7.15.md` for the exact rollback scope.
 
 Release 8.7.14 has no new migrations. Its application rollback target is
 `fc94faa09ee89b74274a26282b390ffd357d5116` (8.7.13), retaining all 65 migrations.

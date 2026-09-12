@@ -1,6 +1,6 @@
 # Audit remediation status
 
-Status as of 10 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
+Status as of 12 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
 
 Deployed: 8.7.12 addresses P0-02/P1-02/P2-01 difficulty coverage. Protected
 inventory report `34298405159` and a read-only production check found Computer
@@ -24,13 +24,27 @@ staging candidate/rollback/restore `34402947939`, `34403222096`, `34403815245`.
 Staging canary `34342778372` confirmed sequential claims, a fresh retry after
 missing grounding, and four verified accepted questions from the next batch.
 
-In progress: 8.7.14 fixes topic-distribution repair routing. Seven-day delivery
+Deployed: 8.7.14 fixes topic-distribution repair routing. Seven-day delivery
 report `34404035708` records 91/91 posted but 81/91 on time (89.011%). Two
 9 September Polity attempts in `34324505211` received topic-identity repair
 instructions after a topic-balance failure. Regression tests reproduce the
 wrong routing; specific distribution markers now take precedence, without
 changing validators or the one-repair ceiling. See `RELEASE_NOTES_8.7.14.md`.
 Content breadth, sustained on-time delivery and native UI QA remain open.
+Release `a8b79650e655d21f33e43f5a1b987804b29ba4df` passed production smoke
+`34467682938`, protected Tests `34466463630` (922 Python/database, 336 mobile,
+six HTTPS service-worker cases), Security `34466463618`, and authenticated
+staging candidate/rollback/restore `34466664896`, `34466932061`, `34467281508`.
+
+In progress: 8.7.15 adds durable target rotation to replenishment claims. Five
+successive Mathematics batches selected the same oldest topic and rejected all
+50 candidates while thirty eligible jobs remained queued. The old due-time
+ordering starves later jobs despite bounded retry delays. Claim-event recency
+now determines the target round and keeps sequential subject claims fair inside
+the unchanged reserve tiers. See `RELEASE_NOTES_8.7.15.md` for evidence and gates.
+The 10 September Mathematics daily quiz remains an unreplayed validation dead
+letter; 11 September posted all 13 quizzes. This queue fix does not certify
+content breadth or close that historical incident.
 
 Status meanings:
 
