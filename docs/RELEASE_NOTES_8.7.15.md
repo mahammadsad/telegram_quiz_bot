@@ -71,6 +71,15 @@ downloaded or restored. This does not certify a restore drill or authorize
 destructive recovery. The updated candidate must repeat CI and staging gates;
 production migration/source pin and promotion remain pending.
 
+Updated read-only plan `34720837430` passed project identity, source parity and
+the single-migration preview, then blocked on no completed provider backup
+within 48 hours. Readback confirmed the production claim-function hash is still
+`0ed3bbfb756fe88eb45d8e9d937b8a9c`, platform readiness is true and the rotation
+migration is absent. All 65 production pins remain unchanged. Staging rollback
+`dep-daisf7p5efls73eoufkg` and authenticated smoke `34720849074` passed while
+retaining the new compatible staging function. No paid plan, backup restore,
+production DDL or historical quiz replay was initiated.
+
 Application rollback is `a8b79650e655d21f33e43f5a1b987804b29ba4df` (8.7.14),
 retaining the compatible migration. Application rollback does **not** revert
 database claim ordering. If that behavior itself needs reversal, use a reviewed

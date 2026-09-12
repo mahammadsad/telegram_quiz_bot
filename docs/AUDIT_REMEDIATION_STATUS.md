@@ -1,6 +1,6 @@
 # Audit remediation status
 
-Status as of 12 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
+Status as of 13 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
 
 Deployed: 8.7.12 addresses P0-02/P1-02/P2-01 difficulty coverage. Protected
 inventory report `34298405159` and a read-only production check found Computer
@@ -45,6 +45,17 @@ the unchanged reserve tiers. See `RELEASE_NOTES_8.7.15.md` for evidence and gate
 The 10 September Mathematics daily quiz remains an unreplayed validation dead
 letter; 11 September posted all 13 quizzes. This queue fix does not certify
 content breadth or close that historical incident.
+
+8.7.15 promotion is blocked by backup readiness, not by a failed queue test.
+Staging canary `34697038030` attempt 2 accepted eight independently verified
+questions across two sequential subjects; authenticated candidate smoke
+`34720718216` and 8.7.14 rollback smoke `34720849074` passed. The production
+preview still contains exactly the reviewed migration. New read-only backup
+gate in plan `34720837430` found no completed provider backup within 48 hours.
+No production migration was applied and the 65 source pins remain unchanged.
+Local follow-up checks pass (891 Python tests, 61 database tests skipped;
+Ruff, mypy and source parity). A confirmed recent backup/restore point and the
+remaining final-candidate gates are required before production promotion.
 
 Status meanings:
 
