@@ -57,6 +57,14 @@ Local follow-up checks pass (891 Python tests, 61 database tests skipped;
 Ruff, mypy and source parity). A confirmed recent backup/restore point and the
 remaining final-candidate gates are required before production promotion.
 
+Local follow-up candidate 8.7.16 addresses the settings UX acceptance rule for
+truthful pending/dirty/saved feedback. Two browser regressions reproduced edits
+being falsely marked saved and overlapping submissions while a save was pending.
+The fix preserves the submitted snapshot and later draft, serializes requests
+and retains explicit retry after failure. See `RELEASE_NOTES_8.7.16.md` and the
+13 September UX-plan checkpoint. This dependent branch is not deployed and
+does not bypass the 8.7.15 backup gate.
+
 Status meanings:
 
 - **Implemented**: code and local automated evidence are complete; production impact still requires the release procedure.
