@@ -5,7 +5,13 @@ from urllib.error import HTTPError
 
 import pytest
 
-from scripts.check_production_backup import NoRedirects, has_recent_completed_backup, main
+from scripts.check_production_backup import (
+    NoRedirects,
+    backup_summary,
+    has_recent_completed_backup,
+    has_recent_pitr_window,
+    main,
+)
 
 NOW = datetime(2026, 9, 13, tzinfo=timezone.utc)
 
@@ -15,6 +21,71 @@ def test_completed_recent_backup(timestamp):
     assert has_recent_completed_backup(
         {"backups": [{"status": "COMPLETED", "inserted_at": timestamp}]}, NOW
     )
+
+
+def test_pitr_window_is_recovery_evidence_even_without_daily_backup_rows():
+    import scripts.check_production_backup as gate
+
+    payload = {"backups": [], "walg_enabled": True, "pitr_enabled": True,
+               "physical_backup_data": {
+                   "earliest_physical_backup_date_unix": int(NOW.timestamp()) - 7 * 86400,
+                   "latest_physical_backup_date_unix": int(NOW.timestamp()) - 120,
+               }}
+    with patch.dict("os.environ", {
+        "EXPECTED_SUPABASE_PROJECT_REF": "tizxodkcpglmxgtwepor",
+        "SUPABASE_ACCESS_TOKEN": "test-secret-never-log",
+    }, clear=True), patch.object(gate, "build_opener") as opener, patch.object(gate, "datetime") as clock:
+        import json
+
+        opener.return_value.open.return_value = BytesIO(json.dumps(payload).encode())
+        clock.now.return_value = NOW
+        assert main() == 0
+
+
+@pytest.mark.parametrize("earliest,latest", [
+    (0, int(NOW.timestamp())), (True, int(NOW.timestamp())),
+    (int(NOW.timestamp()), False), (None, int(NOW.timestamp())),
+    ("1", int(NOW.timestamp())), (1, str(int(NOW.timestamp()))),
+    (1, float(NOW.timestamp())), (1, int(NOW.timestamp()) + 1),
+    (int(NOW.timestamp()), int(NOW.timestamp()) - 1),
+    (1, int(NOW.timestamp()) - 48 * 3600 - 1),
+    (1, 10 ** 100),
+])
+def test_invalid_or_stale_pitr_window_fails_closed(earliest, latest):
+    payload = {"pitr_enabled": True, "walg_enabled": True, "physical_backup_data": {
+        "earliest_physical_backup_date_unix": earliest,
+        "latest_physical_backup_date_unix": latest,
+    }}
+    assert not has_recent_pitr_window(payload, NOW)
+
+
+@pytest.mark.parametrize("pitr,walg", [(False, True), (True, False), ("true", True), (True, 1)])
+def test_window_alone_or_truthy_non_boolean_flags_are_insufficient(pitr, walg):
+    assert not has_recent_pitr_window({
+        "pitr_enabled": pitr, "walg_enabled": walg, "physical_backup_data": {
+            "earliest_physical_backup_date_unix": 1,
+            "latest_physical_backup_date_unix": int(NOW.timestamp()),
+        }}, NOW)
+
+
+def test_pitr_freshness_boundary_and_equal_endpoints():
+    timestamp = int(NOW.timestamp()) - 48 * 3600
+    assert has_recent_pitr_window({
+        "pitr_enabled": True, "walg_enabled": True, "physical_backup_data": {
+            "earliest_physical_backup_date_unix": timestamp,
+            "latest_physical_backup_date_unix": timestamp,
+        }}, NOW)
+
+
+def test_diagnostics_do_not_echo_provider_fields():
+    assert backup_summary({
+        "backups": [{"id": "private-id", "download_url": "https://private.invalid"}],
+        "region": "private-region", "pitr_enabled": True,
+        "physical_backup_data": {"secret": "private-value"},
+    }, NOW) == {
+        "backup_records": 1, "recent_completed_backup": False,
+        "pitr_enabled": True, "recent_pitr_window": False,
+    }
 
 
 @pytest.mark.parametrize("payload", [

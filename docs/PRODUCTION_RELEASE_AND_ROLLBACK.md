@@ -26,7 +26,7 @@ Never print service keys, bot tokens or synthetic `initData` in logs.
    git rev-parse HEAD
    ```
 
-4. Create and verify a production database backup/restore point. Record its identifier outside the repository. Migration plan/apply workflows now require a provider-reported `COMPLETED` backup no older than 48 hours through a read-only Management API check. Enabled backup/PITR settings alone do not pass. This metadata check does not substitute for a restore drill; no learner data is downloaded or restored by the gate.
+4. Create and verify a production database backup/restore point. Record its identifier outside the repository. Migration plan/apply workflows require either a provider-reported `COMPLETED` backup no older than 48 hours or an enabled WAL-G/PITR recovery window with ordered integer endpoints and a latest recovery point within 48 hours (never in the future). Supabase stops taking daily backups when PITR is enabled, so an empty daily-backup list alone is not proof of missing recovery coverage. Enabled settings without an actual recovery range do not pass. This read-only metadata check does not substitute for a restore drill; no learner data is downloaded or restored. Diagnostics expose only allowlisted counts and booleans, not backup identifiers, timestamps, URLs or credentials.
 5. Confirm production secrets and these non-secret values in Render:
 
    ```text

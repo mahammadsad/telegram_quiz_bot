@@ -72,5 +72,5 @@ jobs:
           --password "$SUPABASE_DB_PASSWORD"
           --include-all --dry-run --yes
 
-      - name: Confirm a recent completed production backup
+      - name: Confirm a recent production recovery point
         run: python scripts/check_production_backup.py
