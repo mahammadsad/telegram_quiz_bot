@@ -116,6 +116,7 @@ def test_security_comparison_uses_effective_privileges_not_acl_storage_order():
     assert "pg_get_userbyid(a.grantee)" in backup.SECURITY_SQL
     assert "a.privilege_type,a.is_grantable" in backup.SECURITY_SQL
     assert "c.relacl::text" not in backup.SECURITY_SQL
+    assert "WHEN c.relkind='S' THEN 's'" in backup.SECURITY_SQL
 
 
 def test_production_workflow_uploads_only_encrypted_allowlist():

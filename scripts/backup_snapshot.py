@@ -62,7 +62,7 @@ SELECT coalesce(jsonb_agg(jsonb_build_array(n.nspname,c.relname,c.relrowsecurity
    ORDER BY CASE WHEN a.grantee=0 THEN 'PUBLIC' ELSE pg_get_userbyid(a.grantee) END,
      pg_get_userbyid(a.grantor),a.privilege_type,a.is_grantable)
   FROM aclexplode(coalesce(c.relacl,acldefault(
-    CASE WHEN c.relkind='S' THEN 'S'::"char" ELSE 'r'::"char" END,c.relowner))) a))
+    CASE WHEN c.relkind='S' THEN 's'::"char" ELSE 'r'::"char" END,c.relowner))) a))
  ORDER BY n.nspname,c.relname),'[]')
 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
 WHERE n.nspname IN ('public','supabase_migrations') AND c.relkind IN ('r','v','S')
