@@ -57,6 +57,19 @@ Local follow-up checks pass (891 Python tests, 61 database tests skipped;
 Ruff, mypy and source parity). A confirmed recent backup/restore point and the
 remaining final-candidate gates are required before production promotion.
 
+Backup follow-up on 13 September: protected plan `34737305825` also checked
+the documented PITR recovery range and confirmed zero provider backup records,
+PITR disabled and no recent recovery window. The new encrypted-archive primitive
+and a complete migrated-schema synthetic restore passed CI `34751036976`
+(1,002 Python/database tests, 33 dedicated encryption/restore tests, 336 mobile
+and six HTTPS service-worker tests). The owner-held public recipient is pinned;
+the private key remains in a dedicated owner-only home-directory keyring, and
+its local synthetic decryption check passed. No production rows were exported,
+no production migration was applied, and no backup gate was bypassed. Actual
+snapshot capture, isolated restore, archive retention and recovery evidence
+remain open. See `ENCRYPTED_BACKUP_RECOVERY.md`; this does not close a phase or
+represent production disaster-recovery completion.
+
 Status meanings:
 
 - **Implemented**: code and local automated evidence are complete; production impact still requires the release procedure.

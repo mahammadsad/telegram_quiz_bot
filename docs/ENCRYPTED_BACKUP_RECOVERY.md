@@ -40,18 +40,38 @@ The job has no production environment, hosted credentials, or artifact upload.
 - A manifest and checksums do not authenticate the exporting workflow: anyone
   possessing the public key can encrypt data. Trusted workflow/source-project
   provenance and a real restore receipt remain separate requirements.
-- No production private key has been generated or uploaded by this change.
+- After the full synthetic CI restore passed, a dedicated RSA-3072 encryption
+  key was generated in an owner-only `0700` keyring at
+  `/home/mahammadsad/.local/share/citizen-affairs-backups/production-key-20260913`.
+  It was not uploaded or read into chat. Only its public key is tracked at
+  `config/backup-recipient.asc`; independently checked fingerprint:
+  `39F3FC1CE7F58FAA4CCB823FCBC34F51F9DA20DC`, expiry 12 September 2028 UTC.
+  A separate synthetic local encryption/decryption custody check passed.
   The project drive is `fuseblk`; do not assume `chmod` protects secrets there.
-  The owner's `/home/mahammadsad` filesystem is `ext4`. A dedicated `0700`
-  directory there is the candidate key-custody location, outside this repository.
-  An unattended unpassphrased key would rely on OS access control, not password
-  protection. Losing the only private key makes every corresponding backup
-  unrecoverable; an independent owner-controlled recovery copy is still needed.
+  The owner's home filesystem is `ext4`. The unattended private key relies on
+  OS access control, **not a passphrase**. Losing the only private key makes every
+  corresponding backup unrecoverable; an independent owner-controlled recovery
+  copy is still needed. Do not delete or regenerate this key during code rollback.
+
+Verification checkpoint: full local suite 941 passed / 62 skipped (local database
+service absent); Ruff, mypy and all 65 source pins passed. Protected PR CI
+`34751036976` at `c787b15` passed 1,002 Python/database tests (one separate-drill
+skip), plus the dedicated **33-test real-GPG and full-schema restore job**.
+The first drill attempt found an invalid empty libpq service option; it was
+removed and inherited libpq settings explicitly cleared. Disposable database
+names are also bounded below PostgreSQL's identifier truncation limit.
+
+Read-only production scope discovery: PostgreSQL 17, 74 public tables, 65 ledger
+rows, zero Auth users, Storage objects, foreign tables, large objects or public
+pgsodium column labels. Public/ledger table owners are `postgres`. Managed
+Cron/Net/Vault extensions remain outside the synthetic restore evidence; these
+counts do not certify a complete project recovery strategy.
 
 ## Remaining production steps (not performed by this change)
 
-1. Pin an owner-held recipient, prove local key custody with a synthetic round
-   trip, and define key-loss recovery and encrypted-archive retention.
+1. Owner-held recipient pinning and the synthetic local key-custody round trip
+   are complete. Define independent key-loss recovery and encrypted-archive
+   retention; no production archive is represented by the synthetic fixture.
 2. Inventory the exact application's dependencies read-only. Agree the backup
    scope explicitly: public application data and migration history are not a
    complete Supabase project backup. Managed Auth, Storage objects, extension

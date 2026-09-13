@@ -200,3 +200,12 @@ def test_encryption_does_not_relax_production_gate():
     workflow = Path(".github/workflows/supabase-migrations.yml").read_text()
     assert "python scripts/check_production_backup.py" in workflow
     assert "backup_archive" not in workflow
+
+
+def test_tracked_public_recipient_matches_independently_pinned_owner_key(tmp_path):
+    if not shutil.which("gpg"):
+        pytest.skip("GnuPG is required to validate the public recipient")
+    backup.import_recipient(
+        tmp_path, Path("config/backup-recipient.asc"),
+        "39F3FC1CE7F58FAA4CCB823FCBC34F51F9DA20DC",
+    )
