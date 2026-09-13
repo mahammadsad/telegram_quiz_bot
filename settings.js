@@ -10,7 +10,7 @@
   var requestJson=window.miniappRequest;
   var subjects={"history":"ইতিহাস","geography":"ভূগোল","polity":"সংবিধান","economics":"অর্থনীতি","science":"বিজ্ঞান","mathematics":"গণিত","reasoning":"রিজনিং","english":"ইংরেজি","bengali":"বাংলা","computer":"কম্পিউটার","current-affairs":"কারেন্ট অ্যাফেয়ার্স","environment":"পরিবেশ","miscellaneous":"বিবিধ সাধারণ জ্ঞান"};
   var exams={WBCS:"WBCS",WBPSC_CLERKSHIP:"WBPSC Clerkship",WBPSC_MISC:"WBPSC Misc",WBP_CONSTABLE:"WBP Constable",WBP_SI:"WBP SI",KOLKATA_POLICE:"Kolkata Police",PRIMARY_TET:"Primary TET",UPPER_PRIMARY_TET:"Upper Primary TET",SSC:"SSC",RAILWAY:"Railway",BANKING:"Banking"};
-  var committedSubjects=[],committedExams=[],savedSnapshot="",activeDialogTrigger=null;
+  var committedSubjects=[],committedExams=[],savedSnapshot="",activeDialogTrigger=null,saving=false,saveFailed=false;
   var hasTelegramBack=!!(tg&&tg.BackButton&&typeof tg.BackButton.onClick==="function"&&typeof tg.BackButton.show==="function"&&typeof tg.BackButton.hide==="function");
   if(hasTelegramBack){
     tg.BackButton.hide();
@@ -67,7 +67,7 @@
   el("confirm-deletion").addEventListener("click",requestDeletion);
   el("cancel-delete-confirm").addEventListener("click",hideDeletionConfirmation);
   el("cancel-deletion").addEventListener("click",cancelDeletion);
-  window.addEventListener("beforeunload",function(event){if(!isDirty())return;event.preventDefault();event.returnValue=""});
+  window.addEventListener("beforeunload",function(event){if(!saving&&!isDirty())return;event.preventDefault();event.returnValue=""});
   if(initData)loadPreferences();
   else showState("নিজের পছন্দ ও গোপনীয়তা দেখতে Telegram-এর কুইজ বাটন থেকে Mini App খুলুন।",false);
 
@@ -112,9 +112,9 @@
   function updateDialogCount(kind){var config=selectorConfig(kind);el(config.count).textContent=countCopy(checked(config.checks).length)}
   function updateSelectionSummaries(){el("subject-summary").textContent=countCopy(committedSubjects.length);el("exam-summary").textContent=committedExams.length?countCopy(committedExams.length):"কোনোটি নয়"}
   function preferenceSnapshot(){return JSON.stringify({targetExams:committedExams.slice().sort(),preferredSubjects:committedSubjects.slice().sort(),dailyQuestionTarget:+el("daily-target").value,preferredLanguage:el("language").value,difficultyPreference:el("difficulty").value,quizMode:el("quiz-mode").value,leaderboardVisible:el("leaderboard-visible").checked,publicDisplayName:el("display-name").value.trim()||null,usernameVisible:el("username-visible").checked,revisionSoundEnabled:el("revision-sound").checked,revisionVibrationEnabled:el("revision-vibration").checked})}
-  function isDirty(){return!!savedSnapshot&&preferenceSnapshot()!==savedSnapshot}
+  function isDirty(){return saveFailed||(!!savedSnapshot&&preferenceSnapshot()!==savedSnapshot)}
   function markDirty(){setDirty(isDirty())}
-  function setDirty(dirty){var button=el("settings-submit");button.disabled=!dirty;button.textContent=dirty?"পরিবর্তন সংরক্ষণ করুন":"সব পরিবর্তন সংরক্ষিত";if(!tg)return;try{if(dirty&&typeof tg.enableClosingConfirmation==="function")tg.enableClosingConfirmation();else if(!dirty&&typeof tg.disableClosingConfirmation==="function")tg.disableClosingConfirmation()}catch(e){}}
+  function setDirty(dirty){var button=el("settings-submit");button.disabled=saving||!dirty;button.textContent=saving?"সংরক্ষণ হচ্ছে...":dirty?"পরিবর্তন সংরক্ষণ করুন":"সব পরিবর্তন সংরক্ষিত";if(!tg)return;try{if((dirty||saving)&&typeof tg.enableClosingConfirmation==="function")tg.enableClosingConfirmation();else if(!dirty&&!saving&&typeof tg.disableClosingConfirmation==="function")tg.disableClosingConfirmation()}catch(e){}}
 
   function testSound(){
     var message=el("sound-message");message.textContent="শব্দ বাজানো হচ্ছে...";
@@ -129,9 +129,13 @@
   function cancelDeletion(){var message=el("privacy-message");privacyAction("/api/me/account-deletion/cancel").then(function(result){message.textContent=result.cancelled?"মুছে ফেলার অনুরোধ বাতিল হয়েছে।":"কোনো সক্রিয় অনুরোধ পাওয়া যায়নি।"}).catch(function(error){message.textContent=errorMessage(error)})}
 
   function savePreferences(event){
-    event.preventDefault();var message=el("settings-message"),button=el("settings-submit");button.disabled=true;message.textContent="সংরক্ষণ হচ্ছে...";
+    event.preventDefault();if(saving||!isDirty())return;
+    var message=el("settings-message"),submittedSnapshot=preferenceSnapshot();
+    saving=true;setDirty(true);message.textContent="সংরক্ষণ হচ্ছে...";
     var sound=el("revision-sound").checked,vibration=el("revision-vibration").checked;
     requestJson(api("/api/me/preferences"),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({initData:initData,targetExams:committedExams,preferredSubjects:committedSubjects,dailyQuestionTarget:+el("daily-target").value,preferredLanguage:el("language").value,difficultyPreference:el("difficulty").value,quizMode:el("quiz-mode").value,leaderboardVisible:el("leaderboard-visible").checked,publicDisplayName:el("display-name").value.trim()||null,usernameVisible:el("username-visible").checked,dailyReminderEnabled:false,revisionSoundEnabled:sound,revisionVibrationEnabled:vibration})})
-      .then(function(){localPreference("revisionSoundEnabled",sound);localPreference("revisionVibrationEnabled",vibration);savedSnapshot=preferenceSnapshot();setDirty(false);message.textContent="সেটিং সংরক্ষিত হয়েছে।"}).catch(function(error){message.textContent=errorMessage(error);setDirty(true)});
+      .then(function(){localPreference("revisionSoundEnabled",sound);localPreference("revisionVibrationEnabled",vibration);savedSnapshot=submittedSnapshot;saveFailed=false;message.textContent=isDirty()?"আগের সেটিং সংরক্ষিত হয়েছে। নতুন পরিবর্তন সংরক্ষণ করুন।":"সেটিং সংরক্ষিত হয়েছে।"})
+      .catch(function(error){saveFailed=true;message.textContent=errorMessage(error)})
+      .finally(function(){saving=false;setDirty(isDirty())});
   }
 })();

@@ -56,6 +56,28 @@ test("quiz confirmation traps focus and Escape returns to the active question", 
   await expect(page.locator("#q-text")).toBeFocused();
 });
 
+test("question-map navigation focuses the new question before the next animation frame", async ({ page }) => {
+  await openIntro(page);
+  await startWithTelegramMainButton(page);
+  await page.locator("#question-map-toggle").click();
+  const focused = await page.evaluate(() => {
+    const original = window.requestAnimationFrame;
+    const pending = [];
+    window.requestAnimationFrame = (callback) => { pending.push(callback); return 1; };
+    try {
+      document.querySelectorAll(".nav-q")[4].click();
+      window.__delayedNavigationFrames = pending;
+      return document.activeElement.id;
+    } finally {
+      window.requestAnimationFrame = original;
+    }
+  });
+  expect(focused).toBe("q-text");
+  await page.keyboard.press("3");
+  await expect(page.locator(".option").nth(2)).toHaveAttribute("aria-pressed", "true");
+  await page.evaluate(() => window.__delayedNavigationFrames.forEach((callback) => callback(performance.now())));
+});
+
 test("complete quiz lifecycle hides answers until submission and recovers the result", async ({
   page,
 }, testInfo) => {

@@ -528,6 +528,39 @@ The automated stress tests hold the viewport fixed and double computed text
 sizes. They are not native Android/iOS text scaling or browser-chrome zoom QA.
 Real Telegram and Bengali assistive-technology acceptance remains separate.
 
+## Settings save-race follow-up — 2026-09-13
+
+The settings acceptance rule to show truthful pending/saved/dirty states had a
+reproduced race. Editing after pressing Save re-enabled the submit button while
+the earlier PUT was pending. When that PUT succeeded, the page recorded the
+current form as saved even though those later edits were never sent.
+
+The candidate captures the submitted snapshot, permits only one in-flight save
+and compares the current draft with that confirmed snapshot. Later edits stay
+editable and receive a Bengali unsaved-change message; the next explicit Save
+sends them. Failed/uncertain saves remain retryable, even if the learner changed
+the input back to its original value while the request was pending. Browser and
+Telegram close confirmation remain enabled during a pending write. This does
+not add automatic write retries, enable reminders, change authentication, or
+claim cross-device concurrency control.
+
+Two pre-fix browser regressions failed at 320px. The follow-up adds three
+scenarios across all four supported widths, plus the existing settings and
+HTTPS service-worker checks. Application candidate 8.7.16 and shell
+8.7.16-ui1 are not deployed; this work is stacked after the backup-blocked
+8.7.15 queue release. Native Telegram/assistive-technology QA remains open.
+
+## Immediate question focus follow-up — 2026-09-13
+
+Protected mobile job `103627821501` needed one retry of the 390px quiz lifecycle:
+the number-key answer immediately after selecting a question from the map was
+ignored. A deterministic test delaying the next animation frame reproduced
+focus remaining on the map trigger even though the new question was visible.
+Navigation now focuses the already-rendered semantic heading synchronously,
+matching the existing same-question path. Keyboard guards for dialogs, links,
+form editing and modifiers remain unchanged. This addresses an actual timing
+window rather than hiding the failure with test sleeps or additional retries.
+
 ## Decisions intentionally deferred (audit boundaries)
 
 - No production mutation or deployment is part of this audit.
