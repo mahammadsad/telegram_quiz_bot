@@ -15,6 +15,7 @@ import pytest
 from psycopg import sql
 
 from scripts import backup_archive as backup
+from scripts import backup_snapshot as snapshot
 from scripts.apply_test_database import rebuild
 
 
@@ -51,6 +52,31 @@ def test_migrated_database_encryption_decryption_and_disposable_restore(tmp_path
                 source.execute("INSERT INTO public.backup_drill_fixture VALUES (1, %s), (2, NULL)",
                                ("বাংলা synthetic recovery fixture",))
                 ledger_count = source.execute("SELECT count(*) FROM supabase_migrations.schema_migrations").fetchone()[0]
+                source.execute('CREATE EXTENSION IF NOT EXISTS "uuid-ossp" WITH SCHEMA extensions')
+            # Exercise the production exporter and network-isolated restore with
+            # the same full migrated schema, but no hosted connection or data.
+            snapshot.command([*snapshot.DOCKER, "pull", snapshot.IMAGE], stdout=subprocess.DEVNULL, timeout=120)
+            scoped_dump = tmp_path / "scoped-synthetic.dump"
+            original_command = snapshot.command
+
+            def dump_then_change_source(arguments, **kwargs):
+                result = original_command(arguments, **kwargs)
+                # Commit a concurrent change after pg_dump but before inventory.
+                # The exported transaction must still see the original value.
+                if "pg_dump" in arguments:
+                    with psycopg.connect(**(connection_options | {"dbname": source_name})) as writer:
+                        writer.execute("UPDATE public.backup_drill_fixture SET text_value='changed concurrently' WHERE id=1")
+                return result
+
+            with monkeypatch.context() as scoped:
+                scoped.setattr(snapshot, "command", dump_then_change_source)
+                with psycopg.connect(**(connection_options | {"dbname": source_name}), autocommit=True) as source:
+                    expected = snapshot.export_snapshot(
+                        source, scoped_dump, [*docker, "pg_dump", "--username=postgres", f"--dbname={source_name}"], environment)
+            snapshot.restore_and_compare(scoped_dump, expected)
+            with psycopg.connect(**(connection_options | {"dbname": source_name})) as source:
+                source.execute("UPDATE public.backup_drill_fixture SET text_value=%s WHERE id=1",
+                               ("বাংলা synthetic recovery fixture",))
             dump = tmp_path / "synthetic.dump"
             descriptor = os.open(dump, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
             with os.fdopen(descriptor, "wb") as destination:

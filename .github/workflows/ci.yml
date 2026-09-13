@@ -78,7 +78,7 @@ jobs:
       - name: Restore the encrypted synthetic archive into a disposable database
         env:
           BACKUP_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
-        run: pytest -q tests/test_backup_archive.py tests/test_backup_archive_postgres.py
+        run: pytest -q tests/test_backup_archive.py tests/test_backup_snapshot.py tests/test_backup_archive_postgres.py
       # Deliberately no upload-artifact step. Synthetic plaintext, private test
       # keys, and decrypted files remain inside this disposable runner only.
 

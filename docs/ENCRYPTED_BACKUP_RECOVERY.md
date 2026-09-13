@@ -69,6 +69,34 @@ counts do not certify a complete project recovery strategy.
 
 ## Remaining production steps (not performed by this change)
 
+The next implementation is `scripts/backup_snapshot.py`, exposed only by the
+manual migration-plan workflow's separate `operation=backup` job. Its exact
+acknowledgement is `BACKUP APPLICATION SCHEMAS FOR tizxodkcpglmxgtwepor`.
+This job never calls migration apply and does not change the provider-only gate.
+It uses the linked session pooler with exact project username, port 5432,
+verified TLS and read-only transactions. One exported repeatable-read snapshot
+is shared by `pg_dump` and source row fingerprints; locks/statements/transactions
+and subprocesses have bounded timeouts. The synthetic CI drill deliberately
+commits a concurrent source edit between export and verification.
+
+The actual archive is restored in a random, disposable PostgreSQL 17 container
+with no network, bind mounts, hosted credentials or Docker log collection.
+It compares every public/ledger table's row count and sorted row hashes,
+table/view/sequence ACLs and RLS flags, application/platform readiness and the
+claim RPC's service-only permissions. MD5 row fingerprints detect accidental
+data changes; they are not an authenticity signature. Sequences are not MVCC
+snapshot data; their restored state is not independently compared. Restore
+uses `--no-owner` and local no-login role placeholders, not managed role passwords
+or a proof of managed-service ownership parity.
+
+Only ciphertext, the encryption manifest and an allowlisted restore receipt may
+be uploaded, with 30-day GitHub artifact retention. The receipt distinguishes an
+isolated plaintext archive restore from the still-required owner-key decryption
+check. This is an application recovery point, not full project disaster recovery:
+private scheduler records, Cron/Net/Vault, managed Auth/Storage, role credentials
+and hosting configuration are excluded. No actual production export or restore
+has yet been verified at this implementation checkpoint.
+
 1. Owner-held recipient pinning and the synthetic local key-custody round trip
    are complete. Define independent key-loss recovery and encrypted-archive
    retention; no production archive is represented by the synthetic fixture.
