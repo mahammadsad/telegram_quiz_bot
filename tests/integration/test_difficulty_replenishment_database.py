@@ -106,6 +106,31 @@ def _counts(conn, chapter):
     ).fetchone()
 
 
+def test_single_claim_calls_rotate_subjects_with_different_reserve_gaps(inventory):
+    conn, _, topic, _, _ = inventory
+    now = datetime.now(timezone.utc)
+    for subject, target in (("computer", topic), ("mathematics", None)):
+        conn.execute("""
+            insert into public.content_replenishment_jobs
+                (logical_date, subject_key, micro_topic_id, due_at)
+            values (%s, %s, %s, %s)
+        """, (now.date(), subject, target, now))
+    subjects = []
+    for _ in range(3):
+        job = conn.execute(
+            "select * from public.claim_content_replenishment_jobs('subject-round', %s, 20, 1)",
+            (now,),
+        ).fetchone()
+        subjects.append(job["subject_key"])
+        conn.execute("""
+            select public.complete_content_replenishment_batch(
+                %s, 'subject-round', 0, 5, '{}', 'content_rejected', %s)
+        """, (job["id"], now))
+    # Math has zero verified questions; Computer has 20. The larger deficit
+    # wins the first tie, not every subsequent just-in-time claim forever.
+    assert subjects == ["mathematics", "computer", "mathematics"]
+
+
 def test_full_total_without_hard_questions_ensures_and_returns_one_job(inventory):
     conn, chapter, topic, _, _ = inventory
     assert _counts(conn, chapter)["hard"] == 0

@@ -3,8 +3,15 @@ name: Plan Production Supabase Migrations
 on:
   workflow_dispatch:
     inputs:
+      operation:
+        description: Read-only plan or encrypted application backup (never applies migrations)
+        type: choice
+        default: plan
+        options:
+          - plan
+          - backup
       safety_ack:
-        description: Enter PLAN TRACKED MIGRATIONS FOR tizxodkcpglmxgtwepor
+        description: Enter PLAN TRACKED MIGRATIONS FOR tizxodkcpglmxgtwepor or BACKUP APPLICATION SCHEMAS FOR tizxodkcpglmxgtwepor
         required: true
         type: string
 
@@ -17,6 +24,7 @@ concurrency:
 
 jobs:
   plan-migrations:
+    if: inputs.operation != 'backup'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
@@ -71,3 +79,52 @@ jobs:
           npx --yes supabase@2.77.0 db push
           --password "$SUPABASE_DB_PASSWORD"
           --include-all --dry-run --yes
+
+      - name: Confirm a recent production recovery point
+        run: python scripts/check_production_backup.py
+
+  backup-application:
+    if: inputs.operation == 'backup'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: production
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.lock
+      - name: Verify reviewed production migration sources
+        run: python scripts/check_migration_ledger_sources.py
+      - name: Check backup acknowledgement before contacting production
+        env:
+          EXPECTED_SUPABASE_PROJECT_REF: tizxodkcpglmxgtwepor
+          INPUT_SAFETY_ACK: ${{ inputs.safety_ack }}
+        run: python -c 'import os; from scripts.backup_snapshot import workflow_identity; workflow_identity(os.environ)'
+      - name: Link only the exact production project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: >-
+          npx --yes supabase@2.77.0 link --project-ref tizxodkcpglmxgtwepor
+          --password "$SUPABASE_DB_PASSWORD" --yes
+      - name: Export read-only snapshot, restore in isolation and encrypt
+        env:
+          EXPECTED_SUPABASE_PROJECT_REF: tizxodkcpglmxgtwepor
+          INPUT_SAFETY_ACK: ${{ inputs.safety_ack }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: python -m scripts.backup_snapshot
+      # Explicit files only. No raw dump, error log, private key or workspace
+      # upload; no always() upload after a failed/partial export or restore.
+      - name: Retain only the encrypted application snapshot and bounded receipt
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: encrypted-application-backup-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/application-backup-${{ github.run_id }}/sealed/database.dump.gpg
+            ${{ runner.temp }}/application-backup-${{ github.run_id }}/sealed/manifest.json
+            ${{ runner.temp }}/application-backup-${{ github.run_id }}/sealed/restore-receipt.json
+          if-no-files-found: error
+          retention-days: 30

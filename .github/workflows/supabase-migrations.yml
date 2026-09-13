@@ -38,7 +38,7 @@ jobs:
           import os
           from pathlib import Path
 
-          from database.contract import DIFFICULTY_AWARE_REPLENISHMENT_MIGRATION_VERSION
+          from database.contract import REPLENISHMENT_JOB_ROTATION_MIGRATION_VERSION
 
           expected_ref = "tizxodkcpglmxgtwepor"
           expected_ack = f"APPLY TRACKED MIGRATIONS TO {expected_ref}"
@@ -60,8 +60,8 @@ jobs:
           if missing:
               raise SystemExit("Refusing migration: required production credentials are unavailable.")
           migration = Path("supabase/migrations") / (
-              f"{DIFFICULTY_AWARE_REPLENISHMENT_MIGRATION_VERSION}_"
-              "difficulty_aware_replenishment.sql"
+              f"{REPLENISHMENT_JOB_ROTATION_MIGRATION_VERSION}_"
+              "durable_replenishment_job_rotation.sql"
           )
           if not migration.is_file():
               raise SystemExit("Refusing migration: expected reviewed migration is missing.")
@@ -83,6 +83,9 @@ jobs:
           npx --yes supabase@2.77.0 db push
           --password "$SUPABASE_DB_PASSWORD"
           --include-all --dry-run --yes
+
+      - name: Confirm a recent production recovery point
+        run: python scripts/check_production_backup.py
 
       - name: Apply tracked migrations after successful dry run
         run: >-
