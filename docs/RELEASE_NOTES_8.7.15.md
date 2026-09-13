@@ -35,10 +35,18 @@ rejection, not the topic-routing defect repaired in 8.7.14.
   ownership, 1–25 limits and 5–120 minute lease bounds unchanged. Do not reset
   retry history, waive verification, approve sources or publish synthetic quizzes.
 
+UI release-gate follow-up: PR test run `34751373382` reproduced the existing
+question-map keyboard race on three mobile widths (one terminal failure and
+two retry-only passes). The already verified synchronous question-focus fix
+from the dependent UI candidate is backported here, with its deterministic
+delayed-animation-frame regression. Shell registration and both service-worker
+caches advance to `8.7.15-ui1` so this first release does not retain stale code.
+No keyboard guards, retry counts or test assertions were weakened.
+
 Migration `20260912132928_durable_replenishment_job_rotation.sql` replaces only
 the existing service-only claim function. The signature and row contract remain
-compatible with 8.7.14. No new table, index, source approval, frontend or Telegram
-change is required. Reuse the existing partial claim-event index; measure the
+compatible with 8.7.14. No new table, index, source approval or Telegram change
+is required for the queue fix. Reuse the existing partial claim-event index; measure the
 read-only ranking plan before hosted promotion.
 
 Release gates: disposable PostgreSQL tests comparing the pinned legacy function
