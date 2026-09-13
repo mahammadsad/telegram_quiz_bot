@@ -1,4 +1,4 @@
-# 8.7.16 — candidate, not deployed
+# 8.7.16 — candidate, not production-deployed
 
 Settings UX follow-up to the original Mini App audit: preserve changes made
 during a pending save and prevent overlapping preference writes.
@@ -36,3 +36,22 @@ target before promotion; no new rollback SHA is assumed here.
 This serializes saves within one page. It does not claim optimistic concurrency
 across devices or browser tabs, or that native Telegram/Bengali screen-reader
 acceptance is complete.
+
+## Readiness diagnostic follow-up
+
+A read-only production check on 13 September found the quiz API and liveness
+working, while readiness reported both database-contract and scheduler failures.
+The database's own schema contract was ready. Scheduler history contained one
+09:04 UTC transport timeout followed by accepted HTTP 204 dispatches at 09:19,
+09:34, 09:49 and 10:04. The existing 24-hour rejection rule intentionally still
+flags that incident, but combining that operational check into the schema check
+incorrectly also described the schema as broken.
+
+The candidate now reports scheduler failure separately from a healthy database
+contract. Overall readiness still fails closed for the scheduler, including
+renewal-window, missing-Cron and wrong-contract failures. Real simultaneous
+database failures still report both categories. Four regressions failed before
+the change; all five new checks and the existing readiness tests pass afterward.
+No scheduler history was cleared, request replayed, token rotated, Cron job
+changed, or warning suppressed. The historical warning and delivery SLO remain
+operational follow-up work; this is a diagnosis correction, not incident erasure.

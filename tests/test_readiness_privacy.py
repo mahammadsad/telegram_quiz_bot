@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import pytest
+
 from database.contract import (
     PLATFORM_CONTRACT_KEY,
     PLATFORM_CONTRACT_MIGRATION_VERSION,
@@ -359,6 +361,44 @@ def test_readiness_fails_closed_when_primary_scheduler_needs_renewal(monkeypatch
     assert result.ready is False
     assert result.checks["primaryScheduler"] is False
     assert "primary_scheduler" in result.categories
+
+
+@pytest.mark.parametrize("scheduler_update", [
+    {"recent_rejected_requests": 1},
+    {"ready": False, "credential_outside_renewal_window": False},
+    {"ready": False, "pg_cron_ready": False},
+    {"migration_version": "unknown"},
+])
+def test_scheduler_failure_does_not_mislabel_healthy_database_contract(monkeypatch, scheduler_update):
+    _configure_ready_dependencies(monkeypatch)
+    monkeypatch.setattr(readiness_service, "EXPECTED_SUPABASE_PROJECT_REF",
+                        readiness_service.PRIMARY_SCHEDULER_PROJECT_REF)
+    scheduler = readiness_service.schema_contract_repo.get_primary_scheduler_contract()
+    monkeypatch.setattr(readiness_service.schema_contract_repo, "get_primary_scheduler_contract",
+                        lambda: scheduler | scheduler_update)
+
+    result = readiness_service.assess(use_cache=False)
+
+    assert result.ready is False
+    assert result.checks["primaryScheduler"] is False
+    assert result.checks["databaseContract"] is True
+    assert result.categories == ("primary_scheduler",)
+
+
+def test_real_schema_failure_remains_visible_alongside_scheduler_failure(monkeypatch):
+    _configure_ready_dependencies(monkeypatch)
+    monkeypatch.setattr(readiness_service, "EXPECTED_SUPABASE_PROJECT_REF",
+                        readiness_service.PRIMARY_SCHEDULER_PROJECT_REF)
+    contract = readiness_service.schema_contract_repo.get_contract()
+    monkeypatch.setattr(readiness_service.schema_contract_repo, "get_contract",
+                        lambda: contract | {"ready": False})
+    monkeypatch.setattr(readiness_service.schema_contract_repo, "get_primary_scheduler_contract", lambda: {})
+
+    result = readiness_service.assess(use_cache=False)
+
+    assert result.ready is False
+    assert result.checks["databaseContract"] is False
+    assert set(result.categories) == {"database_contract", "primary_scheduler"}
 
 
 def test_readiness_fails_closed_for_unsafe_leaderboard_functions(monkeypatch) -> None:
