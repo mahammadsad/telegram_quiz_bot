@@ -84,6 +84,13 @@ def test_migrated_database_encryption_decryption_and_disposable_restore(tmp_path
                     for field in ("tables", "security") if expected[field] != actual[field]
                 }
                 assert not differences, differences
+                # NULL ACL means default privileges, not no privileges. After
+                # canonicalizing that representation, a genuine new public
+                # grant must still fail equality and revocation must restore it.
+                query("GRANT SELECT ON public.backup_drill_fixture TO anon;")
+                assert query(snapshot.SECURITY_SQL) != expected["security"]
+                query("REVOKE SELECT ON public.backup_drill_fixture FROM anon;")
+                assert query(snapshot.SECURITY_SQL) == expected["security"]
                 return actual
 
             def synthetic_restore_diagnostics(arguments, **kwargs):
