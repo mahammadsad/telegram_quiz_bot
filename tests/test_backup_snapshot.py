@@ -15,7 +15,7 @@ URI = f"postgresql://postgres.{backup.PROJECT}@aws-0-ap-south-1.pooler.supabase.
 def test_production_connection_pins_identity_tls_and_read_only():
     options = backup.production_connection(URI, backup.PROJECT, "do-not-print")
     assert options["sslmode"] == "verify-full"
-    assert options["sslrootcert"] == "/etc/ssl/certs/ca-certificates.crt"
+    assert options["sslrootcert"] == str(backup.CA_PATH)
     assert options["port"] == 5432
     assert "default_transaction_read_only=on" in options["options"]
     assert "statement_timeout=30000" in options["options"]
@@ -118,6 +118,17 @@ def test_security_comparison_uses_effective_privileges_not_acl_storage_order():
     assert "a.privilege_type,a.is_grantable" in backup.SECURITY_SQL
     assert "c.relacl::text" not in backup.SECURITY_SQL
     assert "WHEN c.relkind='S' THEN 's'" in backup.SECURITY_SQL
+
+
+def test_reviewed_provider_public_ca_is_pinned():
+    backup.validate_certificate()
+
+
+def test_changed_provider_ca_is_refused(tmp_path):
+    certificate = tmp_path / "changed.crt"
+    certificate.write_text(backup.CA_PATH.read_text().replace("MIIDxD", "MIIDxE"))
+    with pytest.raises(backup.SnapshotError):
+        backup.validate_certificate(certificate)
 
 
 @pytest.mark.parametrize("error,expected", [

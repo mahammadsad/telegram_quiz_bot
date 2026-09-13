@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 import re
+import ssl
 import subprocess
 import tempfile
 import time
@@ -27,6 +28,8 @@ from scripts import backup_archive as archive
 
 PROJECT = "tizxodkcpglmxgtwepor"
 RECIPIENT = "39F3FC1CE7F58FAA4CCB823FCBC34F51F9DA20DC"
+CA_PATH = archive.ROOT / "config/supabase-prod-ca-2021.crt"
+CA_DER_SHA256 = "807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa"
 IMAGE = "postgres:17@sha256:67f41722b7a8cbdb868a44a4995c846eddfdc2973bccb291ce937dce88ad5675"
 DOCKER = ["docker", "--host", "unix:///var/run/docker.sock"]
 SCHEMAS = ("public", "supabase_migrations", "extensions")
@@ -121,8 +124,16 @@ def production_connection(uri: str, project_ref: str, password: str) -> dict:
         raise SnapshotError("The exact production session-pooler identity is required.")
     return {"host": parsed.hostname, "port": 5432, "dbname": "postgres",
             "user": parsed.username, "password": password, "connect_timeout": 10,
-            "sslmode": "verify-full", "sslrootcert": "/etc/ssl/certs/ca-certificates.crt",
+            "sslmode": "verify-full", "sslrootcert": str(CA_PATH),
             "options": OPTIONS, "application_name": "citizen-affairs-readonly-backup"}
+
+
+def validate_certificate(path: Path = CA_PATH) -> None:
+    with archive.open_regular(path) as stream:
+        pem = stream.read(16385).decode("ascii")
+    if (len(pem) > 16384 or pem.count("-----BEGIN CERTIFICATE-----") != 1
+        or hashlib.sha256(ssl.PEM_cert_to_DER_cert(pem)).hexdigest() != CA_DER_SHA256):
+        raise SnapshotError("The reviewed Supabase CA certificate is required.")
 
 
 def workflow_identity(environment) -> dict:
@@ -263,6 +274,7 @@ def main() -> int:
     phase = "identity"
     try:
         identity = workflow_identity(os.environ)
+        validate_certificate()
         linked = archive.ROOT / "supabase" / ".temp"
         connection_options = production_connection(
             (linked / "pooler-url").read_text().strip(),
@@ -278,12 +290,13 @@ def main() -> int:
             pg_environment = clean_environment() | {
                 "PGHOST": connection_options["host"], "PGPORT": "5432", "PGDATABASE": "postgres",
                 "PGUSER": connection_options["user"], "PGPASSWORD": connection_options["password"],
-                "PGSSLMODE": "verify-full", "PGSSLROOTCERT": "/etc/ssl/certs/ca-certificates.crt",
+                "PGSSLMODE": "verify-full", "PGSSLROOTCERT": "/run/backup-ca.pem",
                 "PGOPTIONS": OPTIONS, "PGCONNECT_TIMEOUT": "10",
             }
             container_identity = directory / "export-container.id"
             dump_command = [*DOCKER, "run", "--rm", "--cidfile", str(container_identity),
                             "--log-driver", "none", "--memory", "512m",
+                            "--mount", f"type=bind,source={CA_PATH},target=/run/backup-ca.pem,readonly",
                             "--security-opt", "no-new-privileges"]
             for name in pg_environment:
                 if name.startswith("PG"):

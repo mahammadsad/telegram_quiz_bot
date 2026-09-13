@@ -120,6 +120,25 @@ has yet been verified at this implementation checkpoint.
    encryption manifest for a restore receipt.
 
 The provider-only migration gate is unchanged and continues to fail closed.
+
+The first actual backup attempts (`34783373716`, `34783553252`) produced no
+artifact. Safe diagnostics on the second attempt identified a TLS CA failure
+before source connection completed. The exporter now pins the **public**
+Supabase Root 2021 CA from the download URL used by the official Studio
+`apps/studio/hooks/custom-content/custom-content.json`. Its DER SHA-256 is
+`807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa`, expiry
+26 April 2031. Both clients retain `verify-full`; the export container receives
+only this public certificate through a read-only mount. The isolated restore
+container still has no mounts or network. No server SSL setting was changed.
+
+The synthetic scoped restore also found two verification issues: an empty
+default `public` schema conflicting with the explicit-schema dump, and an
+explicit default sequence ACL being represented as NULL after restore. The
+drill now prepares only its fresh empty schema and compares canonical effective
+privileges, including defaults; a real added `anon` grant still fails equality.
+TCP readiness avoids the Docker image's temporary socket-only initialization
+server. Protected CI `34783484054` passed all 78 encryption/snapshot/restore
+cases, including the concurrent-edit test, before the CA follow-up.
 No Supabase billing upgrade or new third-party storage service is needed for
 the synthetic work above. Retention, durable storage and the actual production
 restore are not yet completed or represented as completed audit items.
