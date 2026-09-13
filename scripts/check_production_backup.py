@@ -36,6 +36,37 @@ def has_recent_completed_backup(payload: object, now: datetime) -> bool:
     return False
 
 
+def has_recent_pitr_window(payload: object, now: datetime) -> bool:
+    """Require a real ordered recovery range, not merely enabled PITR settings."""
+    if not isinstance(payload, dict):
+        return False
+    if payload.get("pitr_enabled") is not True or payload.get("walg_enabled") is not True:
+        return False
+    window = payload.get("physical_backup_data")
+    if not isinstance(window, dict):
+        return False
+    earliest = window.get("earliest_physical_backup_date_unix")
+    latest = window.get("latest_physical_backup_date_unix")
+    # bool is an int subclass; API timestamps must be actual integer seconds.
+    if type(earliest) is not int or type(latest) is not int:
+        return False
+    return (
+        0 < earliest <= latest <= now.timestamp()
+        and now.timestamp() - latest <= MAX_BACKUP_AGE.total_seconds()
+    )
+
+
+def backup_summary(payload: object, now: datetime) -> dict[str, bool | int | None]:
+    """Allowlisted diagnostics only: no raw records, identifiers or URLs."""
+    records = payload.get("backups") if isinstance(payload, dict) else None
+    return {
+        "backup_records": len(records) if isinstance(records, list) else None,
+        "recent_completed_backup": has_recent_completed_backup(payload, now),
+        "pitr_enabled": isinstance(payload, dict) and payload.get("pitr_enabled") is True,
+        "recent_pitr_window": has_recent_pitr_window(payload, now),
+    }
+
+
 def main() -> int:
     if os.environ.get("EXPECTED_SUPABASE_PROJECT_REF") != PRODUCTION_REF:
         print("Backup preflight refused: production identity mismatch.")
@@ -55,10 +86,12 @@ def main() -> int:
         # Never echo provider bodies, credentials, backup IDs or download URLs.
         print("Backup preflight unavailable; production migration remains blocked.")
         return 1
-    if not has_recent_completed_backup(payload, datetime.now(timezone.utc)):
-        print("No completed provider backup within 48 hours; production migration blocked.")
+    summary = backup_summary(payload, datetime.now(timezone.utc))
+    print("Backup evidence: " + json.dumps(summary, sort_keys=True))
+    if not (summary["recent_completed_backup"] or summary["recent_pitr_window"]):
+        print("No verified provider recovery point within 48 hours; production migration blocked.")
         return 1
-    print("Recent completed provider backup confirmed; restore drill is a separate gate.")
+    print("Recent provider recovery point confirmed; restore drill is a separate gate.")
     return 0
 
 

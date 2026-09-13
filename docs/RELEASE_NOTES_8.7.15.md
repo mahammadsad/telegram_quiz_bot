@@ -50,6 +50,19 @@ apply has been verified.
 
 ## Rollback and remaining work
 
+Backup-gate follow-up: the initial checker handled only completed daily backup
+rows. Supabase's documented PITR mode replaces daily backups and exposes an
+earliest/latest recovery range separately. A valid PITR response with no daily
+rows reproduced a false rejection. The checker now also accepts strictly
+enabled WAL-G/PITR with an ordered positive integer recovery range whose latest
+point is no older than 48 hours and not in the future. Missing/malformed/stale
+ranges and enabled flags alone remain blocked. Allowlisted counts/booleans make
+the next protected read distinguish missing coverage from checker limitations;
+no live recovery coverage or restored data is assumed from the unit fixture.
+
+References: [Supabase backup behavior](https://supabase.com/docs/guides/platform/backups)
+and [Management API backup response](https://supabase.com/docs/reference/api/v1-list-all-backups).
+
 Pre-release verification (13 September IST): 931 protected Python/database
 tests, 336 mobile tests and 6 service-worker tests passed for `4b7af56`.
 Staging migration source MD5 `aedfc1cf07a0ca76d807425381565c32` and service-only
