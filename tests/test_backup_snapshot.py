@@ -98,6 +98,19 @@ def test_failed_export_cli_never_prints_exception(monkeypatch, capsys):
     assert "secret learner" not in capsys.readouterr().out
 
 
+@pytest.mark.parametrize("scope", [None, {}, {"large_objects": 0},
+    {"large_objects": 1, "unsupported_relations": 0},
+    {"large_objects": 0, "unsupported_relations": 1},
+    {"large_objects": False, "unsupported_relations": 0}])
+def test_scope_gate_refuses_unsupported_or_missing_evidence(scope):
+    with pytest.raises(backup.SnapshotError):
+        backup.validate_scope(scope)
+
+
+def test_scope_gate_accepts_exact_supported_snapshot():
+    backup.validate_scope({"large_objects": 0, "unsupported_relations": 0})
+
+
 def test_production_workflow_uploads_only_encrypted_allowlist():
     import yaml
 

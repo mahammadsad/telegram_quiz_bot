@@ -59,6 +59,13 @@ SELECT coalesce(jsonb_agg(jsonb_build_array(n.nspname,c.relname,c.relrowsecurity
 FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
 WHERE n.nspname IN ('public','supabase_migrations') AND c.relkind IN ('r','v','S')
 """
+SCOPE_SQL = """
+SELECT jsonb_build_object(
+ 'unsupported_relations', (SELECT count(*) FROM pg_class c
+   JOIN pg_namespace n ON n.oid=c.relnamespace
+   WHERE n.nspname IN ('public','supabase_migrations') AND c.relkind IN ('f','m','p')),
+ 'large_objects', (SELECT count(*) FROM pg_largeobject_metadata))
+"""
 
 
 class SnapshotError(Exception):
@@ -133,6 +140,12 @@ def inventory(query) -> dict:
     return {"tables": rows, "security": query(SECURITY_SQL), "contract": contract}
 
 
+def validate_scope(scope) -> None:
+    if (not isinstance(scope, dict) or set(scope) != {"unsupported_relations", "large_objects"}
+        or any(type(value) is not int or value != 0 for value in scope.values())):
+        raise SnapshotError("Application recovery scope needs review before export.")
+
+
 @contextmanager
 def isolated_restore():
     """No network, bind mounts, hosted secrets or Docker/service log collection."""
@@ -171,6 +184,10 @@ def isolated_restore():
                 "CREATE ROLE service_role NOLOGIN BYPASSRLS; CREATE ROLE supabase_admin NOLOGIN; "
                 "CREATE ROLE dashboard_user NOLOGIN; CREATE ROLE supabase_auth_admin NOLOGIN; "
                 "CREATE ROLE supabase_storage_admin NOLOGIN;")
+        # Explicit-schema pg_dump emits CREATE SCHEMA public. Remove only the
+        # empty default schema of this newly created, network-isolated database.
+        # No CASCADE: unexpected objects must stop the drill, not be deleted.
+        execute("DROP SCHEMA public;")
         yield container, execute
     finally:
         # Only the random exact container created by this invocation is removed.
@@ -202,6 +219,7 @@ def export_snapshot(connection, dump: Path, dump_command: list[str], dump_enviro
         snapshot = connection.execute("SELECT pg_export_snapshot()").fetchone()[0]
         if not re.fullmatch(r"[A-Fa-f0-9]+-[A-Fa-f0-9]+-[0-9]+", snapshot):
             raise SnapshotError("Exported snapshot identity is invalid.")
+        validate_scope(connection.execute(SCOPE_SQL).fetchone()[0])
         descriptor = os.open(dump, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         with os.fdopen(descriptor, "wb") as output:
             command([*dump_command, "--format=custom", "--no-password", "--lock-wait-timeout=5s",
@@ -234,7 +252,9 @@ def main() -> int:
                 "PGSSLMODE": "verify-full", "PGSSLROOTCERT": "/etc/ssl/certs/ca-certificates.crt",
                 "PGOPTIONS": OPTIONS, "PGCONNECT_TIMEOUT": "10",
             }
-            dump_command = [*DOCKER, "run", "--rm", "--log-driver", "none", "--memory", "512m",
+            container_identity = directory / "export-container.id"
+            dump_command = [*DOCKER, "run", "--rm", "--cidfile", str(container_identity),
+                            "--log-driver", "none", "--memory", "512m",
                             "--security-opt", "no-new-privileges"]
             for name in pg_environment:
                 if name.startswith("PG"):
@@ -242,8 +262,20 @@ def main() -> int:
             dump_command.extend([IMAGE, "pg_dump"])
             phase = "read-only snapshot"
             captured_at = datetime.now(timezone.utc).isoformat()
-            with psycopg.connect(**connection_options, autocommit=True) as connection:
-                expected = export_snapshot(connection, dump, dump_command, pg_environment)
+            try:
+                with psycopg.connect(**connection_options, autocommit=True) as connection:
+                    expected = export_snapshot(connection, dump, dump_command, pg_environment)
+            finally:
+                # A timed-out Docker client alone does not terminate pg_dump.
+                # Stop only its captured exact container, including on failure.
+                if container_identity.exists():
+                    with archive.open_regular(container_identity) as stream:
+                        export_id = stream.read(65).decode().strip()
+                    if not re.fullmatch(r"[a-f0-9]{64}", export_id):
+                        raise SnapshotError("Export container identity is invalid.")
+                    subprocess.run([*DOCKER, "rm", "--force", "--volumes", export_id],
+                                   env=clean_environment(), stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL, timeout=30, check=False)
             phase = "isolated restore"
             restore_and_compare(dump, expected)
             phase = "encryption"
