@@ -4,6 +4,7 @@ import os
 import subprocess
 from unittest.mock import patch
 
+import psycopg
 import pytest
 
 from scripts import backup_snapshot as backup
@@ -117,6 +118,40 @@ def test_security_comparison_uses_effective_privileges_not_acl_storage_order():
     assert "a.privilege_type,a.is_grantable" in backup.SECURITY_SQL
     assert "c.relacl::text" not in backup.SECURITY_SQL
     assert "WHEN c.relkind='S' THEN 's'" in backup.SECURITY_SQL
+
+
+@pytest.mark.parametrize("error,expected", [
+    (psycopg.OperationalError("secret host: certificate verify failed"), "tls_certificate"),
+    (psycopg.OperationalError("secret value: unsupported startup parameter: options"), "startup_parameter"),
+    (psycopg.OperationalError("secret password"), "database"),
+    (ValueError("secret learner row"), "local_configuration"),
+    (subprocess.TimeoutExpired(["secret command"], 10), "subprocess_timeout"),
+])
+def test_failure_categories_never_echo_private_context(error, expected):
+    assert backup.failure_category(error) == expected
+
+
+def test_isolated_readiness_waits_for_tcp_server_not_temporary_init_socket():
+    calls = []
+
+    def fake_command(arguments, **kwargs):
+        calls.append(arguments)
+        if "run" in arguments:
+            return ("a" * 64).encode()
+        return b""
+
+    with patch.object(backup, "command", side_effect=fake_command), patch.object(
+        subprocess, "run", return_value=subprocess.CompletedProcess([], 0)
+    ) as readiness:
+        with backup.isolated_restore():
+            pass
+    arguments = readiness.call_args.args[0]
+    assert arguments[arguments.index("pg_isready") + 1:] == ["-h", "127.0.0.1", "-U", "postgres"]
+    container_arguments = calls[0]
+    assert container_arguments[container_arguments.index("--network") + 1] == "none"
+    assert container_arguments[container_arguments.index("--log-driver") + 1] == "none"
+    assert "--mount" not in container_arguments and "--volume" not in container_arguments
+    assert calls[-1] == [*backup.DOCKER, "rm", "--force", "--volumes", "a" * 64]
 
 
 def test_production_workflow_uploads_only_encrypted_allowlist():

@@ -92,6 +92,25 @@ def command(arguments, *, timeout=180, **kwargs):
     return result.stdout
 
 
+def failure_category(error: Exception) -> str:
+    """Allowlisted diagnostics, never raw database/command output."""
+    if isinstance(error, psycopg.Error):
+        message = str(error).lower()
+        if "certificate verify failed" in message or "root certificate" in message:
+            return "tls_certificate"
+        if "unsupported startup parameter" in message:
+            return "startup_parameter"
+        return {"28P01": "authentication", "42501": "database_permission",
+                "57014": "database_timeout", "25006": "read_only_violation"}.get(error.sqlstate, "database")
+    if isinstance(error, subprocess.TimeoutExpired):
+        return "subprocess_timeout"
+    if isinstance(error, SnapshotError):
+        return "snapshot_validation_or_subprocess"
+    if isinstance(error, archive.ArchiveError):
+        return "archive_validation"
+    return "local_configuration"
+
+
 def production_connection(uri: str, project_ref: str, password: str) -> dict:
     """Accept only CLI-linked session pooling, never arbitrary libpq parameters."""
     parsed = urlsplit(uri)
@@ -170,7 +189,9 @@ def isolated_restore():
         if not re.fullmatch(r"[a-f0-9]{64}", container):
             raise SnapshotError("Disposable restore container identity is invalid.")
         for _ in range(30):
-            ready = subprocess.run([*DOCKER, "exec", container, "pg_isready", "-U", "postgres"],
+            # The image's temporary initialization server accepts Unix sockets
+            # before restarting. TCP readiness waits for the final server.
+            ready = subprocess.run([*DOCKER, "exec", container, "pg_isready", "-h", "127.0.0.1", "-U", "postgres"],
                                    env=clean_environment(), stdout=subprocess.DEVNULL,
                                    stderr=subprocess.DEVNULL, timeout=5, check=False)
             if ready.returncode == 0:
@@ -268,10 +289,11 @@ def main() -> int:
                 if name.startswith("PG"):
                     dump_command.extend(["--env", name])
             dump_command.extend([IMAGE, "pg_dump"])
-            phase = "read-only snapshot"
+            phase = "source connection"
             captured_at = datetime.now(timezone.utc).isoformat()
             try:
                 with psycopg.connect(**connection_options, autocommit=True) as connection:
+                    phase = "read-only snapshot"
                     expected = export_snapshot(connection, dump, dump_command, pg_environment)
             finally:
                 # A timed-out Docker client alone does not terminate pg_dump.
@@ -307,8 +329,9 @@ def main() -> int:
             print("Application snapshot restored and encrypted. Owner decryption and release approval remain separate.")
         return 0
     except (SnapshotError, archive.ArchiveError, psycopg.Error, OSError, ValueError,
-            KeyError, subprocess.SubprocessError):
-        print(f"Application backup stopped at {phase}; no production write or recovery-gate bypass was performed.")
+            KeyError, subprocess.SubprocessError) as error:
+        print(f"Application backup stopped at {phase} ({failure_category(error)}); "
+              "no production write or recovery-gate bypass was performed.")
         return 1
 
 
