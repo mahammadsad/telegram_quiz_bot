@@ -1,6 +1,6 @@
 # Production release and rollback
 
-This runbook is the production gate for application version `8.7.14`. Passing local unit tests is not production evidence.
+This runbook is the production gate for application version `8.7.15`. Passing local unit tests is not production evidence.
 
 ## Ownership and required inputs
 
@@ -26,7 +26,7 @@ Never print service keys, bot tokens or synthetic `initData` in logs.
    git rev-parse HEAD
    ```
 
-4. Create and verify a production database backup/restore point. Record its identifier outside the repository.
+4. Create and verify a production database backup/restore point. Record its identifier outside the repository. Migration plan/apply workflows require either a provider-reported `COMPLETED` backup no older than 48 hours or an enabled WAL-G/PITR recovery window with ordered integer endpoints and a latest recovery point within 48 hours (never in the future). Supabase stops taking daily backups when PITR is enabled, so an empty daily-backup list alone is not proof of missing recovery coverage. Enabled settings without an actual recovery range do not pass. This read-only metadata check does not substitute for a restore drill; no learner data is downloaded or restored. Diagnostics expose only allowlisted counts and booleans, not backup identifiers, timestamps, URLs or credentials.
 5. Confirm production secrets and these non-secret values in Render:
 
    ```text
@@ -39,6 +39,15 @@ Never print service keys, bot tokens or synthetic `initData` in logs.
 6. Confirm the rollback owner is present and the previous known-good application commit is available.
 
 ## Database migration order
+
+Release 8.7.15 adds `20260912132928_durable_replenishment_job_rotation.sql`.
+Verify disposable queue fairness tests, staging source/permissions/canary and
+the exact production migration plan before applying. Pin its source only after
+production readback. Application rollback is
+`a8b79650e655d21f33e43f5a1b987804b29ba4df` (8.7.14), keeping the compatible
+migration. Reversing database claim ordering itself needs a reviewed forward
+migration, not an application rollback or migration-ledger deletion. See
+`RELEASE_NOTES_8.7.15.md` for the exact rollback scope.
 
 Release 8.7.14 has no new migrations. Its application rollback target is
 `fc94faa09ee89b74274a26282b390ffd357d5116` (8.7.13), retaining all 65 migrations.
@@ -77,7 +86,7 @@ Do **not** schedule or manually call `public.process_due_account_deletions` unti
 ## Staging gate
 
 1. Deploy the exact release commit to staging.
-2. Verify `/version` reports `applicationVersion: 8.7.11`, the expected full `commitSha`, staging environment and build time.
+2. Verify `/version` reports `applicationVersion: 8.7.15`, the expected full `commitSha`, staging environment and build time.
 3. Verify root HTML, CSS, JS, icon, manifest, service worker, `/health/live`, `/health/ready`, an answer-free quiz, server-timed start/submission and dashboard with only the synthetic user.
 4. Test a duplicate submission with the same attempt ID; it must be idempotent.
 5. Submit forged client duration telemetry; it must not become trusted ranking time.
