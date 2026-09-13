@@ -210,13 +210,16 @@ def verify(archive: Path, manifest_path: Path, key_home: Path, fingerprint: str)
             size = 0
             magic = b""
             try:
+                output_stream = child.stdout
+                if output_stream is None:
+                    raise ArchiveError("Decryption output pipe is unavailable.")
                 with selectors.DefaultSelector() as selector:
-                    selector.register(child.stdout, selectors.EVENT_READ)
+                    selector.register(output_stream, selectors.EVENT_READ)
                     while True:
                         remaining = deadline - time.monotonic()
                         if remaining <= 0 or not selector.select(remaining):
                             raise ArchiveError("Archive verification timed out.")
-                        chunk = os.read(child.stdout.fileno(), 1024 * 1024)
+                        chunk = os.read(output_stream.fileno(), 1024 * 1024)
                         if not chunk:
                             break
                         size += len(chunk)

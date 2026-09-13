@@ -104,7 +104,7 @@ def failure_category(error: Exception) -> str:
         if "unsupported startup parameter" in message:
             return "startup_parameter"
         return {"28P01": "authentication", "42501": "database_permission",
-                "57014": "database_timeout", "25006": "read_only_violation"}.get(error.sqlstate, "database")
+                "57014": "database_timeout", "25006": "read_only_violation"}.get(error.sqlstate or "", "database")
     if isinstance(error, subprocess.TimeoutExpired):
         return "subprocess_timeout"
     if isinstance(error, SnapshotError):

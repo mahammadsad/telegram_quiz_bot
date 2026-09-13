@@ -75,6 +75,8 @@ jobs:
         run: |
           gpg --version
           gpgconf --version
+      - name: Type-check the recovery helpers as well as the application
+        run: mypy scripts/backup_snapshot.py
       - name: Restore the encrypted synthetic archive into a disposable database
         env:
           BACKUP_TEST_POSTGRES_CONTAINER: ${{ job.services.postgres.id }}
