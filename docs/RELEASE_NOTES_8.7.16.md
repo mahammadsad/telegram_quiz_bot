@@ -14,6 +14,11 @@ during a pending save and prevent overlapping preference writes.
   from the successful submitted values.
 - Shell cache and worker registration advance to 8.7.16-ui1 so installed Mini
   Apps can receive the corrected settings code.
+- Question-map navigation moves focus to the rendered question immediately.
+  A deferred animation-frame callback left focus on the map trigger, causing
+  a quick answer-number key to be ignored. A deterministic delayed-frame test
+  reproduced the failure seen on the first CI lifecycle attempt; it is fixed
+  without weakening keyboard guards or adding arbitrary test sleeps.
 
 The two original race scenarios failed before the fix. The new browser checks
 hold the PUT response while editing, explicitly trigger a duplicate submit,

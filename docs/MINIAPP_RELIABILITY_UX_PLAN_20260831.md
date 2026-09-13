@@ -550,6 +550,17 @@ HTTPS service-worker checks. Application candidate 8.7.16 and shell
 8.7.16-ui1 are not deployed; this work is stacked after the backup-blocked
 8.7.15 queue release. Native Telegram/assistive-technology QA remains open.
 
+## Immediate question focus follow-up — 2026-09-13
+
+Protected mobile job `103627821501` needed one retry of the 390px quiz lifecycle:
+the number-key answer immediately after selecting a question from the map was
+ignored. A deterministic test delaying the next animation frame reproduced
+focus remaining on the map trigger even though the new question was visible.
+Navigation now focuses the already-rendered semantic heading synchronously,
+matching the existing same-question path. Keyboard guards for dialogs, links,
+form editing and modifiers remain unchanged. This addresses an actual timing
+window rather than hiding the failure with test sleeps or additional retries.
+
 ## Decisions intentionally deferred (audit boundaries)
 
 - No production mutation or deployment is part of this audit.
