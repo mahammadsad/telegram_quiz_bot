@@ -519,7 +519,8 @@ def assess(*, use_cache: bool = True) -> Readiness:
                 and checks["questionQualityAdministration"]
                 and checks["sourceOptionalGeneration"]
                 and checks["dailyAttemptTiming"]
-                and checks["primaryScheduler"]
+                # Scheduler delivery/credential failures have their own required
+                # readiness check. They do not imply a broken database schema.
                 and float(contract.get("verification_threshold") or 0) == QUESTION_VERIFICATION_MIN_CONFIDENCE
             )
             active = _read_active_quiz_with_retry()

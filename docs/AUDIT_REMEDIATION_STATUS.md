@@ -57,6 +57,16 @@ Local follow-up checks pass (891 Python tests, 61 database tests skipped;
 Ruff, mypy and source parity). A confirmed recent backup/restore point and the
 remaining final-candidate gates are required before production promotion.
 
+Local follow-up candidate 8.7.16 addresses the settings UX acceptance rule for
+truthful pending/dirty/saved feedback. Two browser regressions reproduced edits
+being falsely marked saved and overlapping submissions while a save was pending.
+The fix preserves the submitted snapshot and later draft, serializes requests
+and retains explicit retry after failure. See `RELEASE_NOTES_8.7.16.md` and the
+13 September UX-plan checkpoint. Its UI candidate `b662f7e` passed authenticated
+staging smoke `34737073909`, including the question-map focus follow-up. This
+dependent release is not deployed to production and does not bypass the 8.7.15
+backup gate.
+
 Backup follow-up on 13 September: protected plan `34737305825` also checked
 the documented PITR recovery range and confirmed zero provider backup records,
 PITR disabled and no recent recovery window. The new encrypted-archive primitive
