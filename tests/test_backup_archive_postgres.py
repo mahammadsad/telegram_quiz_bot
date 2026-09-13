@@ -74,6 +74,17 @@ def test_migrated_database_encryption_decryption_and_disposable_restore(tmp_path
                     expected = snapshot.export_snapshot(
                         source, scoped_dump, [*docker, "pg_dump", "--username=postgres", f"--dbname={source_name}"], environment)
             original_run = subprocess.run
+            original_inventory = snapshot.inventory
+
+            def synthetic_inventory_diagnostics(query):
+                actual = original_inventory(query)
+                differences = {
+                    field: [(old, new) for old, new in zip(expected[field], actual[field], strict=True)
+                            if old != new][:5]
+                    for field in ("tables", "security") if expected[field] != actual[field]
+                }
+                assert not differences, differences
+                return actual
 
             def synthetic_restore_diagnostics(arguments, **kwargs):
                 # This fixture is hardwired to the synthetic local service. Do
@@ -87,6 +98,7 @@ def test_migrated_database_encryption_decryption_and_disposable_restore(tmp_path
 
             with monkeypatch.context() as scoped:
                 scoped.setattr(subprocess, "run", synthetic_restore_diagnostics)
+                scoped.setattr(snapshot, "inventory", synthetic_inventory_diagnostics)
                 snapshot.restore_and_compare(scoped_dump, expected)
             with psycopg.connect(**(connection_options | {"dbname": source_name})) as source:
                 source.execute("UPDATE public.backup_drill_fixture SET text_value=%s WHERE id=1",
