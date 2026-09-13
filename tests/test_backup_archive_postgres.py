@@ -18,21 +18,25 @@ from scripts import backup_archive as backup
 from scripts.apply_test_database import rebuild
 
 
-def test_migrated_database_encryption_decryption_and_disposable_restore(tmp_path):
+def test_migrated_database_encryption_decryption_and_disposable_restore(tmp_path, monkeypatch):
     container = os.environ.get("BACKUP_TEST_POSTGRES_CONTAINER", "")
     if not container:
         pytest.skip("Dedicated disposable PostgreSQL backup-drill service is not configured")
     assert re.fullmatch(r"[a-f0-9]{64}", container), "Expected the CI service container ID"
     # Never inherit a database service file, connection override, remote Docker
     # endpoint, or hosted password from the developer's environment.
+    for name in tuple(os.environ):
+        if name.startswith("PG"):
+            monkeypatch.delenv(name)
     environment = {"PATH": os.environ["PATH"], "LANG": "C.UTF-8"}
     docker = ["docker", "--host", "unix:///var/run/docker.sock", "exec", "-i", container]
-    suffix = uuid.uuid4().hex
+    # Stay under PostgreSQL's 63-byte identifier limit (no silent truncation).
+    suffix = uuid.uuid4().hex[:16]
     source_name = f"telegram_quiz_test_backup_source_{suffix}"
     restore_name = f"telegram_quiz_test_backup_restore_{suffix}"
     connection_options = dict(host="127.0.0.1", hostaddr="127.0.0.1", port=5432,
                               user="postgres", password="postgres", dbname="telegram_quiz_test",
-                              connect_timeout=10, options="", service="")
+                              connect_timeout=10, options="")
     key_home = tmp_path / "disposable-key"
     key_home.mkdir(mode=0o700)
     created = []
@@ -93,7 +97,7 @@ def test_migrated_database_encryption_decryption_and_disposable_restore(tmp_path
                 ).fetchone()[0] is False
         finally:
             for name in reversed(created):
-                assert re.fullmatch(r"telegram_quiz_test_backup_(source|restore)_[a-f0-9]{32}", name)
+                assert re.fullmatch(r"telegram_quiz_test_backup_(source|restore)_[a-f0-9]{16}", name)
                 admin.execute(sql.SQL("DROP DATABASE {}").format(sql.Identifier(name)))
             subprocess.run(["gpgconf", "--homedir", str(key_home), "--kill", "gpg-agent"],
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False)
