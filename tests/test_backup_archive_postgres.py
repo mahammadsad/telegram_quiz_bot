@@ -73,7 +73,21 @@ def test_migrated_database_encryption_decryption_and_disposable_restore(tmp_path
                 with psycopg.connect(**(connection_options | {"dbname": source_name}), autocommit=True) as source:
                     expected = snapshot.export_snapshot(
                         source, scoped_dump, [*docker, "pg_dump", "--username=postgres", f"--dbname={source_name}"], environment)
-            snapshot.restore_and_compare(scoped_dump, expected)
+            original_run = subprocess.run
+
+            def synthetic_restore_diagnostics(arguments, **kwargs):
+                # This fixture is hardwired to the synthetic local service. Do
+                # not add an equivalent log switch to the production exporter.
+                if "pg_restore" in arguments:
+                    kwargs["stderr"] = subprocess.PIPE
+                    result = original_run(arguments, **kwargs)
+                    assert result.returncode == 0, result.stderr.decode("utf-8", errors="replace")
+                    return result
+                return original_run(arguments, **kwargs)
+
+            with monkeypatch.context() as scoped:
+                scoped.setattr(subprocess, "run", synthetic_restore_diagnostics)
+                snapshot.restore_and_compare(scoped_dump, expected)
             with psycopg.connect(**(connection_options | {"dbname": source_name})) as source:
                 source.execute("UPDATE public.backup_drill_fixture SET text_value=%s WHERE id=1",
                                ("বাংলা synthetic recovery fixture",))
