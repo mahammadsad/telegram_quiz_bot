@@ -62,8 +62,23 @@ truthful pending/dirty/saved feedback. Two browser regressions reproduced edits
 being falsely marked saved and overlapping submissions while a save was pending.
 The fix preserves the submitted snapshot and later draft, serializes requests
 and retains explicit retry after failure. See `RELEASE_NOTES_8.7.16.md` and the
-13 September UX-plan checkpoint. This dependent branch is not deployed and
-does not bypass the 8.7.15 backup gate.
+13 September UX-plan checkpoint. Its UI candidate `b662f7e` passed authenticated
+staging smoke `34737073909`, including the question-map focus follow-up. This
+dependent release is not deployed to production and does not bypass the 8.7.15
+backup gate.
+
+Backup follow-up on 13 September: protected plan `34737305825` also checked
+the documented PITR recovery range and confirmed zero provider backup records,
+PITR disabled and no recent recovery window. The new encrypted-archive primitive
+and a complete migrated-schema synthetic restore passed CI `34751036976`
+(1,002 Python/database tests, 33 dedicated encryption/restore tests, 336 mobile
+and six HTTPS service-worker tests). The owner-held public recipient is pinned;
+the private key remains in a dedicated owner-only home-directory keyring, and
+its local synthetic decryption check passed. No production rows were exported,
+no production migration was applied, and no backup gate was bypassed. Actual
+snapshot capture, isolated restore, archive retention and recovery evidence
+remain open. See `ENCRYPTED_BACKUP_RECOVERY.md`; this does not close a phase or
+represent production disaster-recovery completion.
 
 Status meanings:
 
