@@ -809,7 +809,9 @@
     questionStartedAt = Date.now();
     saveDraft();
     renderQuestion();
-    window.requestAnimationFrame(function(){ byId("q-text").focus(); });
+    // The question DOM is ready now. Deferring focus leaves the map trigger
+    // owning immediate number-key input until the next animation frame.
+    byId("q-text").focus();
   }
 
   function startTimer(){
