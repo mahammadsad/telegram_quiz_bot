@@ -2,6 +2,23 @@
 
 ## Status and boundaries
 
+**19 September verification:** protected workflow `34783767495`, at reviewed
+exporter `c3f6f3bd1fabc21c93f85dbcff80de416fe2adbc`, successfully captured the
+production application snapshot on 13 September and restored it in isolation.
+All 75 application/ledger tables matched the shared source snapshot's row
+fingerprints, effective privileges, RLS flags and application contracts. Only
+the encrypted archive and bounded receipts were retained by GitHub (30 days).
+The actual artifact was downloaded to the owner's private backup directory and
+passed retained-key decryption, length, magic and checksum verification on
+19 September, without creating a plaintext copy. Its receipts remain immutable;
+an owner-local `OWNER-VERIFICATION.md` records the distinct custody check.
+
+This proves the scoped export/restore/encryption pipeline on real data. It does
+not make a six-day-old snapshot meet the 48-hour release gate, cover managed
+services, or remove the need for independent key-loss recovery. A fresh capture
+and release-gate provenance validation are still required. No production
+migration or gate bypass has been performed.
+
 The production provider check on 13 September 2026, workflow `34737305825`,
 reported zero backup records, PITR disabled, and no recent recovery window.
 Production still has 65 pinned migrations. The queue-rotation migration must
@@ -94,8 +111,8 @@ be uploaded, with 30-day GitHub artifact retention. The receipt distinguishes an
 isolated plaintext archive restore from the still-required owner-key decryption
 check. This is an application recovery point, not full project disaster recovery:
 private scheduler records, Cron/Net/Vault, managed Auth/Storage, role credentials
-and hosting configuration are excluded. No actual production export or restore
-has yet been verified at this implementation checkpoint.
+and hosting configuration are excluded. The initial implementation preceded the
+actual production verification recorded above.
 
 1. Owner-held recipient pinning and the synthetic local key-custody round trip
    are complete. Define independent key-loss recovery and encrypted-archive
@@ -105,14 +122,12 @@ has yet been verified at this implementation checkpoint.
    complete Supabase project backup. Managed Auth, Storage objects, extension
    configuration, role credentials, Vault keys/secrets, Cron jobs, Edge Functions
    and hosting configuration require separate recovery treatment as applicable.
-3. Implement a bounded, read-only, consistent production snapshot export in the
-   protected project workflow. Use a verified exact project connection; never
-   print connection strings, rows or raw export/restore error output. Upload
-   only an explicitly allowlisted encrypted artifact, never a working directory.
-4. Restore the actual snapshot in an isolated disposable environment, verify
-   application contracts, data integrity and permissions, download the encrypted
-   archive, and verify decryption with the owner's retained key. Never restore
-   over production or staging as a test.
+3. The bounded read-only snapshot exporter is implemented and passed a real
+   production capture. Refresh the snapshot before release, preserving exact
+   project/TLS checks and the ciphertext-only upload allowlist.
+4. The real isolated restore and retained-key decryption checks passed for the
+   13 September snapshot. Repeat them for the fresh release snapshot. Never
+   restore over production or staging as a test.
 5. Bind a recovery receipt to exact project identity, exporting workflow and
    reviewed commit, snapshot age, artifact hash, successful restore and key-custody
    checks. Only then consider extending the release gate for this alternative.
@@ -139,9 +154,10 @@ privileges, including defaults; a real added `anon` grant still fails equality.
 TCP readiness avoids the Docker image's temporary socket-only initialization
 server. Protected CI `34783484054` passed all 78 encryption/snapshot/restore
 cases, including the concurrent-edit test, before the CA follow-up.
-No Supabase billing upgrade or new third-party storage service is needed for
-the synthetic work above. Retention, durable storage and the actual production
-restore are not yet completed or represented as completed audit items.
+No Supabase billing upgrade or new third-party storage service was used. The
+real encrypted archive has 30-day GitHub retention plus a retained owner-local
+copy. Recurring recovery-point freshness, independent private-key recovery and
+complete managed-project disaster recovery are not completed audit items.
 
 ## Recovery/rollback of this code change
 
