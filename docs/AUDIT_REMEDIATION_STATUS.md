@@ -73,8 +73,14 @@ in a network-isolated disposable database, compared row fingerprints, effective
 ACL/RLS state and application contracts, and retained only encrypted artifacts.
 The downloaded archive passed owner-key decryption and checksum verification on
 19 September. Its 13 September capture is too old for the 48-hour release gate;
-a fresh capture and independently bound release evidence remain required.
-The provider-only gate and 65 production migration pins are unchanged. Managed
+a fresh capture and independently bound release evidence were required.
+Fresh run `35450108411` captured production at 19 September 14:54:13 UTC and
+passed the 75-table isolated restore; its actual encrypted artifact passed
+retained-key verification by 15:11:54 UTC. A narrow alternative recovery gate
+now validates protected owner approval, live GitHub run/artifact provenance,
+48-hour freshness, exact migration source hashes and the linked dry-run plan.
+It does not waive recovery requirements or authorize later migrations. The
+production plan/apply and 66th migration pin remain unperformed. Managed
 services, private scheduler state, key-loss recovery and complete project DR
 remain outside this application-snapshot evidence. See `ENCRYPTED_BACKUP_RECOVERY.md`.
 

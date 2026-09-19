@@ -1,12 +1,17 @@
-"""Read-only provider backup preflight; never download or restore learner data."""
+"""Read-only recovery preflight; never download or restore learner data."""
 
 from __future__ import annotations
 
 import json
 import os
+import sys
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from scripts.verified_recovery_point import verify_recovery_point  # noqa: E402
 
 PRODUCTION_REF = "tizxodkcpglmxgtwepor"
 MAX_BACKUP_AGE = timedelta(hours=48)
@@ -67,6 +72,27 @@ def backup_summary(payload: object, now: datetime) -> dict[str, bool | int | Non
     }
 
 
+def application_recovery_gate(now: datetime) -> int:
+    """No generic override: protected owner approval AND live provenance required."""
+    try:
+        raw = os.environ.get("APP_RECOVERY_EVIDENCE", "")
+        if not raw:
+            raise ValueError("Missing approval")
+        plan_path = Path(os.environ["RUNNER_TEMP"]) / "production-migration-plan.txt"
+        if plan_path.is_symlink() or plan_path.stat().st_size > 1024 * 1024:
+            raise ValueError("Invalid plan")
+        verify_recovery_point(
+            raw,
+            os.environ.get("GH_TOKEN", ""), now,
+            plan=plan_path.read_text(encoding="utf-8"),
+        )
+    except (OSError, ValueError, TypeError, KeyError, StopIteration):
+        print("No valid scoped application recovery approval; production migration blocked.")
+        return 1
+    print("Fresh owner-verified application recovery point confirmed for the exact reviewed migration only.")
+    return 0
+
+
 def main() -> int:
     if os.environ.get("EXPECTED_SUPABASE_PROJECT_REF") != PRODUCTION_REF:
         print("Backup preflight refused: production identity mismatch.")
@@ -81,16 +107,16 @@ def main() -> int:
     )
     try:
         with build_opener(NoRedirects()).open(request, timeout=20) as response:
-            payload = json.load(response)
+            payload = json.loads(response.read(1024 * 1024 + 1))
     except (HTTPError, URLError, TimeoutError, ValueError):
         # Never echo provider bodies, credentials, backup IDs or download URLs.
-        print("Backup preflight unavailable; production migration remains blocked.")
-        return 1
+        print("Provider backup preflight unavailable; checking scoped recovery evidence.")
+        return application_recovery_gate(datetime.now(timezone.utc))
     summary = backup_summary(payload, datetime.now(timezone.utc))
     print("Backup evidence: " + json.dumps(summary, sort_keys=True))
     if not (summary["recent_completed_backup"] or summary["recent_pitr_window"]):
-        print("No verified provider recovery point within 48 hours; production migration blocked.")
-        return 1
+        print("No verified provider recovery point within 48 hours; checking scoped recovery evidence.")
+        return application_recovery_gate(datetime.now(timezone.utc))
     print("Recent provider recovery point confirmed; restore drill is a separate gate.")
     return 0
 

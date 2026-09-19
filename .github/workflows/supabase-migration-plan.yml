@@ -28,6 +28,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment: production
+    permissions:
+      contents: read
+      actions: read
     env:
       EXPECTED_SUPABASE_PROJECT_REF: tizxodkcpglmxgtwepor
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -75,12 +78,17 @@ jobs:
           --linked --password "$SUPABASE_DB_PASSWORD"
 
       - name: Show migration plan without changing production
-        run: >-
-          npx --yes supabase@2.77.0 db push
-          --password "$SUPABASE_DB_PASSWORD"
-          --include-all --dry-run --yes
+        shell: bash
+        run: |
+          set -o pipefail
+          npx --yes supabase@2.77.0 db push \
+            --password "$SUPABASE_DB_PASSWORD" \
+            --include-all --dry-run --yes 2>&1 | tee "$RUNNER_TEMP/production-migration-plan.txt"
 
       - name: Confirm a recent production recovery point
+        env:
+          APP_RECOVERY_EVIDENCE: ${{ vars.APP_RECOVERY_EVIDENCE }}
+          GH_TOKEN: ${{ github.token }}
         run: python scripts/check_production_backup.py
 
   backup-application:

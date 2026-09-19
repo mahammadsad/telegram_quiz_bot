@@ -16,8 +16,18 @@ an owner-local `OWNER-VERIFICATION.md` records the distinct custody check.
 This proves the scoped export/restore/encryption pipeline on real data. It does
 not make a six-day-old snapshot meet the 48-hour release gate, cover managed
 services, or remove the need for independent key-loss recovery. A fresh capture
-and release-gate provenance validation are still required. No production
+and release-gate provenance validation were the next requirements. No production
 migration or gate bypass has been performed.
+
+Fresh protected run `35450108411` at exporter `e4bb797295c5964f78e3b21c89f0a0b7c978a6bb`
+succeeded on 19 September. Its capture time is `2026-09-19T14:54:13.696427Z`;
+all 75 tables again passed isolated restore comparison. Artifact `10586058103`
+was downloaded into the owner's private `production-run-35450108411` directory.
+Retained-key decryption and integrity verification passed, repeated immediately
+before `2026-09-19T15:11:54Z`. The unchanged receipt and owner-local
+`owner-approval.json` distinguish the exporter restore from the owner custody
+check. The GitHub artifact ZIP digest is
+`8accc1b7c692d42f6dfd06fcbcce75007c364296a815dce86175a3f1ef560776`.
 
 The production provider check on 13 September 2026, workflow `34737305825`,
 reported zero backup records, PITR disabled, and no recent recovery window.
@@ -89,7 +99,7 @@ counts do not certify a complete project recovery strategy.
 The next implementation is `scripts/backup_snapshot.py`, exposed only by the
 manual migration-plan workflow's separate `operation=backup` job. Its exact
 acknowledgement is `BACKUP APPLICATION SCHEMAS FOR tizxodkcpglmxgtwepor`.
-This job never calls migration apply and does not change the provider-only gate.
+This job never calls migration apply or automatically approve a release.
 It uses the linked session pooler with exact project username, port 5432,
 verified TLS and read-only transactions. One exported repeatable-read snapshot
 is shared by `pg_dump` and source row fingerprints; locks/statements/transactions
@@ -134,7 +144,43 @@ actual production verification recorded above.
    Do not introduce a generic `backup_verified=true` bypass or mistake the
    encryption manifest for a restore receipt.
 
-The provider-only migration gate is unchanged and continues to fail closed.
+## Narrow application-recovery release alternative
+
+`scripts/verified_recovery_point.py` adds a deliberately one-release alternative
+when the provider cannot show a fresh recovery point. It is **not** a general
+replacement for provider backups or full-project disaster recovery:
+
+- The production environment's `APP_RECOVERY_EVIDENCE` record is an operator
+  attestation created only after actual retained-key verification. It embeds the
+  unchanged exporter receipt, artifact ID/ZIP digest, owner verification time,
+  and approved migration SHA-256. It contains no key or learner rows.
+- The gate checks exact project, recipient, reviewed exporter commit, scope,
+  restore result, table count, ordered timestamps and a maximum 48-hour age.
+- GitHub read-only API requests independently check the successful manual run,
+  exact repository/source, successful backup job, skipped plan job, and live,
+  unexpired artifact identity and digest. Redirects and oversized responses are
+  rejected; raw errors and credentials are not printed. The gate does not
+  download/decrypt learner data or independently repeat the owner's custody check.
+- The pinned 65-entry ledger source, all historical SQL checksums, exact pending
+  queue-rotation migration SHA-256 and complete local SQL filename set must match.
+  The actual linked CLI dry run must list **only** that reviewed migration.
+  A missing/no-op/broader/changed plan fails closed. This alternative intentionally
+  stops working after the ledger is advanced or a different migration is added.
+- Both plan and apply jobs capture their own fresh dry run with `pipefail` and
+  check the recovery evidence before any apply. The existing fresh provider
+  backup/PITR path remains available. No generic boolean override is accepted.
+
+Only after local verification and live provenance validation may the owner-local
+approval record be installed as the production environment variable. Setting
+that variable is not itself a migration or a successful release check. Run the
+read-only production plan first; production apply, ledger readback, staging
+verification and normal application release gates remain separate.
+
+The application snapshot expires for release purposes at
+`2026-09-21T14:54:13.696427Z`, even though GitHub retains its artifact for 30 days.
+Do not change its capture/verification timestamps to make old evidence appear
+fresh. Any refreshed record requires an actual new capture, restore, retained-key
+check and independently verified run/artifact provenance.
 
 The first actual backup attempts (`34783373716`, `34783553252`) produced no
 artifact. Safe diagnostics on the second attempt identified a TLS CA failure
@@ -162,8 +208,9 @@ complete managed-project disaster recovery are not completed audit items.
 ## Recovery/rollback of this code change
 
 The change does not modify hosted data, migrations, roles, billing or deployment
-versions. Reverting its commit removes the helper, tests, CI job and this guide;
-the existing provider backup gate remains. Never remove an actual owner's key
+versions. Remove `APP_RECOVERY_EVIDENCE` from the production environment to
+disable the application alternative immediately; the existing provider backup
+gate remains. Revert the scoped gate/workflow change if required. Never remove an actual owner's key
 or archive as part of a code rollback. A failed sealing directory can be kept
 for inspection; there is intentionally no broad automatic deletion command.
 
