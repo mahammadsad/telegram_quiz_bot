@@ -1,6 +1,6 @@
 # Audit remediation status
 
-Status as of 13 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
+Status as of 19 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
 
 Deployed: 8.7.12 addresses P0-02/P1-02/P2-01 difficulty coverage. Protected
 inventory report `34298405159` and a read-only production check found Computer
@@ -74,11 +74,31 @@ and a complete migrated-schema synthetic restore passed CI `34751036976`
 (1,002 Python/database tests, 33 dedicated encryption/restore tests, 336 mobile
 and six HTTPS service-worker tests). The owner-held public recipient is pinned;
 the private key remains in a dedicated owner-only home-directory keyring, and
-its local synthetic decryption check passed. No production rows were exported,
-no production migration was applied, and no backup gate was bypassed. Actual
-snapshot capture, isolated restore, archive retention and recovery evidence
-remain open. See `ENCRYPTED_BACKUP_RECOVERY.md`; this does not close a phase or
-represent production disaster-recovery completion.
+its local synthetic decryption check passed. At that checkpoint, no production
+rows had been exported and no migration or backup-gate bypass was performed.
+
+Recovery follow-up on 19 September: protected backup run `34783767495` completed
+a real, read-only production snapshot, restored its 75 application/ledger tables
+in a network-isolated disposable database, compared row fingerprints, effective
+ACL/RLS state and application contracts, and retained only encrypted artifacts.
+The downloaded archive passed owner-key decryption and checksum verification on
+19 September. Its 13 September capture is too old for the 48-hour release gate;
+a fresh capture and independently bound release evidence were required.
+Fresh run `35450108411` captured production at 19 September 14:54:13 UTC and
+passed the 75-table isolated restore; its actual encrypted artifact passed
+retained-key verification by 15:11:54 UTC. A narrow alternative recovery gate
+now validates protected owner approval, live GitHub run/artifact provenance,
+48-hour freshness, exact migration source hashes and the linked dry-run plan.
+It does not waive recovery requirements or authorize later migrations. The
+production plan/apply and 66th migration pin remain unperformed. Managed
+services, private scheduler state, key-loss recovery and complete project DR
+remain outside this application-snapshot evidence. See `ENCRYPTED_BACKUP_RECOVERY.md`.
+
+Credential follow-up: the primary scheduler's renewal-window check is false on
+19 September (no recent rejected dispatches). GitHub independently reports the
+current CLI token expiry as 20 September 2026 at 07:35:25 UTC. The owner has been
+given renewal instructions; no token was printed, expiry falsified or scheduler
+credential replaced. Rotation and a verified normal heartbeat remain pending.
 
 Status meanings:
 

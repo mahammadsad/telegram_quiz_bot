@@ -154,3 +154,38 @@ def test_backup_gate_precedes_apply():
     assert workflow.index("python scripts/check_production_backup.py") < workflow.index(
         "- name: Apply tracked migrations"
     )
+
+
+def test_scoped_fallback_reads_only_bounded_plan_and_preserves_redaction(tmp_path, capsys):
+    import scripts.check_production_backup as gate
+
+    (tmp_path / "production-migration-plan.txt").write_text("test plan")
+    with patch.dict("os.environ", {
+        "APP_RECOVERY_EVIDENCE": "test-approval", "GH_TOKEN": "test-secret-token",
+        "RUNNER_TEMP": str(tmp_path),
+    }, clear=True), patch.object(gate, "verify_recovery_point") as verify:
+        assert gate.application_recovery_gate(NOW) == 0
+        verify.assert_called_once_with("test-approval", "test-secret-token", NOW, plan="test plan")
+        verify.side_effect = HTTPError("https://private.invalid", 403, "private-body", {}, None)
+        assert gate.application_recovery_gate(NOW) == 1
+    output = capsys.readouterr().out
+    assert all(value not in output for value in ("test-secret", "private-body", "private.invalid"))
+
+
+@pytest.mark.parametrize("kind", ["missing", "symlink", "oversized"])
+def test_missing_unsafe_plan_cannot_enable_fallback(tmp_path, kind):
+    import scripts.check_production_backup as gate
+
+    plan = tmp_path / "production-migration-plan.txt"
+    if kind == "symlink":
+        target = tmp_path / "target"
+        target.write_text("plan")
+        plan.symlink_to(target)
+    elif kind == "oversized":
+        plan.write_bytes(b"x" * (1024 * 1024 + 1))
+    with patch.dict("os.environ", {
+        "APP_RECOVERY_EVIDENCE": "test-approval", "GH_TOKEN": "test-token",
+        "RUNNER_TEMP": str(tmp_path),
+    }, clear=True), patch.object(gate, "verify_recovery_point") as verify:
+        assert gate.application_recovery_gate(NOW) == 1
+        verify.assert_not_called()
