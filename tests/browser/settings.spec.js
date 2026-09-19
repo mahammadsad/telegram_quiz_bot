@@ -9,6 +9,83 @@ const {
   installTelegramMock,
 } = require("./fixtures");
 
+test("settings preserves edits made while an earlier save is pending", async ({ page }) => {
+  await installTelegramMock(page);
+  await installApiMocks(page);
+  const writes = [];
+  await page.route("**/api/me/preferences", async (route) => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    writes.push({ route, body: route.request().postDataJSON() });
+  });
+  await page.goto("/settings.html");
+  await expect(page.locator("#settings")).toBeVisible();
+  await page.locator("#display-name").fill("প্রথম নাম");
+  await page.locator("#settings-submit").click();
+  await expect.poll(() => writes.length).toBe(1);
+  await page.locator("#display-name").fill("নতুন নাম");
+  await writes[0].route.fulfill({ json: { ok: true } });
+  await expect(page.locator("#settings-message")).toContainText("নতুন পরিবর্তন");
+  await expect(page.locator("#display-name")).toHaveValue("নতুন নাম");
+  await expect(page.locator("#settings-submit")).toBeEnabled();
+  expect(writes[0].body.publicDisplayName).toBe("প্রথম নাম");
+  await page.locator("#settings-submit").click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1].body.publicDisplayName).toBe("নতুন নাম");
+  await writes[1].route.fulfill({ json: { ok: true } });
+  await expect(page.locator("#settings-submit")).toBeDisabled();
+  await expect(page.locator("#settings-message")).toContainText("সেটিং সংরক্ষিত হয়েছে");
+});
+
+test("settings permits only one in-flight save even after another input or submit", async ({ page }) => {
+  await installTelegramMock(page);
+  await installApiMocks(page);
+  const writes = [];
+  await page.route("**/api/me/preferences", async (route) => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    writes.push(route);
+  });
+  await page.goto("/settings.html");
+  await expect(page.locator("#settings")).toBeVisible();
+  await page.locator("#display-name").fill("প্রথম নাম");
+  await page.locator("#settings-submit").click();
+  await expect.poll(() => writes.length).toBe(1);
+  await page.locator("#display-name").fill("নতুন নাম");
+  await expect(page.locator("#settings-submit")).toBeDisabled();
+  await page.locator("#settings").evaluate((form) => {
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+  });
+  await writes[0].fulfill({ json: { ok: true } });
+  await expect(page.locator("#settings-submit")).toBeEnabled();
+  expect(writes).toHaveLength(1);
+});
+
+test("failed settings save keeps the current draft retryable even after reverting an input", async ({ page }) => {
+  await installTelegramMock(page);
+  await installApiMocks(page);
+  const writes = [];
+  await page.route("**/api/me/preferences", async (route) => {
+    if (route.request().method() !== "PUT") return route.fallback();
+    writes.push({ route, body: route.request().postDataJSON() });
+  });
+  await page.goto("/settings.html");
+  await expect(page.locator("#settings")).toBeVisible();
+  await page.locator("#display-name").fill("প্রথম নাম");
+  await page.locator("#settings-submit").click();
+  await expect.poll(() => writes.length).toBe(1);
+  await page.locator("#display-name").fill("");
+  await expect(page.locator("#settings-submit")).toBeDisabled();
+  await writes[0].route.fulfill({ status: 503, json: { detail: "unavailable" } });
+  await expect(page.locator("#settings-submit")).toBeEnabled();
+  await page.locator("#display-name").focus();
+  await page.locator("#display-name").press("Tab");
+  await expect(page.locator("#settings-submit")).toBeEnabled();
+  await page.locator("#settings-submit").click();
+  await expect.poll(() => writes.length).toBe(2);
+  expect(writes[1].body.publicDisplayName).toBeNull();
+  await writes[1].route.fulfill({ json: { ok: true } });
+  await expect(page.locator("#settings-submit")).toBeDisabled();
+});
+
 test("preferences and privacy live in a dedicated settings destination", async ({
   page,
 }, testInfo) => {
