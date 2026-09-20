@@ -7,6 +7,7 @@ from services.question_validation import (
     QuizValidationError,
     content_checksum,
     randomize_balanced_answer_positions,
+    validate_question_candidate,
     validate_questions,
 )
 
@@ -36,6 +37,35 @@ def test_duplicate_option_rejected(valid_questions):
     rows[0]["options"][1] = rows[0]["options"][0]
     with pytest.raises(QuizValidationError, match="duplicate options"):
         validate_questions(rows, "history", "আধুনিক ভারত")
+
+
+@pytest.mark.parametrize("options", [
+    ["1.5", "2.5", "3.5", "4.5"],
+    ["-5", "5", "10", "15"],
+    ["১.৫", "২.৫", "৩.৫", "৪.৫"],
+])
+def test_numeric_options_survive_both_validation_layers(valid_questions, options):
+    row = deepcopy(valid_questions[0])
+    row["options"] = options
+    clean = validate_question_candidate(row, "history", "আধুনিক ভারত")
+    assert clean["options"] == options
+    restored = validate_question_candidate(
+        row, "history", "আধুনিক ভারত", run_deterministic_checks=False,
+    )
+    assert restored["options"] == options
+
+
+def test_certified_read_does_not_retroactively_apply_new_quantity_equivalence(valid_questions):
+    row = deepcopy(valid_questions[0])
+    row["options"] = ["1/2", "0.5", "2", "3"]
+    with pytest.raises(QuizValidationError, match="duplicate options"):
+        validate_question_candidate(row, "history", "আধুনিক ভারত")
+    assert validate_question_candidate(
+        row, "history", "আধুনিক ভারত", run_deterministic_checks=False,
+    )["options"] == row["options"]
+    row["options"][1] = row["options"][0]
+    with pytest.raises(QuizValidationError, match="duplicate options"):
+        validate_question_candidate(row, "history", "আধুনিক ভারত", run_deterministic_checks=False)
 
 
 @pytest.mark.parametrize("index", [-1, 4, True, "1"])

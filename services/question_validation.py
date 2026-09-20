@@ -27,6 +27,7 @@ from utils.hashing import (
     question_hash,
     quiz_content_checksum,
 )
+from utils.option_identity import option_identity
 
 QUESTION_COUNT = QUESTIONS_PER_RUN
 _BENGALI_RE = re.compile(r"[\u0980-\u09ff]")
@@ -184,8 +185,22 @@ def validate_questions(
         if len(options) != 4 or any(not option for option in options):
             raise QuizValidationError(f"Question {number} must contain exactly four non-empty options.")
         normalized_options = [normalize_text(option) for option in options]
-        if len(set(normalized_options)) != 4:
-            raise QuizValidationError(f"Question {number} contains duplicate options.")
+        # New candidates use quantity-aware equivalence. Checksum-certified
+        # reads must not apply newer generation heuristics to immutable packs,
+        # nor erase signs/decimals from newly accepted options. Keep only the
+        # literal duplicate shape check on that existing read-only path.
+        option_keys = (
+            [option_identity(option) for option in options] if run_deterministic_checks
+            else [" ".join(option.split()).casefold() for option in options]
+        )
+        if len(set(option_keys)) != 4:
+            raise QuizValidationError(
+                f"Question {number} contains duplicate options.",
+                reason_code=(
+                    "options_duplicate" if len(set(normalized_options)) != 4
+                    else "options_materially_duplicate"
+                ),
+            )
         if isinstance(correct, bool) or not isinstance(correct, int) or correct not in range(4):
             raise QuizValidationError(f"Question {number} has an invalid correct index.")
         normalized_answer = normalized_options[correct]

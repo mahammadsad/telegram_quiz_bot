@@ -7,6 +7,7 @@ import pytest
 
 from services.deterministic_verification import (
     DeterministicVerificationError,
+    _verify_option_quality,
     verify_candidate,
 )
 from services.question_validation import validate_question_candidates
@@ -166,6 +167,46 @@ def test_materially_duplicate_and_pattern_leaking_options_are_rejected() -> None
     with pytest.raises(DeterministicVerificationError) as raised:
         verify_candidate(leakage)
     assert raised.value.code == "option_pattern_leakage"
+
+
+@pytest.mark.parametrize("options", [
+    ["1.5", "2.5", "3.5", "4.5"],
+    ["১.৫", "২.৫", "৩.৫", "৪.৫"],
+    ["-5", "5", "10", "15"],
+    ["−৫", "৫", "১০", "১৫"],
+    ["1.25", "12.5", "125", "1250"],
+    ["1/2", "1/3", "2/3", "3/4"],
+    ["১.৫ টাকা", "২.৫ টাকা", "৩.৫ টাকা", "৪.৫ টাকা"],
+    ["A. 1.5", "B. 2.5", "C. 3.5", "D. 4.5"],
+])
+def test_distinct_numeric_options_keep_signs_decimal_points_and_fractions(options):
+    _verify_option_quality(options, 0, enforce_pattern=False)
+
+
+@pytest.mark.parametrize("options", [
+    ["1.5", "১.৫০", "2", "3"],
+    ["1/2", "0.50", "2", "3"],
+    ["-0", "0.00", "2", "3"],
+    ["1,000", "১০০০", "2", "3"],
+    ["1.5 টাকা", "১.৫০ টাকা", "2 টাকা", "3 টাকা"],
+    ["A. 1.5", "বিকল্প খ: ১.৫০", "2", "3"],
+])
+def test_equivalent_numeric_values_still_reject_duplicate_options(options):
+    with pytest.raises(DeterministicVerificationError) as raised:
+        _verify_option_quality(options, 0, enforce_pattern=False)
+    assert raised.value.code == "options_materially_duplicate"
+
+
+def test_explanation_conclusion_cannot_erase_the_answers_sign():
+    candidate = mathematics_candidate()
+    candidate["deterministic_proof"]["explanation_conclusion"] = "-২৫"
+    with pytest.raises(DeterministicVerificationError) as raised:
+        verify_candidate(candidate)
+    assert raised.value.code == "explanation_contradiction"
+
+
+def test_unicode_minus_does_not_make_a_numeric_answer_the_only_script_outlier():
+    assert _verify_option_quality(["−৫", "৫", "১০", "১৫"], 0, enforce_pattern=True)
 
 
 def test_model_verified_candidate_records_pattern_signal_without_hard_failure() -> None:
