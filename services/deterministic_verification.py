@@ -19,6 +19,7 @@ from typing import Any, Mapping, Sequence
 
 from config.settings import DETERMINISTIC_PROOF_VERSION
 from utils.hashing import normalize_text
+from utils.option_identity import option_identity
 
 PROOF_VERSION = DETERMINISTIC_PROOF_VERSION
 _BENGALI_RE = re.compile(r"[\u0980-\u09ff]")
@@ -156,7 +157,7 @@ def verify_candidate(
 
     expected_text = str(options[correct_index]).strip()
     conclusion = str(proof.get("explanation_conclusion") or "").strip()
-    if not conclusion or normalize_text(conclusion) != normalize_text(expected_text):
+    if not conclusion or option_identity(conclusion) != option_identity(expected_text):
         raise DeterministicVerificationError(
             "explanation_contradiction",
             "The explanation conclusion does not match the proved answer.",
@@ -187,7 +188,7 @@ def _verify_option_quality(
     *,
     enforce_pattern: bool,
 ) -> bool:
-    material = [_material_option(value) for value in options]
+    material = [option_identity(value) for value in options]
     if any(not value for value in material) or len(set(material)) != 4:
         raise DeterministicVerificationError(
             "options_materially_duplicate",
@@ -204,14 +205,8 @@ def _verify_option_quality(
     return pattern_safe
 
 
-def _material_option(value: Any) -> str:
-    text = normalize_text(str(value))
-    text = re.sub(r"^(?:option|বিকল্প)?\s*[a-dক-ঘ১-৪1-4][\s:.)-]+", "", text)
-    return re.sub(r"[^\w\u0980-\u09ff]+", "", text)
-
-
 def _option_kind(value: Any) -> str:
-    text = str(value).strip().replace(",", "")
+    text = str(value).strip().replace(",", "").replace("−", "-")
     try:
         Decimal(text)
         return "number"

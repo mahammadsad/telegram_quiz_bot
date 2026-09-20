@@ -370,6 +370,25 @@ def test_recovery_accepts_certified_source_less_model_verified_pack(monkeypatch,
     assert service.get_recoverable_quiz_pack(QUIZ_ID, certified_run()) is saved
 
 
+@pytest.mark.parametrize("options", [
+    ["-5", "5", "10", "15"],
+    ["১.৫", "২.৫", "৩.৫", "৪.৫"],
+    ["1/2", "0.5", "2", "3"],  # An older heuristic could certify this pair.
+])
+def test_numeric_saved_pack_read_keeps_real_checksum_and_immutable_values(monkeypatch, valid_questions, options):
+    rows = deepcopy(valid_questions)
+    rows[0]["options"] = options
+    saved = persisted_pack(rows)
+    immutable_items = deepcopy(saved["items"])
+    checksum = service.checksum_for_pack(saved)
+    run = certified_run() | {"generated_checksum": checksum, "persisted_checksum": checksum}
+    monkeypatch.setattr(service, "get_quiz_pack", lambda quiz_id: saved)
+    assert service.get_recoverable_quiz_pack(QUIZ_ID, run) is saved
+    assert saved["items"] == immutable_items
+    saved["items"][0]["question"]["option_c"] = "পরিবর্তিত বিকল্প"
+    assert service.get_recoverable_quiz_pack(QUIZ_ID, run) is None
+
+
 def test_recovery_rejects_a_mixed_source_contract(monkeypatch, valid_questions):
     rows = deepcopy(valid_questions)
     rows[0]["source_document_id"] = None

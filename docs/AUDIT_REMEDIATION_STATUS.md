@@ -1,6 +1,6 @@
 # Audit remediation status
 
-Status as of 19 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
+Status as of 20 September 2026 for audit commit `cf51b4ebb9d4a3619968d39f710a616a91284181`.
 
 Deployed: 8.7.12 addresses P0-02/P1-02/P2-01 difficulty coverage. Protected
 inventory report `34298405159` and a read-only production check found Computer
@@ -99,6 +99,24 @@ Credential follow-up: the primary scheduler's renewal-window check is false on
 current CLI token expiry as 20 September 2026 at 07:35:25 UTC. The owner has been
 given renewal instructions; no token was printed, expiry falsified or scheduler
 credential replaced. Rotation and a verified normal heartbeat remain pending.
+
+20 September follow-up (candidates, not production promotion): the fresh scoped
+backup passed retained-key verification, and read-only production plan
+`35451271106` passed the exact single-migration and recovery evidence gates.
+Parent candidate `d0ffcdd` passed all protected checks and authenticated staging
+candidate/rollback/restore runs `35469638512`, `35469844109`, `35470028780`.
+UI candidate `e05af5a` incorporates those prerequisites, passes full CI and
+authenticated staging `35470413862`, and preserves the settings-save race fix.
+The scheduler credential renewal warning still blocks production promotion;
+production retains its 65 migrations and 8.7.14 application.
+
+Recent delivery is **12/13**, not complete: each of 17–19 September has one
+retained dead letter and zero unknown deliveries. Investigating the rejection
+categories reproduced numeric-option normalization defects locally. Candidate
+8.7.17 fixes distinct signed/decimal choices being conflated and equivalent
+fraction/digit-format values escaping duplicate checks, without changing stored
+hashes, weakening source/proof checks, or replaying old jobs. See
+`RELEASE_NOTES_8.7.17.md`; live yield attribution remains unproven.
 
 Status meanings:
 
